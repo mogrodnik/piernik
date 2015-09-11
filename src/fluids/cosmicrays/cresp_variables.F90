@@ -1,8 +1,20 @@
-module cresp_vars ! & constants
-! pulled by COSM_RAY_ELECTRONS
-  use 
+module cresp_variables ! & constants
+!pulled by COSM_RAY_ELECTRONS
+!    use initcosmicrays, only: ncre
   implicit none
+! indices to operate within cg%u structure
+  
+!    type cre_args
+       integer(kind=4),allocatable, dimension(:)  :: cren ! < indices pointing cosmic ray electrons number per bin in cg%u(iarr_cre,...) in the range of (1:ncre)
+       integer(kind=4),allocatable, dimension(:)  :: cree ! < indices pointing cosmic ray electrons energy per bin in cg%u(iarr_cre,...) in the range of (ncre+1:2*ncre)
+       integer(kind=4)                            :: crepu! < index pointing cosmic ray electrons upper momentum cut in in cg%u(iarr_cre,...) at (2*ncre+1)
+       integer(kind=4)                            :: crepl! < index pointing cosmic ray electrons upper momentum cut in in cg%u(iarr_cre,...) at (2*ncre+2)
+!    end type cre_args
 
+! type (cre_args) cre_table             ! cosmic ray electrons
+       integer(kind=4),allocatable, dimension(:)  :: cre_table
+  
+  
   integer          , parameter :: order = 3
 !   integer          , parameter :: nbin = 5
 ! 
@@ -33,16 +45,6 @@ module cresp_vars ! & constants
   integer                      :: c2nd, c3rd
   real(kind=8)                 :: p_lo_next, p_up_next  ! momemntum for spectrum cut-offs
   real(kind=8)                 :: n_tot, n_tot0, e_tot, e_tot0
-  real(kind=8),dimension(1:ncre):: ndt, edt
 
-  ! physical constants
-!   real(kind=8), parameter      :: cnst_pi = 3.14159265358979311599796346854419d0
-!   real(kind=8), parameter      :: cnst_c  = 1.0d0 ! speed of light
-  !real(kind=8), parameter      :: cnst_me = 1.0d0 ! mass of electron
-  
-  
-  ! used in driver and crspectrum module
-  real(kind=8), dimension(0:nre)   :: p_next, p_fix, p_upw , nflux, eflux
-  real(kind=8), dimension(1:ncre)   :: n, e, r
 
-end module cresp_vars
+end module cresp_variables

@@ -36,6 +36,7 @@
 !<
 module initcosmicrays
 ! pulled by COSM_RAYS
+   use cresp_variables, only: cre_table, cren, cree
    use constants, only: cbuff_len
    implicit none
 
@@ -286,10 +287,19 @@ contains
       ma1d = [ncrn]
       call my_allocate(iarr_crn, ma1d)
       ma1d = [2*ncre+2] !!!
-      call my_allocate(iarr_cre, ma1d)
+      call my_allocate(iarr_cre, ma1d) ! < iarr_cre will point: (1:ncre) - cre number per bin, (ncre+1:2*ncre) - cre energy per bin,
+!                                                               (2*ncre+1) - momentum of lower cut, (2*ncre+2) - momentum of upper cut      
       ma1d = [ncrs]
       call my_allocate(iarr_crs, ma1d)
 
+#ifdef COSM_RAY_ELECTRONS
+      ma1d = [ncre]
+      call my_allocate(cren, ma1d)
+      call my_allocate(cree, ma1d)
+      ma1d = [size(iarr_cre)]
+      call my_allocate(cre_table,ma1d)
+#endif /*COSM_RAY_ELECTRONS */
+      
 #ifdef COSM_RAYS_SOURCES
       call init_crsources(ncrn, crn_gpcr_ess)
 #endif /* COSM_RAYS_SOURCES */

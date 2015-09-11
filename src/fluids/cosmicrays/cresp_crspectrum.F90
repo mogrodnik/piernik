@@ -1,38 +1,48 @@
 module cresp_crspectrum
 ! pulled by COSM_RAY_ELECTRONS
- use global,only: dt !!! global timestep calculated by piernik
+ use global,         only: dt !!! global timestep calculated by piernik
  use initcosmicrays, only: ncre
- use types, only: crel
- use vars!,  only: nbin, u_b, u_d, c2nd, c3rd, f_init, q_init
+ use cresp_variables !,  only: nbin, u_b, u_d, c2nd, c3rd, f_init, q_init
+ use grid_cont,      only: grid_container
 
  implicit none
  
-!   integer          , parameter      :: ione    = 1
-!   real(kind=8)     , parameter      :: zero    = 0.0d0
-!   real(kind=8)     , parameter      :: half    = 0.5d0
-!   real(kind=8)     , parameter      :: sixth   = 1.6666d-1
-!   real(kind=8)     , parameter      :: one     = 1.d0
-! !real(kind=8)     , parameter     :: two     = 2.d0
-!   real(kind=8)     , parameter      :: three   = 3.d0
-!   real(kind=8)     , parameter      :: four    = 4.d0
-!   real(kind=8)     , parameter      :: five    = 5.d0
+   integer          , parameter      :: ione    = 1
+   real(kind=8)     , parameter      :: zero    = 0.0d0
+   real(kind=8)     , parameter      :: half    = 0.5d0
+   real(kind=8)     , parameter      :: sixth   = 1.6666d-1
+   real(kind=8)     , parameter      :: one     = 1.d0
+   real(kind=8)     , parameter      :: two     = 2.d0
+   real(kind=8)     , parameter      :: three   = 3.d0
+   real(kind=8)     , parameter      :: four    = 4.d0
+   real(kind=8)     , parameter      :: five    = 5.d0
 !   real(kind=8)     , parameter      :: ten     = 10.d0
 ! !real(kind=8)     , parameter     :: twenty  = 20.d0
 !   real(kind=8)     , parameter      :: hundred = 100.d0
   
-  integer, dimension(0:ncre)        :: all_edges, i_act_edges
-  integer, dimension(1:ncre)        :: all_bins
+!   integer, dimension(0:ncre)        :: all_edges, i_act_edges
+!   integer, dimension(1:ncre)        :: all_bins
+   integer, allocatable, dimension(:)        :: all_edges, i_act_edges
+   integer, allocatable, dimension(:)        :: all_bins
+
   integer                           :: del_i_lo, del_i_up
 !   integer                           :: i_lo_act_edge, i_up_act_edge !,i
 
 
   
     ! logical arrays / arrays determining use of p/n/e in some lines
-  logical, dimension(0:ncre)        :: is_fixed_edge,   is_fixed_edge_next 
-  logical, dimension(0:ncre)        :: is_active_edge,  is_active_edge_next 
-  logical, dimension(0:ncre)        :: is_cooling_edge, is_cooling_edge_next 
-  logical, dimension(0:ncre)        :: is_heating_edge, is_heating_edge_next 
-  logical, dimension(1:ncre)        :: is_active_bin,   is_active_bin_next
+!   logical, dimension(0:ncre)        :: is_fixed_edge,   is_fixed_edge_next 
+!   logical, dimension(0:ncre)        :: is_active_edge,  is_active_edge_next 
+!   logical, dimension(0:ncre)        :: is_cooling_edge, is_cooling_edge_next 
+!   logical, dimension(0:ncre)        :: is_heating_edge, is_heating_edge_next 
+!   logical, dimension(1:ncre)        :: is_active_bin,   is_active_bin_next
+
+
+   logical, allocatable, dimension(:) :: is_fixed_edge,   is_fixed_edge_next 
+   logical, allocatable, dimension(:) :: is_active_edge,  is_active_edge_next 
+   logical, allocatable, dimension(:) :: is_cooling_edge, is_cooling_edge_next 
+   logical, allocatable, dimension(:) :: is_heating_edge, is_heating_edge_next 
+   logical, allocatable, dimension(:) :: is_active_bin,   is_active_bin_next
   
     ! counters
   integer                           :: num_fixed_edges,   num_fixed_edges_next
@@ -40,6 +50,8 @@ module cresp_crspectrum
   integer                           :: num_active_bins,   num_active_bins_next
   integer                           :: num_cooling_edges, num_cooling_edges_next
   integer                           :: num_heating_edges, num_heating_edges_next
+  integer                           :: i,j,k ! < loop counters
+  integer                           :: icre  ! < loop limiter
   
     ! dynamic arrays
   integer, allocatable              :: fixed_edges(:),   fixed_edges_next(:)
@@ -48,6 +60,24 @@ module cresp_crspectrum
   integer, allocatable              :: cooling_edges(:), cooling_edges_next(:)
   integer, allocatable              :: heating_edges(:), heating_edges_next(:)
   
+  real(kind=8),dimension(1:ncre)    :: ndt, edt
+
+  ! physical constants
+!   real(kind=8), parameter      :: cnst_pi = 3.14159265358979311599796346854419d0
+!   real(kind=8), parameter      :: cnst_c  = 1.0d0 ! speed of light
+  !real(kind=8), parameter      :: cnst_me = 1.0d0 ! mass of electron
+  
+  
+  ! used in crspectrum module
+!   real(kind=8), dimension(1:ncre)   :: n, e, r
+!   real(kind=8), dimension(1:ncre)   :: q
+!   real(kind=8), dimension(0:ncre)   :: p_next, p_fix, p_upw , nflux, eflux
+!   real(kind=8), dimension(0:ncre)   :: p,  f !,p_fix0
+   real(kind=8), allocatable, dimension(:) :: n, e, r
+   real(kind=8), allocatable, dimension(:) :: q
+   real(kind=8), allocatable, dimension(:) :: p_next, p_fix, p_upw , nflux, eflux
+   real(kind=8), allocatable, dimension(:) :: p,  f !,p_fix0
+   integer                           :: i_lo, i_up
  
 !-------------------------------------------------------------------------------------------------
 !
@@ -60,18 +90,40 @@ contains
 ! values saved will be n and e in each cell; f and q have to be calculated
 
 subroutine cresp_update(dt)
+  use diagnostics, only my_allocate, ma1d
   implicit none
+  
+!   integer        :: ma1d ! < an integer for allocation
+
+  ma1d = [ncre]
 !    real(kind = 8)                    :: dt
-   
+  call myallocate(n,ma1d)   !:: n, e, r
+  call myallocate(e,ma1d)
+  call myallocate(r,ma1d)
+  call myallocate(q,ma1d)
+  
+!   real(kind=8), dimension(1:ncre)   :: q
+!   real(kind=8), dimension(p_next,ma1d+1)   :: p_next, p_fix, p_upw , nflux, eflux
+!   real(kind=8), dimension(0:ncre)   :: p,  f !,p_fix0 
+ 
+!   logical, dimension(0:ncre)        :: is_fixed_edge,   is_fixed_edge_next 
+!   logical, dimension(0:ncre)        :: is_active_edge,  is_active_edge_next 
+!   logical, dimension(0:ncre)        :: is_cooling_edge, is_cooling_edge_next 
+!   logical, dimension(0:ncre)        :: is_heating_edge, is_heating_edge_next 
+!   logical, dimension(1:ncre)        :: is_active_bin,   is_active_bin_next
+
+ 
+ 
 ! Update indexes of active bins, fixed edges and active edges at [t]
 ! Detect heating edges (energy upflow) and cooling edges (energy downflow)
    call cresp_update_bin_index(dt, p_lo, p_up, p_lo_next, p_up_next)    
    
 ! Compute power indexes for each bin at [t]
-   call ne_to_q(n, e, crel%q)
+  
+   call ne_to_q(n, e, q)
    
 ! Compute f on left bin faces at [t]
-   crel%f = nq_to_f(crel%p(0:ncre-1), crel%p(1:ncre), n(1:ncre), crel%q(1:ncre), active_bins)
+   f = nq_to_f(p(0:ncre-1), p(1:ncre), n(1:ncre), q(1:ncre), active_bins)
 
 ! Compute fluxes through fixed edges in time period [t,t+dt]
 ! using f, q, p_lo and p_up at [t]
@@ -122,13 +174,13 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       call p_update(dt, p_up, p_up_next)
     
 ! Locate cut-ofs before and after current timestep
-      crel%i_lo = int(floor(dlog10(p_lo/p_fix(1))/w)) + 1
-      crel%i_lo = max(0, crel%i_lo)
-      crel%i_lo = min(crel%i_lo, ncre - 1)
+      i_lo = int(floor(dlog10(p_lo/p_fix(1))/w)) + 1
+      i_lo = max(0, i_lo)
+      i_lo = min(i_lo, ncre - 1)
       
-      crel%i_up = int(floor(dlog10(p_up/p_fix(1))/w)) + 2
-      crel%i_up = max(1,crel%i_up)
-      crel%i_up = min(crel%i_up,ncre)
+      i_up = int(floor(dlog10(p_up/p_fix(1))/w)) + 2
+      i_up = max(1,i_up)
+      i_up = min(i_up,ncre)
       
       i_lo_next = int(floor(dlog10(p_lo_next/p_fix(1))/w)) + 1
       i_lo_next = max(0, i_lo_next)
@@ -139,13 +191,13 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       i_up_next = min(i_up_next,ncre)
       
 ! Detect changes in positions of lower an upper cut-ofs
-      del_i_lo = i_lo_next - crel%i_lo
-      del_i_up = i_up_next - crel%i_up
+      del_i_lo = i_lo_next - i_lo
+      del_i_up = i_up_next - i_up
       
 ! Construct index arrays for fixed edges betwen p_lo and p_up, active edges 
 ! before timestep
       is_fixed_edge = .false.
-      is_fixed_edge(crel%i_lo+1:crel%i_up-1) = .true.
+      is_fixed_edge(i_lo+1:i_up-1) = .true.
       num_fixed_edges = count(is_fixed_edge)
       allocate(fixed_edges(num_fixed_edges))
       fixed_edges = pack(all_edges, is_fixed_edge)
@@ -157,7 +209,7 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       fixed_edges_next = pack(all_edges, is_fixed_edge_next)
       
       is_active_edge = .false.
-      is_active_edge(crel%i_lo:crel%i_up) = .true.
+      is_active_edge(i_lo:i_up) = .true.
       num_active_edges = count(is_active_edge)
       allocate(active_edges(num_active_edges))
       active_edges = pack(all_edges, is_active_edge)
@@ -170,7 +222,7 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       
 ! Active bins 
       is_active_bin = .false.
-      is_active_bin(crel%i_lo+1:crel%i_up) = .true.
+      is_active_bin(i_lo+1:i_up) = .true.
       num_active_bins = count(is_active_bin)
       allocate(active_bins(num_active_bins))
       active_bins = pack(all_bins, is_active_bin)
@@ -183,10 +235,10 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       active_bins_next = pack(all_bins, is_active_bin_next)
       
 ! Compute p for all active edges
-      crel%p = zero
-      crel%p(fixed_edges) = p_fix(fixed_edges)
-      crel%p(crel%i_lo) = p_lo
-      crel%p(crel%i_up) = p_up
+      p = zero
+      p(fixed_edges) = p_fix(fixed_edges)
+      p(i_lo) = p_lo
+      p(i_up) = p_up
       
       p_next = zero
       p_next(fixed_edges_next) = p_fix(fixed_edges_next)
@@ -258,7 +310,7 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       all_edges = (/ (i,i=0,ncre) /)
       all_bins = (/ (i,i=1,ncre) /)
 
-      crel%q = q_init
+      q = q_init
 
       w  = (log10(p_max_fix/p_min_fix))/dble(ncre-2)
       
@@ -266,25 +318,25 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       p_fix(0)    = zero     ! initial array of p used to identify fixed edges
       p_fix(ncre) = zero     ! extreme two edges are never fixed edges
 
-      crel%p        = p_fix       ! actual array of p including free edges
-      crel%p(0)     = p_lo
-      crel%p(ncre)  = p_up
+      p        = p_fix       ! actual array of p including free edges
+      p(0)     = p_lo
+      p(ncre)  = p_up
       
 ! Sorting bin edges - arbitrary chosen p_lo and p_up may need to be sorted to appear in growing order
       do k = ncre, 1, -1
          do i = 0, k-1
-            if (crel%p(i)>crel%p(i+1)) then 
-               c = crel%p(i)
-               crel%p(i) = crel%p(i+1)
-               crel%p(i+1) = c
+            if (p(i)>p(i+1)) then 
+               c = p(i)
+               p(i) = p(i+1)
+               p(i+1) = c
             endif
          enddo
       enddo
       
-      crel%f = f_init * (crel%p/p_min_fix)**(-q_init)
+      f = f_init * (p/p_min_fix)**(-q_init)
 
-      crel%i_lo = 0
-      crel%i_up = ncre
+      i_lo = 0
+      i_up = ncre
       
       dt = 0.0d0
       u_d = 0.0d0
@@ -299,18 +351,18 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
      print *, num_active_edges, size(active_edges), lbound(active_edges), ubound(active_edges)
      print *, num_active_bins,  size(active_bins), lbound(active_bins), ubound(active_bins)
      print *, 'p      =', active_edges(1:num_active_edges-1), & 
-                                                          crel%p(active_edges(1:num_active_edges-1))
+                                                          p(active_edges(1:num_active_edges-1))
      print *, 'p      =', active_edges(2:num_active_edges),   &
-                                                          crel%p(active_edges(2:num_active_edges))
+                                                          p(active_edges(2:num_active_edges))
      print *, 'init f =', active_edges(1:num_active_edges-1), & 
-                                                          crel%f(active_edges(1:num_active_edges-1))
+                                                          f(active_edges(1:num_active_edges-1))
      print *, 'init q =', active_bins(1:num_active_bins),     & 
-                                                          crel%q(active_bins(1:num_active_bins))
+                                                          q(active_bins(1:num_active_bins))
       
       
-       e = fq_to_e(crel%p(0:ncre-1), crel%p(1:ncre), crel%f(0:ncre-1), crel%q(1:ncre), active_bins)
+       e = fq_to_e(p(0:ncre-1), p(1:ncre), f(0:ncre-1), q(1:ncre), active_bins)
 !       
-       n = fq_to_n(crel%p(0:ncre-1), crel%p(1:ncre), crel%f(0:ncre-1), crel%q(1:ncre), active_bins)
+       n = fq_to_n(p(0:ncre-1), p(1:ncre), f(0:ncre-1), q(1:ncre), active_bins)
 
 
       print *, 'init n =', n
@@ -410,14 +462,14 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       
       real(kind=8), dimension(1:ncre-1) :: dn_upw, de_upw, qi,qim1
       
-      pimh(1:ncre-1) = crel%p(1:ncre-1)
-      pimth(1:ncre-1) = crel%p(0:ncre-2)
+      pimh(1:ncre-1) = p(1:ncre-1)
+      pimth(1:ncre-1) = p(0:ncre-2)
 
-      fimh(1:ncre-1) = crel%f(1:ncre-1)
-      fimth(1:ncre-1) = crel%f(0:ncre-2)
+      fimh(1:ncre-1) = f(1:ncre-1)
+      fimth(1:ncre-1) = f(0:ncre-2)
       
-      qi(1:ncre-1)  = crel%q(2:ncre)
-      qim1(1:ncre-1) = crel%q(1:ncre-1)
+      qi(1:ncre-1)  = q(2:ncre)
+      qim1(1:ncre-1) = q(1:ncre-1)
       
       dn_upw = zero
       de_upw = zero
@@ -441,8 +493,8 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       eflux(ce) =  - de_upw(ce)
       
       if(del_i_up == -1) then 
-         nflux(crel%i_up) = -n(crel%i_up)
-         eflux(crel%i_up) = -e(crel%i_up  )
+         nflux(i_up) = -n(i_up)
+         eflux(i_up) = -e(i_up  )
       endif
          
       dn_upw(he) = four*cnst_pi*fimth(he)*p_upw(he)**3*(pimth(he)/p_upw(he))**qim1(he)
@@ -462,8 +514,8 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       eflux(he) = de_upw(he)
       
       if(del_i_lo == 1) then 
-         nflux(crel%i_lo+1) = n(crel%i_lo+1)
-         eflux(crel%i_lo+1) = e(crel%i_lo+1)
+         nflux(i_lo+1) = n(i_lo+1)
+         eflux(i_lo+1) = e(i_lo+1)
       endif
       
    end subroutine cresp_compute_fluxes
@@ -482,14 +534,14 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       real(kind=8), dimension(size(bins)) :: r_num, r_den
       
       r = 0.0d0
-      where(crel%q(bins) .ne. five) 
-         r_num = (p(bins)**(five-crel%q(bins)) - p(bins-1)**(five-crel%q(bins)))/(five - crel%q(bins))
+      where(q(bins) .ne. five) 
+         r_num = (p(bins)**(five-q(bins)) - p(bins-1)**(five-q(bins)))/(five - q(bins))
       elsewhere
          r_num = log(p(bins)/p(bins-1))
       end where
       
-      where(crel%q(bins) .ne. four) 
-         r_den = (p(bins)**(four-crel%q(bins)) - p(bins-1)**(four-crel%q(bins)))/(four - crel%q(bins))
+      where(q(bins) .ne. four) 
+         r_den = (p(bins)**(four-q(bins)) - p(bins-1)**(four-q(bins)))/(four - q(bins))
       elsewhere
          r_den = log(p(bins)/p(bins-1))
       end where
@@ -521,9 +573,9 @@ subroutine ne_to_q(n, e, q)
 !         alpha = e(i)/(n(i)*p_next(i-1)*cnst_c)     ! czy tu ma byc p_next ?
 !         base  = p_next(i)/p_next(i-1)                   !
 
-      if(is_active_bin(i).and.n(i).ne.0.and.crel%p(i-1).ne.0.)  then  ! dziala takze z jednym dodatkowym warunkiem, niezaleznie czy jest to n czy p, ktores musi byc wieksze od 0
-         alpha = e(i)/(n(i)*crel%p(i-1)*cnst_c)     ! czy tu ma byc p_next ?
-         base  = crel%p(i)/crel%p(i-1)                   !
+      if(is_active_bin(i).and.n(i).ne.0.and.p(i-1).ne.0.)  then  ! dziala takze z jednym dodatkowym warunkiem, niezaleznie czy jest to n czy p, ktores musi byc wieksze od 0
+         alpha = e(i)/(n(i)*p(i-1)*cnst_c)     ! czy tu ma byc p_next ?
+         base  = p(i)/p(i-1)                   !
          x     = q_init !q(i)
          do j = 1, 100
             dfun1 = 0.5*(fun1(x+dx, alpha, base)-fun1(x-dx, alpha, base))/dx

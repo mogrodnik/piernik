@@ -1,9 +1,9 @@
-program cresp_driver
-! pulled by COSM_RAY_ELECTRONS
+module cresp_driver
+! pulled by DEPRECATED
 
-use types,      only: crel!,tosave
-use vars!,       only: nbin, q_init, f_init
-use cresp_pectrum, only: crsupdate, b_losses, init_state
+! use cresp_types,      only: crel!,tosave
+use cresp_variables !,       only: nbin, q_init, f_init
+use cresp_crspectrum, only: crsupdate, b_losses, init_state
 
 implicit none
 integer          , parameter      :: ione    = 1
@@ -156,4 +156,4 @@ contains
 !    
 !       write(10, '(e16.9, 3(1x,i8), 100(1x,e16.9))') t, nbin, crel
 !    end subroutine printer_2
-end program cresp_driver
+end module cresp_driver
