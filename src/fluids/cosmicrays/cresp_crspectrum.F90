@@ -1,27 +1,29 @@
 module cresp_crspectrum
 ! pulled by COSM_RAY_ELECTRONS
- use global,         only: dt !!! global timestep calculated by piernik
+! use timestep,       only: dt !!! global timestep calculated by piernik
  use initcosmicrays, only: ncre
  use cresp_variables !,  only: nbin, u_b, u_d, c2nd, c3rd, f_init, q_init
  use grid_cont,      only: grid_container
+ use constants,      only: pi
+ use units,          only: clight
 
  implicit none
- 
+    real(kind=8)                              :: dt
+   
    integer          , parameter      :: ione    = 1
    real(kind=8)     , parameter      :: zero    = 0.0d0
    real(kind=8)     , parameter      :: half    = 0.5d0
-   real(kind=8)     , parameter      :: sixth   = 1.6666d-1
+   real(kind=8)     , parameter      :: sixth   = 1.0/6.0
    real(kind=8)     , parameter      :: one     = 1.d0
    real(kind=8)     , parameter      :: two     = 2.d0
-   real(kind=8)     , parameter      :: three   = 3.d0
-   real(kind=8)     , parameter      :: four    = 4.d0
+   real(kind=8)     , parameter      :: three   = 3.e0
+   real(kind=8)     , parameter      :: four    = 4.0e0
    real(kind=8)     , parameter      :: five    = 5.d0
-!   real(kind=8)     , parameter      :: ten     = 10.d0
+   real(kind=8)     , parameter      :: ten     = 10.d0
 ! !real(kind=8)     , parameter     :: twenty  = 20.d0
 !   real(kind=8)     , parameter      :: hundred = 100.d0
   
-!   integer, dimension(0:ncre)        :: all_edges, i_act_edges
-!   integer, dimension(1:ncre)        :: all_bins
+
    integer, allocatable, dimension(:)        :: all_edges, i_act_edges
    integer, allocatable, dimension(:)        :: all_bins
 
@@ -60,11 +62,11 @@ module cresp_crspectrum
   integer, allocatable              :: cooling_edges(:), cooling_edges_next(:)
   integer, allocatable              :: heating_edges(:), heating_edges_next(:)
   
-  real(kind=8),dimension(1:ncre)    :: ndt, edt
+  real(kind=8),allocatable, dimension(:)    :: ndt, edt
 
   ! physical constants
-!   real(kind=8), parameter      :: cnst_pi = 3.14159265358979311599796346854419d0
-!   real(kind=8), parameter      :: cnst_c  = 1.0d0 ! speed of light
+!   real(kind=8), parameter      :: cnst_pi = pi!3.14159265358979311599796346854419d0
+!   real(kind=8), parameter      :: cnst_c  = clight ! BEWARE !!!!! !1.0d0 ! speed of light !!!! 
   !real(kind=8), parameter      :: cnst_me = 1.0d0 ! mass of electron
   
   
@@ -75,10 +77,11 @@ module cresp_crspectrum
 !   real(kind=8), dimension(0:ncre)   :: p,  f !,p_fix0
    real(kind=8), allocatable, dimension(:) :: n, e, r
    real(kind=8), allocatable, dimension(:) :: q
-   real(kind=8), allocatable, dimension(:) :: p_next, p_fix, p_upw , nflux, eflux
+   real(kind=8), allocatable, dimension(:) :: p_next, p_fix, p_upw , nflux, eflux!, p_lo, p_up
    real(kind=8), allocatable, dimension(:) :: p,  f !,p_fix0
    integer                           :: i_lo, i_up
  
+
 !-------------------------------------------------------------------------------------------------
 !
 contains
@@ -90,28 +93,53 @@ contains
 ! values saved will be n and e in each cell; f and q have to be calculated
 
 subroutine cresp_update(dt)
-  use diagnostics, only my_allocate, ma1d
+  use diagnostics, only: my_allocate, ma1d
+!   use constants,      only: pi
+!   use units,        only: clight
+!   use global,       only: dt !!! global timestep calculated by piernik
+  use initcosmicrays, only: ncre
+  use cresp_variables !,  only: nbin, u_b, u_d, c2nd, c3rd, f_init, q_init
+  use grid_cont,      only: grid_container
+  
   implicit none
+ 
   
 !   integer        :: ma1d ! < an integer for allocation
 
+
+! Allocation of arrays - these cannot be allocated just once at the beginning,
+! for ncre is not a parameter in fortran syntax
   ma1d = [ncre]
-!    real(kind = 8)                    :: dt
+
   call myallocate(n,ma1d)   !:: n, e, r
   call myallocate(e,ma1d)
   call myallocate(r,ma1d)
   call myallocate(q,ma1d)
+  call myallocate(all_bins, ma1d)
+  call myallocate(edt, ma1d)
+  call myallocate(ndt, ma1d)
   
-!   real(kind=8), dimension(1:ncre)   :: q
-!   real(kind=8), dimension(p_next,ma1d+1)   :: p_next, p_fix, p_upw , nflux, eflux
-!   real(kind=8), dimension(0:ncre)   :: p,  f !,p_fix0 
- 
-!   logical, dimension(0:ncre)        :: is_fixed_edge,   is_fixed_edge_next 
-!   logical, dimension(0:ncre)        :: is_active_edge,  is_active_edge_next 
-!   logical, dimension(0:ncre)        :: is_cooling_edge, is_cooling_edge_next 
-!   logical, dimension(0:ncre)        :: is_heating_edge, is_heating_edge_next 
-!   logical, dimension(1:ncre)        :: is_active_bin,   is_active_bin_next
-
+  ma1d = [ncre+1]
+  call myallocate(p_next, ma1d)
+  call myallocate(p_fix, ma1d)
+  call myallocate(p_upw, ma1d)
+  call myallocate(nflux, ma1d)
+  call myallocate(eflux, ma1d)
+  call myallocate(p, ma1d)
+  call myallocate(f, ma1d)
+  
+  call myallocate(is_fixed_edge, ma1d)
+  call myallocate(is_fixed_edge_next, ma1d)
+  call myallocate(is_active_edge, ma1d)
+  call myallocate(is_active_edge_next, ma1d)
+  call myallocate(is_cooling_edge, ma1d)
+  call myallocate(is_cooling_edge_next, ma1d)
+  call myallocate(is_heating_edge, ma1d)
+  call myallocate(is_heating_edge_next, ma1d)
+  call myallocate(is_active_bin, ma1d)
+  call myallocate(is_active_bin_next, ma1d)
+  call myallocate(all_edges, ma1d)
+  call myallocate(i_act_edges, ma1d)
  
  
 ! Update indexes of active bins, fixed edges and active edges at [t]
@@ -174,19 +202,19 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       call p_update(dt, p_up, p_up_next)
     
 ! Locate cut-ofs before and after current timestep
-      i_lo = int(floor(dlog10(p_lo/p_fix(1))/w)) + 1
+      i_lo = int(floor(log10(p_lo/p_fix(1))/w)) + 1 ! i_lo = int(floor(dlog10(p_lo/p_fix(1))/w)) + 1
       i_lo = max(0, i_lo)
       i_lo = min(i_lo, ncre - 1)
       
-      i_up = int(floor(dlog10(p_up/p_fix(1))/w)) + 2
+      i_up = int(floor(log10(p_up/p_fix(1))/w)) + 2 ! i_up = int(floor(dlog10(p_up/p_fix(1))/w)) + 2
       i_up = max(1,i_up)
       i_up = min(i_up,ncre)
       
-      i_lo_next = int(floor(dlog10(p_lo_next/p_fix(1))/w)) + 1
+      i_lo_next = int(floor(log10(p_lo_next/p_fix(1))/w)) + 1 ! i_lo_next = int(floor(dlog10(p_lo_next/p_fix(1))/w)) + 1
       i_lo_next = max(0, i_lo_next)
       i_lo_next = min(i_lo_next, ncre - 1)
       
-      i_up_next = int(floor(dlog10(p_up_next/p_fix(1))/w)) + 2
+      i_up_next = int(floor(log10(p_up_next/p_fix(1))/w)) + 2 ! i_up_next = int(floor(dlog10(p_up_next/p_fix(1))/w)) + 2
       i_up_next = max(1,i_up_next)
       i_up_next = min(i_up_next,ncre)
       
@@ -394,8 +422,8 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       real(kind=8), dimension(1:ncre)       :: fq_to_e
 
       fq_to_e = 0.0d0
-      e_bins = four*cnst_pi*cnst_c*f_l(bins)*p_l(bins)**4
-      where(q(bins) .ne. four) 
+      e_bins = four*pi*clight*f_l(bins)*p_l(bins)**4
+      where(q(bins) /= four) 
          e_bins = e_bins*((p_r(bins)/p_l(bins))**(four-q(bins)) - one)/(four - q(bins))
       elsewhere
          e_bins = e_bins*log(p_r(bins)/p_l(bins))
@@ -422,8 +450,8 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       real(kind=8), dimension(size(bins))   :: n_bins
       real(kind=8), dimension(1:ncre)       :: fq_to_n
       
-      n_bins = four*cnst_pi*f_l(bins)*p_l(bins)**3
-      where(q(bins) .ne. three) 
+      n_bins = four*pi*f_l(bins)*p_l(bins)**3
+      where(q(bins) /= three) 
          n_bins = n_bins*((p_r(bins)/p_l(bins))**(three-q(bins)) - one)/(three - q(bins))
       elsewhere
          n_bins = n_bins*log((p_r(bins)/p_l(bins)))
@@ -476,16 +504,16 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       nflux  = zero
       eflux  = zero
    
-      dn_upw(ce) = four*cnst_pi*fimh(ce)*pimh(ce)**3
-      where(qi(ce) .ne. three) 
+      dn_upw(ce) = four*pi*fimh(ce)*pimh(ce)**3
+      where(qi(ce) /= three) 
          dn_upw(ce) = dn_upw(ce)*((p_upw(ce)/pimh(ce))**(three-qi(ce)) - one)/(three - qi(ce))
       elsewhere
          dn_upw(ce) = dn_upw(ce)*log((p_upw(ce)/pimh(ce)))
       end where
       nflux(ce) = - dn_upw(ce)
             
-      de_upw(ce) = four*cnst_pi*cnst_c*fimh(ce)*pimh(ce)**4
-      where(qi(ce) .ne. four) 
+      de_upw(ce) = four*pi*clight*fimh(ce)*pimh(ce)**4
+      where(qi(ce) /= four) 
          de_upw(ce) = de_upw(ce)*((p_upw(ce)/pimh(ce))**(four-qi(ce)) - one)/(four - qi(ce))
       elsewhere
          de_upw(ce) = de_upw(ce)*log(p_upw(ce)/pimh(ce))
@@ -497,16 +525,16 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
          eflux(i_up) = -e(i_up  )
       endif
          
-      dn_upw(he) = four*cnst_pi*fimth(he)*p_upw(he)**3*(pimth(he)/p_upw(he))**qim1(he)
-      where(qim1(he) .ne. three) 
+      dn_upw(he) = four*pi*fimth(he)*p_upw(he)**3*(pimth(he)/p_upw(he))**qim1(he)
+      where(qim1(he) /= three) 
          dn_upw(he) = dn_upw(he)*((pimh(he)/p_upw(he))**(three-qim1(he)) - one)/(three - qim1(he))
       elsewhere
          dn_upw(he) = dn_upw(he)*log((pimh(he)/p_upw(he)))
       end where
       nflux(he) = dn_upw(he)
             
-      de_upw(he) = four*cnst_pi*cnst_c*fimth(he)*p_upw(he)**4*(pimth(he)/p_upw(he))**qim1(he)
-      where(qi(he) .ne. four) 
+      de_upw(he) = four*pi*clight*fimth(he)*p_upw(he)**4*(pimth(he)/p_upw(he))**qim1(he)
+      where(qi(he) /= four) 
          de_upw(he) = de_upw(he)*((pimh(he)/p_upw(he))**(four-qim1(he)) - one)/(four - qim1(he))
       elsewhere
          de_upw(he) = de_upw(he)*log(pimh(he)/p_upw(he))
@@ -534,13 +562,13 @@ subroutine update_bin_index(dt,p_lo, p_up, p_lo_next, p_up_next)
       real(kind=8), dimension(size(bins)) :: r_num, r_den
       
       r = 0.0d0
-      where(q(bins) .ne. five) 
+      where(q(bins) /= five) 
          r_num = (p(bins)**(five-q(bins)) - p(bins-1)**(five-q(bins)))/(five - q(bins))
       elsewhere
          r_num = log(p(bins)/p(bins-1))
       end where
       
-      where(q(bins) .ne. four) 
+      where(q(bins) /= four) 
          r_den = (p(bins)**(four-q(bins)) - p(bins-1)**(four-q(bins)))/(four - q(bins))
       elsewhere
          r_den = log(p(bins)/p(bins-1))
@@ -565,16 +593,16 @@ subroutine ne_to_q(n, e, q)
    real(kind=8)    :: alpha, base, x, dx, delta, q_err
    real(kind=8)    :: dfun1
 
-   dx    = 1.0d-3
-   q_err = 1.0d-12
+   dx    = 1.0e-3
+   q_err = 1.0e-12
   
    do i = 1, ncre
 !      if(is_active_bin_next(i)) then 
-!         alpha = e(i)/(n(i)*p_next(i-1)*cnst_c)     ! czy tu ma byc p_next ?
+!         alpha = e(i)/(n(i)*p_next(i-1)*clight)     ! czy tu ma byc p_next ?
 !         base  = p_next(i)/p_next(i-1)                   !
 
-      if(is_active_bin(i).and.n(i).ne.0.and.p(i-1).ne.0.)  then  ! dziala takze z jednym dodatkowym warunkiem, niezaleznie czy jest to n czy p, ktores musi byc wieksze od 0
-         alpha = e(i)/(n(i)*p(i-1)*cnst_c)     ! czy tu ma byc p_next ?
+      if(is_active_bin(i).and.n(i)/=0.and.p(i-1)/=0.)  then  ! dziala takze z jednym dodatkowym warunkiem, niezaleznie czy jest to n czy p, ktores musi byc wieksze od 0
+         alpha = e(i)/(n(i)*p(i-1)*clight)     ! czy tu ma byc p_next ?
          base  = p(i)/p(i-1)                   !
          x     = q_init !q(i)
          do j = 1, 100
@@ -612,9 +640,9 @@ subroutine ne_to_q(n, e, q)
    function fun1(x, alpha, base)
       implicit none
       real(kind=8) :: x, alpha, base, fun1
-      if (x .eq. three) then
+      if (x == three) then
          fun1 = -alpha + (-one + base)/log(base) 
-      else if (x .eq. four) then
+      else if (x == four) then
          fun1 = -alpha + base*log(base)/(base - one)
       else
          fun1 = -alpha + ((three-x)/(four-x))*((base**(four-x)-one)/(base**(three-x)-one))
@@ -635,8 +663,8 @@ subroutine ne_to_q(n, e, q)
       real(kind=8), dimension(size(bins))   :: f_bins
       real(kind=8), dimension(0:ncre)       :: nq_to_f
 
-      f_bins = n(bins) / (four*cnst_pi*p_l(bins)**3)
-      where(q(bins) .ne. three) 
+      f_bins = n(bins) / (four*pi*p_l(bins)**3)
+      where(q(bins) /= three) 
          f_bins = f_bins*(three - q(bins)) /((p_r(bins)/p_l(bins))**(three-q(bins)) - one)
       elsewhere
          f_bins = f_bins/log((p_r(bins)/p_l(bins)))

@@ -8,7 +8,7 @@ module cresp_variables ! & constants
        integer(kind=4),allocatable, dimension(:)  :: cren ! < indices pointing cosmic ray electrons number per bin in cg%u(iarr_cre,...) in the range of (1:ncre)
        integer(kind=4),allocatable, dimension(:)  :: cree ! < indices pointing cosmic ray electrons energy per bin in cg%u(iarr_cre,...) in the range of (ncre+1:2*ncre)
        integer(kind=4)                            :: crepu! < index pointing cosmic ray electrons upper momentum cut in in cg%u(iarr_cre,...) at (2*ncre+1)
-       integer(kind=4)                            :: crepl! < index pointing cosmic ray electrons upper momentum cut in in cg%u(iarr_cre,...) at (2*ncre+2)
+       integer(kind=4)                            :: crepl! < index pointing cosmic ray electrons lower momentum cut in in cg%u(iarr_cre,...) at (2*ncre+2)
 !    end type cre_args
 
 ! type (cre_args) cre_table             ! cosmic ray electrons
@@ -34,17 +34,20 @@ module cresp_variables ! & constants
 !   real(kind=8)     , parameter      :: cfl_cr  = 0.1d0 ! cfl factor for CR
 
   ! these will most probably be in types and will be modificated by the driver (piernik)
-!   real(kind=8)                 :: u_d0 = 7.5d-1 ! 5.0d-1
-!   real(kind=8)                 :: u_d
-!   real(kind=8)                 :: u_b = 1d-7 !0d0 !5d-7!
-!   real(kind=8)                 :: div_v = 0d0
-!   real(kind=8)                 :: omega_d = 0.5d0 !0.1d0    ! frequency of div(v) oscilations
+  real(kind=8)                 :: u_d0 = 7.5d-1 ! 5.0d-1
+  real(kind=8)                 :: u_d
+  real(kind=8)                 :: u_b = 1d-7 !0d0 !5d-7!
+  real(kind=8)                 :: div_v = 0d0
+  real(kind=8)                 :: omega_d = 0.5d0 !0.1d0    ! frequency of div(v) oscilations
 
 
 
-  integer                      :: c2nd, c3rd
+  integer                      :: c2nd, c3rd = 1
   real(kind=8)                 :: p_lo_next, p_up_next  ! momemntum for spectrum cut-offs
   real(kind=8)                 :: n_tot, n_tot0, e_tot, e_tot0
 
+  
+!  c2nd = (mod(2,order) / 2 + mod(3,order))       ! coefficient which is always equal to 1 when order = 2 or = 3 and 0 if order = 1
+!  c3rd = (order - 1)*(order - 2) / 2 
 
 end module cresp_variables

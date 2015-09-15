@@ -43,7 +43,7 @@ module initcosmicrays
    public ! QA_WARN no secrets are kept here
    private :: cbuff_len ! QA_WARN prevent reexport
 
-   integer, parameter                  :: ncr_max = 9  !< maximum number of CR nuclear and electron components (\warning higher ncr_max limit would require changes in names of components in common_hdf5)
+   integer, parameter                  :: ncr_max = 99  !< maximum number of CR nuclear and electron components (\warning higher ncr_max limit would require changes in names of components in common_hdf5)
 
    ! namelist parameters
    integer(kind=4)                     :: ncrn         !< number of CR nuclear  components \deprecated BEWARE: ncrs (sum of ncrn and ncre) should not be higher than ncr_max = 9
