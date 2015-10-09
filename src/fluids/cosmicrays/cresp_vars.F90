@@ -1,26 +1,10 @@
-module cresp_variables ! & constants
+module vars ! & constants
   
   implicit none
+
   integer          , parameter :: order = 3
   integer          , parameter :: ncre = 5
 
-  type bin_old
-    integer                           :: i_lo
-    integer                           :: i_up
-    real(kind=8), dimension(0:ncre)   :: p
-    real(kind=8), dimension(0:ncre)   :: f
-    real(kind=8), dimension(1:ncre)   :: q
-  end type bin_old
-
-  type(bin_old) crel
-
-  type cresp_vector
-    real(kind=8), dimension(1:2*ncre+2) :: cresp_ind
-  end type cresp_vector
-  
-type (cresp_vector) x
-!   real(kind=8), dimension(1:2*ncre+1) :: x
-  
   real(kind=8)     , parameter :: t_max = 6.0d0 !10d0
   real(kind=8)     , parameter :: f_init  = 1.0d0
   real(kind=8)     , parameter :: q_init  = 5.0
@@ -31,9 +15,14 @@ type (cresp_vector) x
   real(kind=8)                 :: w
   real(kind=8)     , parameter :: dt_ini = 0.1
   real(kind=8)     , parameter :: q_big = 10d0
-  real(kind=8)     , parameter :: cfl_cr  = 0.1d0 ! cfl factor for CR
+  real(kind=8)     , parameter      :: cfl_cr  = 0.1d0 ! cfl factor for CR
 
   ! these will most probably be in types and will be modificated by the driver (piernik)
+  real(kind=8)                 :: u_d0 = -2.5d-1 ! 5.0d-1
+  real(kind=8)                 :: u_d
+  real(kind=8)                 :: u_b = 0.d0 ! 1d-7 !0d0 !5d-7!
+  real(kind=8)                 :: div_v = 0d0
+  real(kind=8)                 :: omega_d = 0.5d0 !0.1d0    ! frequency of div(v) oscilations
 
 
 
@@ -52,4 +41,5 @@ type (cresp_vector) x
 
 !   real(kind=8), dimension(:),allocatable   :: n, e, r
 
-end module cresp_variables
+end module vars
+

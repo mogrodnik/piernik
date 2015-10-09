@@ -159,8 +159,8 @@ contains
       use cr_data,        only: icr_H1, icr_C12, cr_table
 #endif /* COSM_RAYS_SOURCES */
 #ifdef COSM_RAY_ELECTRONS
-      use cresp_variables
-      use cresp_crspectrum,only: cresp_init_state,
+      use cresp_variables, only: p_lo, p_up
+      use cresp_crspectrum,only: cresp_init_state
 #endif /* COSM_RAY_ELECTRONS */
 
       implicit none
@@ -265,10 +265,14 @@ contains
             call printinfo(msg)
          endif
       enddo
+
+#endif /* COSM_RAYS */
+
 #ifdef COSM_RAY_ELECTRONS
       cg%u(iarr_cre(cre_table(crepl),:,:,:)) = p_lo ! < initial value of low cut momentum assigned to all cg%u cells
       cg%u(iarr_cre(cre_table(crepu),:,:,:)) = p_up ! < initial value of up cut momentum assigned to all cg%u cells
-#endif /* COSM_RAYS */
+#endif /* COSM_RAY_ELECTRONS */
+
 
    end subroutine problem_initial_conditions
 

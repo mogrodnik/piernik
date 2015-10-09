@@ -36,7 +36,9 @@
 !<
 module initcosmicrays
 ! pulled by COSM_RAYS
+#ifdef COSM_RAY_ELECTRONS
    use cresp_variables, only: cre_table, cren, cree
+#endif /* COSM_RAY_ELECTRONS */   
    use constants, only: cbuff_len
    implicit none
 
