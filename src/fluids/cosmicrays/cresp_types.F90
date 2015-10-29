@@ -1,5 +1,5 @@
  module cresp_types
- 
+! pulled by COSM_RAY_ELECTRONS
  use cresp_variables, only: ncre
  
  implicit none

@@ -126,7 +126,7 @@ contains
       namelist /COSMIC_RAYS/ cfl_cr, smallecr, cr_active, cr_eff, use_split, &
            &                 ncrn, gamma_crn, K_crn_paral, K_crn_perp, &
            &                 ncre, gamma_cre, K_cre_paral, K_cre_perp, &
-           &                 divv_scheme, crn_gpcr_ess, cre_gpcr_ess
+           &                 divv_scheme, crn_gpcr_ess, cre_gpcr_ess!, p_lo0, p_up0
 
       cfl_cr     = 0.9
       smallecr   = 0.0
@@ -295,11 +295,11 @@ contains
       call my_allocate(iarr_crs, ma1d)
 
 #ifdef COSM_RAY_ELECTRONS
-      ma1d = [ncre]
-      call my_allocate(cren, ma1d)
-      call my_allocate(cree, ma1d)
-      ma1d = [size(iarr_cre)]
-      call my_allocate(cre_table,ma1d)
+!       ma1d = [ncre]
+!       call my_allocate(cren, ma1d)
+!       call my_allocate(cree, ma1d)
+!       ma1d = [size(iarr_cre)]
+!       call my_allocate(cre_table,ma1d)
 #endif /*COSM_RAY_ELECTRONS */
       
 #ifdef COSM_RAYS_SOURCES

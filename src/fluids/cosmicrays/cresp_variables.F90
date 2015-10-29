@@ -1,5 +1,5 @@
 module cresp_variables ! & constants
-  
+! pulled by COSM_RAY_ELECTRONS
   implicit none
   integer          , parameter :: order = 3
   integer          , parameter :: ncre = 5
@@ -16,6 +16,8 @@ module cresp_variables ! & constants
 
   type cresp_vector
     real(kind=8), dimension(1:2*ncre+2) :: cresp_ind
+    real(kind=8)            :: uB
+    real(kind=8)            :: uD
   end type cresp_vector
   
 type (cresp_vector) x

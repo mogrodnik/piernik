@@ -100,17 +100,18 @@ module cresp_crspectrum
    real(kind=8), dimension(:), allocatable   :: p !(0:ncre)   :: p
    real(kind=8), dimension(:), allocatable :: f !(0:ncre)   :: f
    
-   real(kind=8), dimension(:),allocatable   :: p_next, p_fix, p_upw , nflux, eflux
+   real(kind=8), dimension(:),allocatable   :: p_next, p_upw , nflux, eflux ! , p_fix
 !    integer                           :: i_lo, i_up
 
-  real(kind=8)                 :: u_d0 = 1.5d-1 ! 5.0d-1
+  real(kind=8)                 :: u_d0 = -1.5d-1 ! 5.0d-1
   
   real(kind=8)                 :: u_b0 = 0.0d-7 ! 1d-7 !0d0 !5d-7!
 
   real(kind=8)                 :: div_v = 0.0d-5 ! 0.5d-6
   real(kind=8)                 :: omega_d = 0.1d0 !0.1d0    ! frequency of div(v) oscilations
-
+  real(kind=8)                 :: u_b, u_d  ! magnetic and adiabatic energy density
   real(kind=8), dimension(1:ncre)   :: n, e
+  real(kind=8), dimension(0:ncre)   :: p_fix
 !   real(kind=8), dimension(0:ncre)   :: p,  f !,p_fix0
 !   real(kind=8)                      :: p_lo, p_up
 
@@ -123,11 +124,10 @@ contains
 
 !----- main subroutine -----
 
-subroutine cresp_crsupdate(dt, args, u_d, u_b)
+subroutine cresp_crsupdate(dt, args)
 
  implicit none
    real(kind=8), intent(in)  :: dt
-   real(kind=8), intent(in)  :: u_b, u_d 
    type(cresp_vector)        :: args
    
    call allocate_all_allocatable
@@ -136,10 +136,13 @@ subroutine cresp_crsupdate(dt, args, u_d, u_b)
     e = args%cresp_ind(ncre+1:2*ncre) ! energy of electrons per bin passed by x vector
     p_lo = args%cresp_ind(2*ncre+1)   ! low cut momentum 
     p_up = args%cresp_ind(2*ncre+2)   ! upper cut momentum
+    u_b = args%uB
+    u_d = args%uD
+    
    
 ! Update indexes of active bins, fixed edges and active edges at [t]
 ! Detect heating edges (energy upflow) and cooling edges (energy downflow)
-    call cresp_update_bin_index(dt, p_lo, p_up, p_lo_next, p_up_next, u_d, u_b)    
+    call cresp_update_bin_index(dt, p_lo, p_up, p_lo_next, p_up_next)    
 
 ! Compute power indexes for each bin at [t]
     call ne_to_q(n, e, q)
@@ -161,7 +164,7 @@ subroutine cresp_crsupdate(dt, args, u_d, u_b)
 !   edt(1:ncre) = e(1:ncre) *(one-0.5*dt*r(1:ncre)) - (eflux(1:ncre) - eflux(0:ncre-1))/(one+0.5*dt*r(1:ncre))   !!! oryginalnie u Miniatiego
 
 ! Compute coefficients R_i needed to find energy in [t,t+dt]
-   call cresp_compute_r(p_next, active_bins_next,u_d, u_b)                 ! new active bins already received some particles, Ri is needed for those bins too
+   call cresp_compute_r(p_next, active_bins_next)                 ! new active bins already received some particles, Ri is needed for those bins too
    
    edt(1:ncre) = edt(1:ncre) *(one-dt*r(1:ncre))
 
@@ -225,17 +228,17 @@ end subroutine cresp_crsupdate
 
 ! all the procedures below are called by crsupdate subroutine or the driver
 
-subroutine cresp_update_bin_index(dt, p_lo, p_up, p_lo_next, p_up_next, u_d, u_b)
+subroutine cresp_update_bin_index(dt, p_lo, p_up, p_lo_next, p_up_next)
    
       implicit none
       real(kind=8), intent(in)  :: dt
       real(kind=8), intent(in)  :: p_lo, p_up
       real(kind=8), intent(out)  :: p_lo_next, p_up_next
       integer                    :: i_lo_next, i_up_next, i
-      real(kind=8), intent(in)   :: u_d, u_b
+!       real(kind=8), intent(in)   :: u_d, u_b
 ! Compute p_lo and p_up at [t+dt]
-      call p_update(dt, p_lo, p_lo_next, u_d, u_b)
-      call p_update(dt, p_up, p_up_next, u_d, u_b)
+      call p_update(dt, p_lo, p_lo_next)
+      call p_update(dt, p_up, p_up_next)
     
 ! Locate cut-ofs before and after current timestep
       i_lo = int(floor(dlog10(p_lo/p_fix(1))/w)) + 1
@@ -315,7 +318,7 @@ subroutine cresp_update_bin_index(dt, p_lo, p_up, p_lo_next, p_up_next, u_d, u_b
 
 ! Compute upwind momentum p_upw for all fixed edges
       p_upw = zero
-      p_upw(1:ncre) = p_fix(1:ncre)*(one+p_upw_rch(dt,p_fix(1:ncre), u_d, u_b))
+      p_upw(1:ncre) = p_fix(1:ncre)*(one+p_upw_rch(dt,p_fix(1:ncre)))
             
 #ifdef VERBOSE
       print*, 'Change of  cut index lo,up:', del_i_lo, del_i_up
@@ -355,15 +358,15 @@ subroutine cresp_update_bin_index(dt, p_lo, p_up, p_lo_next, p_up_next, u_d, u_b
 !
 !-------------------------------------------------------------------------------------------------
 
-   subroutine p_update(dt, p_old,  p_new, u_d, u_b)
+   subroutine p_update(dt, p_old,  p_new)
       
       implicit none
       real(kind=8), intent(in)  :: dt
       real(kind=8), intent(in)  :: p_old
       real(kind=8), intent(out) :: p_new
-      real(kind=8)              :: u_d, u_b
+!       real(kind=8)              :: u_d, u_b
       
-      p_new = p_old*(one + p_rch(dt, p_old, u_d, u_b)) ! changed from - to + for the sake of intuitiveness in p_rch subroutine
+      p_new = p_old*(one + p_rch(dt, p_old)) ! changed from - to + for the sake of intuitiveness in p_rch subroutine
       
       
    end subroutine p_update
@@ -373,12 +376,12 @@ subroutine cresp_update_bin_index(dt, p_lo, p_up, p_lo_next, p_up_next, u_d, u_b
 ! arrays initialization
 !
 !-------------------------------------------------------------------------------------------------
-   subroutine cresp_init_state(dt, u_d, u_b, arguments)
+   subroutine cresp_init_state(dt, arguments)
       implicit none
       real(kind = 8), intent(in)  :: dt
       integer                     :: i, k
       real(kind=8)                ::  c ! width of bin
-      real(kind=8), intent(in)    :: u_d, u_b
+!       real(kind=8), intent(in)    :: u_d, u_b
       type(cresp_vector)          :: arguments
 
        call allocate_all_allocatable
@@ -426,7 +429,7 @@ subroutine cresp_update_bin_index(dt, p_lo, p_up, p_lo_next, p_up_next, u_d, u_b
       
 !      call timestep(dt) <- will be called in the driver instead
 
-       call cresp_update_bin_index(dt, p_lo, p_up, p_lo_next, p_up_next, u_d, u_b)
+       call cresp_update_bin_index(dt, p_lo, p_up, p_lo_next, p_up_next)
 
       
 #ifdef VERBOSE      
@@ -623,9 +626,9 @@ subroutine cresp_update_bin_index(dt, p_lo, p_up, p_lo_next, p_up_next, u_d, u_b
 !
 !-------------------------------------------------------------------------------------------------
 
-   subroutine cresp_compute_r(p, bins, u_d, u_b)
+   subroutine cresp_compute_r(p, bins)
       implicit none
-      real(kind=8), intent(in)                    :: u_d, u_b
+!       real(kind=8), intent(in)                    :: u_d, u_b
       real(kind=8), dimension(0:ncre), intent(in) :: p
       integer, dimension(:), intent(in)     :: bins
       real(kind=8), dimension(size(bins)) :: r_num, r_den
@@ -751,9 +754,9 @@ subroutine ne_to_q(n, e, q)
 !-------------------------------------------------------------------------------------------------
 
 
-  function b_losses(p, u_b)
+  function b_losses(p)
     implicit none
-    real(kind=8), intent(in)                :: u_b
+!     real(kind=8), intent(in)                :: u_b
     real(kind=8), dimension(:), intent(in)  :: p
     real(kind=8), dimension(size(p)) :: b_losses
    
@@ -767,12 +770,12 @@ subroutine ne_to_q(n, e, q)
 !
 !-------------------------------------------------------------------------------------------------
 
-  function p_rch(dt, p, u_d, u_b)
+  function p_rch(dt, p)
     implicit none
     real(kind=8), intent(in)  :: dt
     real(kind=8), intent(in)  :: p
     real(kind=8)              :: p_rch
-    real(kind=8), intent(in)  :: u_d,u_b
+!     real(kind=8), intent(in)  :: u_d,u_b
 
    !p_rch =  (u_b*p + u_d) * dt !!! b_sync_ic = 8.94e-25*(u_b+u_cmb)*gamma_l**2 ! erg/cm
     p_rch = (- u_d - p * u_b ) *  dt  + c2nd *( half*u_d**2 + u_b**2 * p**2)*dt**2 + c3rd *(-sixth*u_d**3 - u_b**3 * p**3)*dt**3 ! analitycally correct solution
@@ -782,12 +785,12 @@ subroutine ne_to_q(n, e, q)
 
 !-------------------------------------------------------------------------------------------------
 
-  function p_upw_rch(dt, p, u_d, u_b)
+  function p_upw_rch(dt, p)
     implicit none
     real(kind=8), intent(in)  :: dt
     real(kind=8), dimension(:), intent(in) :: p
     real(kind=8), dimension(size(p))  :: p_upw_rch
-    real(kind=8), intent(in)  :: u_b, u_d
+!     real(kind=8), intent(in)  :: u_b, u_d
    
    !p_upw_rch =  (u_b*p + u_d) * dt      !!! b_sync_ic = 8.94e-25*(u_b+u_cmb)*gamma_l**2 ! erg/cm
     p_upw_rch = (u_d + p * u_b) * dt + c2nd * (half*u_d**2 + u_b**2 * p**2)*dt**2 + c3rd *(sixth*u_d**3 + u_b**3 * p**3)*dt**3 ! analitycally correct
@@ -812,7 +815,7 @@ subroutine ne_to_q(n, e, q)
 
    call allocate_with_index(edt,1,ma1d)
    call allocate_with_index(ndt,1,ma1d)
-   call allocate_with_index(p_fix,0,ma1d)
+!    call allocate_with_index(p_fix,0,ma1d)
 
    call allocate_with_index(p_next,0,ma1d)
    call allocate_with_index(p_upw,0,ma1d)
@@ -884,7 +887,7 @@ subroutine ne_to_q(n, e, q)
   
 !   ma1d = [ncre+1]
    call deallocate_with_index(p_next)
-   call deallocate_with_index(p_fix)
+!    call deallocate_with_index(p_fix)
    call deallocate_with_index(p_upw)
    call deallocate_with_index(nflux)
    call deallocate_with_index(eflux)

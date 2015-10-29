@@ -11,18 +11,18 @@ contains
       use dataio_pub,        only: halfstep, warn, printinfo, msg
       use fluidindex,        only: flind
       use global,            only: dt
-      use func,              only: operator(.notequals.)
+      use func,              only: operator(.notequals.), bx, by, bz
       use mpisetup,          only: master
       use multigrid_helpers, only: all_dirty
       use multigridvars,     only: ts, tot_ts, stdout
       use timer,             only: set_timer
-      use base,              only: emag
+      use func,              only: emag
       use cresp_variables,   only: cr_table, cren, cree, crepl, crepu, u_d, u_b
       use constants,         only: two
       
       implicit none
       
-      real  :: cresp_dt, u_d1, u_b1
+!       real  :: cresp_dt, u_d1, u_b1
       integer(kind=4), intent(in)  :: i,j,k ! < loop iterators
 !       integer(kind=4), intent(in)
       logical, save :: frun = .true.
@@ -50,12 +50,12 @@ contains
       do i = 1, xdim
         do j = 1, ydim
           do k = 1, zdim
-            ! emag = pmag(bx, by, bz)
+            u_b = emag = pmag(bx(i,j,k), by(i,j,k), bz(i,j,k))
+            u_d = div_v
 #ifdef VERBOSE
             print *, 'Output of cosmic ray electrons module for grid cell with coordinates i,j,k:', i, j, k
 #endif /* VERBOSE */
-            call cell_cresp_update(two*dt, cg%u(cr_table(cren)), cg%u(cr_table(cree)), cg%u(cr_table(crepl), &
-            cg%u(cr_table(crepu), u_d_test, u_b_test)
+            call cell_cresp_update(two*dt, cg%u(flind%cre), u_d_test, u_b_test)
 !             call cresp_crsupdate(2*cresp_dt, cg%u(cr_table(cren)), cg%u(cr_table(cree)), cg%u(cr_table(crepl), &
 !             cg%u(cr_table(crepu), div_v ,emag(cg%b(i), cg%b(j), cg%b(k)) ! most likely 2 sweeps in one dt are executed in one step, we will test whether it's true or not
           

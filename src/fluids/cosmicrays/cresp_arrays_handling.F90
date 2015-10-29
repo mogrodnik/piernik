@@ -1,4 +1,5 @@
 module cresp_arrays_handling
+! pulled by COSM_RAY_ELECTRONS
   implicit none
   
   interface allocate_with_index
