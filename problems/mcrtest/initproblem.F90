@@ -174,7 +174,7 @@ contains
      use initcrspectrum,  only: expan_order, taylor_coeff_2nd, taylor_coeff_3rd, e_small, cresp, cre_eff
      use cresp_crspectrum,only: e_tot_2_f_init_params, cresp_init_powl_spectrum, cresp_init_state, e_tot_2_en_powl_init_params
      use cresp_grid,     only: cresp_init_grid
-     use cresp_NR_method,only: cresp_initialize_guess_grids
+     use cresp_NR_method,only: cresp_init_NR_solution_maps
 #endif /* COSM_RAY_ELECTRONS */
 
       implicit none
@@ -234,7 +234,7 @@ contains
 #endif /* !ISO */
 
 #ifdef COSM_RAY_ELECTRONS
-      call cresp_initialize_guess_grids
+      call cresp_init_NR_solution_maps
       call cresp_init_grid
 #endif /* COSM_RAY_ELECTRONS */
 
@@ -335,10 +335,12 @@ contains
 
 #endif /* COSM_RAYS */
 #ifdef COSM_RAY_ELECTRONS
-      write(msg,*) '[initproblem:problem_initial_conditions]: Taylor_exp._ord. (cresp)    = ', expan_order
-      call printinfo(msg)
-      write(msg,*) '[initproblem:problem_initial conditions]: Taylor_exp._coeff.(2nd,3rd) = ', taylor_coeff_2nd, taylor_coeff_3rd
-      call printinfo(msg)
+      if (master) then
+         write(msg,*) '[initproblem:problem_initial_conditions]: Taylor_exp._ord. (cresp)    = ', expan_order
+         call printinfo(msg)
+         write(msg,*) '[initproblem:problem_initial conditions]: Taylor_exp._coeff.(2nd,3rd) = ', taylor_coeff_2nd, taylor_coeff_3rd
+         call printinfo(msg)
+      endif
 #endif /* COSM_RAY_ELECTRONS */
 
 ! Velocity field
