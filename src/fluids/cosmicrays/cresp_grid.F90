@@ -65,10 +65,10 @@ contains
    use cg_list,         only: cg_list_element
    use constants,       only: LO, HI, xdim, ydim, zdim, zero
    use grid_cont,       only: grid_container
-   use initcrspectrum,  only: ncre, f_init, p_up_init, p_lo_init, q_init, cre_eff, initial_condition, bump_amp, &
-                             virtual_e, virtual_n, e_small, e_small_approx_p_lo, e_small_approx_p_up
+   use initcrspectrum,  only: ncre, f_init, p_up_init, p_lo_init, q_init, cre_eff, initial_condition, bump_amp, ne_ratio, &
+                              virtual_e, virtual_n, e_small, e_small_approx_p_lo, e_small_approx_p_up
    use cresp_crspectrum,only: cresp_init_state, cresp_allocate_all, printer, e_threshold_lo, e_threshold_up, &
-                               fail_count_interpol, fail_count_no_sol, fail_count_NR_2dim, fail_count_comp_q, second_fail
+                              fail_count_interpol, fail_count_no_sol, fail_count_NR_2dim, fail_count_comp_q, second_fail
    use dataio_pub,      only: warn, printinfo
    implicit none
     type(cg_list_element),  pointer :: cgl
@@ -100,6 +100,10 @@ contains
                 cg%lhn(ydim,LO):cg%lhn(ydim,HI), cg%lhn(zdim,LO):cg%lhn(zdim,HI)))
             if (.not. allocated(virtual_n)) allocate(virtual_n(1:2, cg%lhn(xdim,LO):cg%lhn(xdim,HI), &
                 cg%lhn(ydim,LO):cg%lhn(ydim,HI), cg%lhn(zdim,LO):cg%lhn(zdim,HI)))
+
+            if (.not. allocated(ne_ratio ))  allocate(  ne_ratio(cg%lhn(xdim,LO):cg%lhn(xdim,HI), &
+                cg%lhn(ydim,LO):cg%lhn(ydim,HI), cg%lhn(zdim,LO):cg%lhn(zdim,HI)))
+
             virtual_e = zero
             virtual_n = zero
             call printinfo("[cresp_grid:cresp_init_grid] CRESP initialized")
