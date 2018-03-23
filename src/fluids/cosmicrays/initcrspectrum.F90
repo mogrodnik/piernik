@@ -83,6 +83,7 @@ module initcrspectrum
   end type spec_mod_trms
   
   real(kind=8), allocatable, dimension(:,:,:,:) :: virtual_n, virtual_e ! arrays for storing n and e in bins that receive particles but are not yet activated, i.e. where the energy is less than e_small
+  real(kind=8), allocatable, dimension(:,:,:)   :: ne_ratio
 
   integer(kind=4)  :: taylor_coeff_2nd, taylor_coeff_3rd
   
