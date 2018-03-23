@@ -167,6 +167,7 @@ contains
 #endif /* COSM_RAYS */
 #ifdef COSM_RAY_ELECTRONS
       use initcrspectrum,      only: ncre
+      use initcosmicrays,      only: iarr_crs
 #endif /* COSM_RAY_ELECTRONS */
 #ifdef SHEAR
       use shear,               only: shear_3sweeps
@@ -197,15 +198,14 @@ contains
 
             do icrc=1, flind%crn%all
                do s = xdim, zdim
-                  if (.not.skip_sweep(s)) call make_diff_sweep(icrc, s)
+                  if (.not.skip_sweep(s)) call make_diff_sweep(icrc, s, .false.)
                enddo
             enddo
 #ifdef COSM_RAY_ELECTRONS
             do icrc= flind%crn%all + 1, flind%crn%all + ncre
                do s = xdim, zdim
                   if (.not.skip_sweep(s)) then
-                     call make_diff_sweep(icrc, s)
-                     call make_diff_sweep(ncre + icrc, s)
+                     call make_diff_sweep(ncre + icrc, s, .true.) ! diff sweep of both cre energy dens and cre number dens
                   endif
                enddo
             enddo
@@ -234,7 +234,6 @@ contains
 #endif /* GRAV */
       if (associated(problem_customize_solution)) call problem_customize_solution(forward)
       
-
    end subroutine make_3sweeps
 
 !>
@@ -287,7 +286,7 @@ contains
 !>
 !! \brief Perform single diffusion sweep in forward or backward direction
 !<
-   subroutine make_diff_sweep(icrc, dir)
+   subroutine make_diff_sweep(icrc, dir, is_spectrum_component)
 
       use domain,         only: dom
       use sweeps,         only: sweep
@@ -302,10 +301,11 @@ contains
       implicit none
 
       integer(kind=4), intent(in) :: icrc, dir      !< direction, one of xdim, ydim, zdim
+      logical                     :: is_spectrum_component
 
 #ifdef COSM_RAYS
       if (dom%has_dir(dir)) then
-         call cr_diff(icrc,dir)
+         call cr_diff(icrc,dir,is_spectrum_component)
       endif
 #endif /* COSM_RAYS */
 

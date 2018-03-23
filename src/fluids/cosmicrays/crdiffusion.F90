@@ -130,7 +130,7 @@ contains
 !! cr_diff_y --> cr_diff(ydim)
 !! cr_diff_z --> cr_diff(zdim)
 !<
-   subroutine cr_diff(icrc, crdim)
+   subroutine cr_diff(icrc, crdim, is_spectrum_component)
 
       use cg_leaves,        only: leaves
       use cg_list,          only: cg_list_element
@@ -142,6 +142,9 @@ contains
       use initcosmicrays,   only: K_crn_paral, K_crn_perp, K_crs_paral, K_crs_perp, iarr_crs !, iarr_crn !!!
       use named_array,      only: p3
       use named_array_list, only: wna
+#ifdef COSM_RAY_ELECTRONS
+      use initcrspectrum,   only: ncre, ne_ratio, e_small
+#endif /* COSM_RAY_ELECTRONS */
 
       implicit none
 
@@ -155,25 +158,30 @@ contains
       real, dimension(ndims)               :: bcomp
       real                                 :: fcrdif
       real, dimension(ndims)               :: decr
+      integer, dimension(ndims)            :: dir_fcrdif
       real                                 :: dqp, dqm
       type(cg_list_element), pointer       :: cgl
       type(grid_container),  pointer       :: cg
       logical, dimension(ndims)            :: present_not_crdim
       real, dimension(:,:,:,:), pointer    :: wcr
       integer                              :: wcri
+      logical, intent(in)                  :: is_spectrum_component
       
       if (.not. has_cr) return
       if (.not.dom%has_dir(crdim)) return
 
       if (dom%geometry_type /= GEO_XYZ) call die("[crdiffusion:cr_diff] Unsupported geometry")
 
-      idm        = 0              ;      idm(crdim) = 1
+      idm      = 0              ;      idm(crdim) = 1
       decr(:)  = 0.             ;      bcomp(:)   = 0.                 ! essential where ( .not.dom%has_dir(dim) .and. (dim /= crdim) )
       present_not_crdim = dom%has_dir .and. ( [ xdim,ydim,zdim ] /= crdim )
       wcri = wna%ind(wcr_n)
       
       icrs = iarr_crs(icrc)
       
+      dir_fcrdif(:)   = 0
+      ne_ratio(:,:,:) = 0.0
+
       cgl => leaves%first
       do while (associated(cgl))
          cg => cgl%cg
@@ -219,6 +227,18 @@ contains
 
                   wcr(icrc,i,j,k) = - fcrdif * dt * cg%idl(crdim)      !!!!! wcr should be reduced to 3 dimensions !
 
+#ifdef COSM_RAY_ELECTRONS
+                  if (is_spectrum_component) then
+                     dir_fcrdif(crdim)  =   int(int_is_gtzero(fcrdif))
+                     if (cg%u(icrs,i+dir_fcrdif(xdim),j+dir_fcrdif(ydim),k+dir_fcrdif(zdim)) .gt. e_small) then
+                        ne_ratio(i,j,k) = cg%u(icrs-ncre,i+dir_fcrdif(xdim),j+dir_fcrdif(ydim),k+dir_fcrdif(zdim)) / cg%u(icrs,i+dir_fcrdif(xdim),j+dir_fcrdif(ydim),k+dir_fcrdif(zdim))
+                     else
+                        ne_ratio(i,j,k) = 0.0
+                     endif
+                     wcr(icrc-ncre,i,j,k) = wcr(icrc,i,j,k) * ne_ratio(i,j,k)
+                  endif
+#endif /* COSM_RAY_ELECTRONS */
+
                enddo
             enddo
          enddo
@@ -238,7 +258,33 @@ contains
          cg%u(icrs,hdm(xdim):cg%lhn(xdim,HI),hdm(ydim):cg%lhn(ydim,HI),hdm(zdim):cg%lhn(zdim,HI)) = cg%u(icrs,ldm(xdim):ndm(xdim),ldm(ydim):ndm(ydim),ldm(zdim):ndm(zdim)) ! for sanity
          cgl => cgl%nxt
       enddo
+#ifdef COSM_RAY_ELECTRONS
+      if (is_spectrum_component) then
+        cgl => leaves%first
+        do while(associated(cgl))
+            cg => cgl%cg
+            p3 => cg%w(wna%fi)%span(icrs-ncre,cg%lhn(:,LO), int(ndm, kind=4))
+            p3(:,:,:) = p3(:,:,:) - (cg%w(wcri)%span(icrc-ncre,int(cg%lhn(:,LO)+idm, kind=4), cg%lhn(:,HI)) - cg%w(wcri)%span(icrc-ncre,cg%lhn(:,LO), int(ndm, kind=4)))
+            cg%u(icrs-ncre,hdm(xdim):cg%lhn(xdim,HI),hdm(ydim):cg%lhn(ydim,HI),hdm(zdim):cg%lhn(zdim,HI)) = cg%u(icrs-ncre,ldm(xdim):ndm(xdim),ldm(ydim):ndm(ydim),ldm(zdim):ndm(zdim))
+            ne_ratio(:,:,:)  = 0.0
+            cgl => cgl%nxt
+        enddo
+      endif
+
+#endif /* COSM_RAY_ELECTRONS */
 
    end subroutine cr_diff
-
+!------------------------------
+   function int_is_gtzero(value)
+    use constants, only: zero, one
+    implicit none
+      real             :: int_is_gtzero
+      real, intent(in) :: value
+         if (value .ge. zero) then
+            int_is_gtzero = zero
+         else
+            int_is_gtzero = -one
+         endif
+   end function int_is_gtzero
+!------------------------------
 end module crdiffusion
