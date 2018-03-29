@@ -37,8 +37,9 @@ module initproblem
    integer(kind=4)    :: norm_step
    real               :: t_sn
    real               :: d0, p0, bx0, by0, bz0, x0, y0, z0, r0, beta_cr, amp_cr, vxd0, vyd0, vzd0, expansion_cnst
+   logical            :: step_dist
 
-   namelist /PROBLEM_CONTROL/ d0, p0, bx0, by0, bz0, x0, y0, z0, r0, vxd0, vyd0, vzd0, beta_cr, amp_cr, norm_step, expansion_cnst
+   namelist /PROBLEM_CONTROL/ d0, p0, bx0, by0, bz0, x0, y0, z0, r0, vxd0, vyd0, vzd0, beta_cr, amp_cr, norm_step, expansion_cnst, step_dist
 contains
 
 !-----------------------------------------------------------------------------
@@ -58,7 +59,7 @@ contains
       use dataio_pub, only: die
       use domain,     only: dom
       use func,       only: operator(.equals.)
-      use mpisetup,   only: ibuff, rbuff, master, slave, piernik_MPI_Bcast
+      use mpisetup,   only: ibuff, lbuff, rbuff, master, slave, piernik_MPI_Bcast
 
       implicit none
 
@@ -83,6 +84,8 @@ contains
       norm_step    = I_TEN     !< how often to compute the norm (in steps)
 
       expansion_cnst = 0.0
+
+      step_dist = .false.
 
       if (master) then
 
@@ -120,6 +123,7 @@ contains
 
          ibuff(1)  = norm_step
 
+         lbuff(1)  = step_dist
       endif
 
       call piernik_MPI_Bcast(ibuff)
@@ -145,6 +149,8 @@ contains
 
          norm_step = int(ibuff(1), kind=4)
 
+         step_dist= lbuff(1)
+
       endif
 
       if (r0 .equals. 0.) call die("[initproblem:read_problem_par] r0 == 0")
@@ -157,7 +163,7 @@ contains
 
       use cg_leaves,      only: leaves
       use cg_list,        only: cg_list_element
-      use constants,      only: xdim, ydim, zdim, LO, HI, pMAX
+      use constants,      only: xdim, ydim, zdim, LO, HI, pMAX, ndims, pi
       use dataio_pub,     only: msg, warn, printinfo, die
       use domain,         only: dom, is_multicg
       use fluidindex,     only: flind
@@ -180,12 +186,14 @@ contains
       implicit none
 
       class(component_fluid), pointer :: fl
-      integer                         :: i, j, k, icr, ipm, jpm, kpm
+      integer                         :: i, j, k, icr, ipm, jpm, kpm, ii, jj, kk
+      integer                         :: isub = 4
       real                            :: cs_iso, xsn, ysn, zsn, r2, maxv, e_tot
+      real                            :: x, y, z, s, smooth = 0.0
       real                            :: sn_exp, sn_rdist2
       type(cg_list_element),  pointer :: cgl
       type(grid_container),   pointer :: cg
-      logical        :: first_run = .true.
+      logical        :: first_run = .true., step_dist = .true.
 #ifndef COSM_RAYS_SOURCES
       integer, parameter              :: icr_H1 = 1, icr_C12 = 2
 #endif /* !COSM_RAYS_SOURCES */
@@ -243,12 +251,124 @@ contains
             cg%u(iarr_crs(icr), :, :, :) =  beta_cr*fl%cs2 * cg%u(fl%idn, :, :, :)/(gamma_crn(icr)-1.0)
          enddo
 
+! Explosions (nongaussian energy distribution; step function)
+         if (step_dist) then
+            do icr = 1, flind%crn%all
+               do k = cg%ks, cg%ke !cg%lhn(zdim,LO), cg%lhn(zdim,HI)
+                  do j = cg%js, cg%je !cg%lhn(ydim,LO), cg%lhn(ydim,HI)
+                     do i = cg%is, cg%ie !cg%lhn(xdim,LO), cg%lhn(xdim,HI)
+                        r2 = (cg%x(i)-x0)**2 + (cg%y(j)-y0)**2 + (cg%z(k)-z0)**2
+                        if ( r2 < ((1 + smooth) * (r0 + maxval(cg%dl, mask=dom%has_dir) ))**2) then
+                           do ii = 1, isub
+                              x = cg%x(i)-x0
+                              if (dom%has_dir(xdim)) x = x + cg%dx*(2*ii -isub - 1)/real(2*isub)
+                              do jj = 1, isub
+                                 y = cg%y(j)-y0
+                                 if (dom%has_dir(ydim)) y = y + cg%dy*(2*jj -isub - 1)/real(2*isub)
+                                 do kk = 1, isub
+                                    z = cg%z(k)-z0
+                                    if (dom%has_dir(zdim)) z = z + cg%dx*(2*kk -isub - 1)/real(2*isub)
+                                    r2 = sqrt(x*x+y*y+z*z)/r0 - 1.
+                                    if (r2 < -smooth) then
+                                       s = 1.
+                                    else if (r2 > smooth) then
+                                       s = 0.
+                                    else
+                                       s = 0.5
+                                       if (smooth .notequals. 0.) s = 0.5 * (1. - sin(pi / 2. * r2/smooth))
+                                    endif
+                                    if (s > 0.) cg%u(iarr_crn(icr),i,j,k) = cg%u(iarr_crn(icr),i,j,k) + amp_cr/isub**ndims * s
+                                 enddo
+                              enddo
+                           enddo
+                        endif
+                     enddo
+                  enddo
+               enddo
+            enddo
+#ifdef COSM_RAY_ELECTRONS
+            do k = cg%ks, cg%ke !cg%lhn(zdim,LO), cg%lhn(zdim,HI)
+               do j = cg%js, cg%je !cg%lhn(ydim,LO), cg%lhn(ydim,HI)
+                  do i = cg%is, cg%ie !cg%lhn(xdim,LO), cg%lhn(xdim,HI)
+                     r2 = (cg%x(i)-x0)**2 + (cg%y(j)-y0)**2 + (cg%z(k)-z0)**2
+                     if ( r2 < ((1 + smooth) * (r0 + maxval(cg%dl, mask=dom%has_dir) ))**2) then
+                        do ii = 1, isub
+                           x = cg%x(i)-x0
+                           if (dom%has_dir(xdim)) x = x + cg%dx*(2*ii -isub - 1)/real(2*isub)
+                           do jj = 1, isub
+                              y = cg%y(j)-y0
+                              if (dom%has_dir(ydim)) y = y + cg%dy*(2*jj -isub - 1)/real(2*isub)
+                              do kk = 1, isub
+                                 z = cg%z(k)-z0
+                                 if (dom%has_dir(zdim)) z = z + cg%dx*(2*kk -isub - 1)/real(2*isub)
+                                 r2 = sqrt(x*x+y*y+z*z)/r0 - 1.
+                                 if (r2 < -smooth) then
+                                    s = 1.
+                                 else if (r2 > smooth) then
+                                    s = 0.
+                                 else
+                                    s = 0.5
+                                    if (smooth .notequals. 0.) s = 0.5 * (1. - sin(pi / 2. * r2/smooth))
+                                 endif
+                                 if (s > 0.) then
+                                 cresp%n = cg%u(iarr_cre_n,i,j,k) ;  cresp%e = cg%u(iarr_cre_e,i,j,k) ! ; e_tot = e_tot * cre_eff
+                                 e_tot = cre_eff * amp_cr /(isub ** ndims * s)
+                                 if (first_run) then
+                                 if (e_tot .gt. e_small) then     ! early phase - fill cells only when total passed energy is greater than e_small, amplitude computed from total explosion energy multiplied by factor cre_eff
+                                    call cresp_init_state(cresp%n,cresp%e, e_tot_2_f_init_params(e_tot))  ! initializes whole spectrum, accounts for "widening" due to e_small approximation
+                                 endif
+                                 else
+                                    call e_tot_2_en_powl_init_params(cresp%n, cresp%e, e_tot)
+                                 endif
+                                 cg%u(iarr_cre_n,i,j,k) = cg%u(iarr_cre_n,i,j,k) + cresp%n
+                                 cg%u(iarr_cre_e,i,j,k) = cg%u(iarr_cre_e,i,j,k) + cresp%e
+                                 endif
+                              enddo
+                           enddo
+                        enddo
+                     endif
+                  enddo
+               enddo
+            enddo
+#endif /* COSM_RAY_ELECTRONS */
+         else ! (Gaussian; not step function distribution of energy density)
 ! Explosions
-         do icr = 1, flind%crn%all
+            do icr = 1, flind%crn%all
+               do k = cg%ks, cg%ke
+                  do j = cg%js, cg%je
+                     do i = cg%is, cg%ie
+
+                        do ipm=-1,1
+                           do jpm=-1,1
+                              do kpm=-1,1
+                                 r2 = (cg%x(i)-xsn+real(ipm)*dom%L_(xdim))**2+(cg%y(j)-ysn+real(jpm)*dom%L_(ydim))**2+(cg%z(k)-zsn+real(kpm)*dom%L_(zdim))**2
+                                 sn_rdist2 = r2/r0**2
+                                 sn_exp = 0.0
+                                 if(sn_rdist2 <= 10.0) then
+                                    sn_exp = exp(-sn_rdist2)
+                                 endif
+                                 if (icr == cr_table(icr_H1)) then
+                                    cg%u(iarr_crn(icr), i, j, k) = cg%u(iarr_crn(icr), i, j, k) + amp_cr*sn_exp
+                                 elseif (icr == cr_table(icr_C12)) then
+                                    cg%u(iarr_crn(icr), i, j, k) = cg%u(iarr_crn(icr), i, j, k) + amp_cr*0.1*sn_exp ! BEWARE: magic number
+                                 else
+                                    cg%u(iarr_crn(icr), i, j, k) = 0.0
+                                 endif
+                              enddo
+                           enddo
+                        enddo
+
+                     enddo
+                  enddo
+               enddo
+            enddo
+#ifdef COSM_RAY_ELECTRONS
+! Explosions @CRESP independent of cr nucleons
             do k = cg%ks, cg%ke
                do j = cg%js, cg%je
                   do i = cg%is, cg%ie
 
+                     e_tot = 0.0
                      do ipm=-1,1
                         do jpm=-1,1
                            do kpm=-1,1
@@ -258,56 +378,26 @@ contains
                               if(sn_rdist2 <= 10.0) then
                                  sn_exp = exp(-sn_rdist2)
                               endif
-                              if (icr == cr_table(icr_H1)) then
-                                 cg%u(iarr_crn(icr), i, j, k) = cg%u(iarr_crn(icr), i, j, k) + amp_cr*sn_exp
-                              elseif (icr == cr_table(icr_C12)) then
-                                 cg%u(iarr_crn(icr), i, j, k) = cg%u(iarr_crn(icr), i, j, k) + amp_cr*0.1*sn_exp ! BEWARE: magic number
-                              else
-                                 cg%u(iarr_crn(icr), i, j, k) = 0.0
-                              endif
+                              e_tot = e_tot + amp_cr*sn_exp
                            enddo
                         enddo
                      enddo
-
-                  enddo
-               enddo
-            enddo
-         enddo
-#ifdef COSM_RAY_ELECTRONS
-! Explosions @CRESP independent of cr nucleons
-         do k = cg%ks, cg%ke
-            do j = cg%js, cg%je
-               do i = cg%is, cg%ie
-
-                  e_tot = 0.0
-                  do ipm=-1,1
-                     do jpm=-1,1
-                        do kpm=-1,1
-                           r2 = (cg%x(i)-xsn+real(ipm)*dom%L_(xdim))**2+(cg%y(j)-ysn+real(jpm)*dom%L_(ydim))**2+(cg%z(k)-zsn+real(kpm)*dom%L_(zdim))**2
-                           sn_rdist2 = r2/r0**2
-                           sn_exp = 0.0
-                           if(sn_rdist2 <= 10.0) then
-                              sn_exp = exp(-sn_rdist2)
-                           endif
-                           e_tot = e_tot + amp_cr*sn_exp
-                        enddo
-                     enddo
-                  enddo
-                  cresp%n = cg%u(iarr_cre_n,i,j,k) ;  cresp%e = cg%u(iarr_cre_e,i,j,k) ; e_tot = e_tot * cre_eff
-                  if (first_run) then
-                     if (e_tot .gt. e_small) then     ! early phase - fill cells only when total passed energy is greater than e_small, amplitude computed from total explosion energy multiplied by factor cre_eff
-                        call cresp_init_state(cresp%n,cresp%e, e_tot_2_f_init_params(e_tot))  ! initializes whole spectrum, accounts for "widening" due to e_small approximation
+                     cresp%n = cg%u(iarr_cre_n,i,j,k) ;  cresp%e = cg%u(iarr_cre_e,i,j,k) ; e_tot = e_tot * cre_eff
+                     if (first_run) then
+                        if (e_tot .gt. e_small) then     ! early phase - fill cells only when total passed energy is greater than e_small, amplitude computed from total explosion energy multiplied by factor cre_eff
+                           call cresp_init_state(cresp%n,cresp%e, e_tot_2_f_init_params(e_tot))  ! initializes whole spectrum, accounts for "widening" due to e_small approximation
+                        endif
+                     else
+                        call e_tot_2_en_powl_init_params(cresp%n, cresp%e, e_tot)
                      endif
-                  else
-                     call e_tot_2_en_powl_init_params(cresp%n, cresp%e, e_tot)
-                  endif
-                  cg%u(iarr_cre_n,i,j,k) = cg%u(iarr_cre_n,i,j,k) + cresp%n
-                  cg%u(iarr_cre_e,i,j,k) = cg%u(iarr_cre_e,i,j,k) + cresp%e
+                     cg%u(iarr_cre_n,i,j,k) = cg%u(iarr_cre_n,i,j,k) + cresp%n
+                     cg%u(iarr_cre_e,i,j,k) = cg%u(iarr_cre_e,i,j,k) + cresp%e
 
+                  enddo
                enddo
             enddo
-         enddo
 #endif /* COSM_RAY_ELECTRONS */
+         endif
          cgl => cgl%nxt
       enddo
       cg => leaves%first%cg
