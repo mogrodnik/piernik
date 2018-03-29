@@ -56,7 +56,7 @@ module initcrspectrum
 !----------------------------------
  real(kind=8),parameter  :: eps   = 1.0e-15          ! < epsilon parameter for real number comparisons 
 !----------------------------------
- real(kind=8),allocatable, dimension(:) :: p_fix, p_mid_fix
+ real(kind=8),allocatable, dimension(:) :: p_fix, p_mid_fix, n_small_bin
  real(kind=8)       :: w
 ! Types used in module: 
    type bin_old
@@ -98,6 +98,7 @@ module initcrspectrum
 !====================================================================================================
   subroutine init_cresp
    use constants,             only: I_ZERO, zero, ten
+   use cresp_variables,       only: clight  !use units,                 only: clight
    use diagnostics,           only: my_allocate_with_index
    implicit none
     integer                  :: i       ! enumerator
@@ -156,6 +157,7 @@ module initcrspectrum
             call my_allocate_with_index(p_mid_fix,ncre,1)
             call my_allocate_with_index(cresp_all_edges,ncre,0)
             call my_allocate_with_index(cresp_all_bins, ncre,1)
+            call my_allocate_with_index(n_small_bin,ncre,1)
 
             cresp_all_edges = (/ (i,i=0,ncre) /)
             cresp_all_bins  = (/ (i,i=1,ncre) /)
@@ -174,6 +176,8 @@ module initcrspectrum
             p_mid_fix(1)    = p_mid_fix(2) / p_fix_ratio
             p_mid_fix(ncre) = p_mid_fix(ncre-1) * p_fix_ratio
             write (*,'(A22, 50E15.7)') 'Fixed mid momenta:   ',p_mid_fix(1:ncre)
+
+            n_small_bin(:) = e_small / (p_mid_fix(:) * clight)
 
 ! Input parameters check
             else
