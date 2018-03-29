@@ -143,7 +143,9 @@ contains
       use named_array,      only: p3
       use named_array_list, only: wna
 #ifdef COSM_RAY_ELECTRONS
-      use initcrspectrum,   only: ncre, ne_ratio, e_small
+      use initcrspectrum,   only: ncre, ne_ratio, e_small, n_small_bin
+      use initcosmicrays,   only: ncrn, iarr_cre
+      use fluidindex,       only: flind
 #endif /* COSM_RAY_ELECTRONS */
 
       implicit none
@@ -156,10 +158,10 @@ contains
       integer, dimension(ndims)            :: idm, ndm, hdm, ldm
       real                                 :: bb
       real, dimension(ndims)               :: bcomp
-      real                                 :: fcrdif
-      real, dimension(ndims)               :: decr
+      real                                 :: fcrdif, fcrdif_cren
+      real, dimension(ndims)               :: decr, dncr
       integer, dimension(ndims)            :: dir_fcrdif
-      real                                 :: dqp, dqm
+      real                                 :: dqp, dqm, dqp1, dqm1
       type(cg_list_element), pointer       :: cgl
       type(grid_container),  pointer       :: cg
       logical, dimension(ndims)            :: present_not_crdim
@@ -174,6 +176,7 @@ contains
 
       idm      = 0              ;      idm(crdim) = 1
       decr(:)  = 0.             ;      bcomp(:)   = 0.                 ! essential where ( .not.dom%has_dir(dim) .and. (dim /= crdim) )
+      dncr(:)  = 0.             ;      fcrdif_cren= 0.
       present_not_crdim = dom%has_dir .and. ( [ xdim,ydim,zdim ] /= crdim )
       wcri = wna%ind(wcr_n)
       
@@ -192,12 +195,22 @@ contains
          ldm        = cg%ijkse(:,LO) ;      ldm(crdim) = cg%lhn(crdim,LO) + dom%D_(crdim)      ! ldm =           1 + D_
          hdm        = cg%ijkse(:,HI) ;      hdm(crdim) = cg%lhn(crdim,HI)                      ! hdm = cg%n_ + idm - D_
          wcr(:,:,:,:) = 0.0                                   !!!!! BEWARE: this is a very provisoric tric.
+
+         if (is_spectrum_component) then
+            ne_ratio(:,:,:) = max(cg%u(icrs-ncre, :, :, :), n_small_bin(icrc-flind%crn%all-ncre)) / max(cg%u(icrs, :, :, :), e_small)
+         endif
+
          do k = ldm(zdim), hdm(zdim)       ; kl = k-1 ; kh = k+1 ; kld = k-idm(zdim)
             do j = ldm(ydim), hdm(ydim)    ; jl = j-1 ; jh = j+1 ; jld = j-idm(ydim)
                do i = ldm(xdim), hdm(xdim) ; il = i-1 ; ih = i+1 ; ild = i-idm(xdim)
 
                   decr(crdim) = (cg%u(icrs,i,j,k) - cg%u(icrs,ild,jld,kld)) * cg%idl(crdim)
                   fcrdif = K_crs_perp(icrc) * decr(crdim) !!!
+
+                  if (is_spectrum_component) then                                                                                     ! perp diffusion
+                     dncr(crdim) = (cg%u(icrs,i,j,k)*ne_ratio(i,j,k) - cg%u(icrs,ild,jld,kld)*ne_ratio(ild,jld,kld)) * cg%idl(crdim) ! n e-weighted diffusion
+                     fcrdif_cren  = K_crs_perp(icrc) * dncr(crdim)
+                  endif
 
                   bcomp(crdim) =  cg%b(crdim,i,j,k)
 
@@ -206,6 +219,14 @@ contains
                      dqp = half*((cg%u(icrs,ih,jld,kld) + cg%u(icrs,ih,j,k)) - (cg%u(icrs,i ,jld,kld) + cg%u(icrs,i ,j,k))) * cg%idx
                      decr(xdim) = (dqp+dqm)* (1.0 + sign(1.0, dqm*dqp))*oneq
                      bcomp(xdim)   = sum(cg%b(xdim,i:ih, jld:j, kld:k))*oneq
+                     if (is_spectrum_component) then
+                        dqm1 = half*((cg%u(icrs,i ,jld,kld)*ne_ratio(i ,jld,kld) + cg%u(icrs,i ,j,k)*ne_ratio(i ,j,k)) - &
+                           (cg%u(icrs,il,jld,kld)*ne_ratio(il,jld,kld) + cg%u(icrs,il,j,k)*ne_ratio(il,j,k) )) * cg%idx
+
+                        dqp1 = half*((cg%u(icrs,ih,jld,kld)*ne_ratio(ih,jld,kld) + cg%u(icrs,ih,j,k)*ne_ratio(ih,j,k)) - &
+                           (cg%u(icrs,i ,jld,kld)*ne_ratio(i ,jld,kld) + cg%u(icrs,i ,j,k)*ne_ratio(i ,j,k) )) * cg%idx
+                        dncr(xdim) = (dqp1+dqm1)* (1.0 + sign(1.0, dqm1*dqp1))*oneq
+                     endif
                   endif
 
                   if (present_not_crdim(ydim)) then
@@ -213,6 +234,14 @@ contains
                      dqp = half*((cg%u(icrs,ild,jh,kld) + cg%u(icrs,i,jh,k)) - (cg%u(icrs,ild,j ,kld) + cg%u(icrs,i,j ,k))) * cg%idy
                      decr(ydim) = (dqp+dqm)* (1.0 + sign(1.0, dqm*dqp))*oneq
                      bcomp(ydim)   = sum(cg%b(ydim,ild:i, j:jh, kld:k))*oneq
+                     if (is_spectrum_component) then
+                        dqm1 = half*((cg%u(icrs,ild,j ,kld)*ne_ratio(ild,j ,kld) + cg%u(icrs,i,j ,k)*ne_ratio(i,j ,k)) - &
+                           (cg%u(icrs,ild,jl,kld)*ne_ratio(ild,jl,kld) + cg%u(icrs,i,jl,k)*ne_ratio(i,jl,k) )) * cg%idy
+
+                        dqp1 = half*((cg%u(icrs,ild,jh,kld)*ne_ratio(ild,jh,kld) + cg%u(icrs,i,jh,k)*ne_ratio(i,jh,k)) - &
+                           (cg%u(icrs,ild,j ,kld)*ne_ratio(ild,j ,kld) + cg%u(icrs,i,j ,k)*ne_ratio(i,j ,k) )) * cg%idy
+                        dncr(ydim) = (dqp1+dqm1)* (1.0 + sign(1.0, dqm1*dqp1))*oneq
+                     endif
                   endif
 
                   if (present_not_crdim(zdim)) then
@@ -220,6 +249,14 @@ contains
                      dqp = half*((cg%u(icrs,ild,jld,kh) + cg%u(icrs,i,j,kh)) - (cg%u(icrs,ild,jld,k ) + cg%u(icrs,i,j,k ))) * cg%idz
                      decr(zdim) = (dqp+dqm)* (1.0 + sign(1.0, dqm*dqp))*oneq
                      bcomp(zdim)   = sum(cg%b(zdim,ild:i, jld:j, k:kh))*oneq
+                     if (is_spectrum_component) then
+                        dqm1 = half*((cg%u(icrs,ild,jld,k )*ne_ratio(ild,jld,k ) + cg%u(icrs,i,j,k )*ne_ratio(i,j,k )) - &
+                           (cg%u(icrs,ild,jld,kl)*ne_ratio(ild,jld,kl) + cg%u(icrs,i,j,kl)*ne_ratio(i,j,kl) )) * cg%idz
+
+                        dqp1 = half*((cg%u(icrs,ild,jld,kh)*ne_ratio(ild,jld,kh) + cg%u(icrs,i,j,kh)*ne_ratio(i,j,kh)) - &
+                           (cg%u(icrs,ild,jld,k )*ne_ratio(ild,jld,k ) + cg%u(icrs,i,j,k )*ne_ratio(i,j,k ) )) * cg%idz
+                        dncr(zdim) = (dqp1+dqm1)* (1.0 + sign(1.0, dqm1*dqp1))*oneq
+                     endif
                   endif
                   bb = sum(bcomp**2)
 
@@ -229,13 +266,8 @@ contains
 
 #ifdef COSM_RAY_ELECTRONS
                   if (is_spectrum_component) then
-                     dir_fcrdif(crdim)  =   int(int_is_gtzero(fcrdif))
-                     if (cg%u(icrs,i+dir_fcrdif(xdim),j+dir_fcrdif(ydim),k+dir_fcrdif(zdim)) .gt. e_small) then
-                        ne_ratio(i,j,k) = cg%u(icrs-ncre,i+dir_fcrdif(xdim),j+dir_fcrdif(ydim),k+dir_fcrdif(zdim)) / cg%u(icrs,i+dir_fcrdif(xdim),j+dir_fcrdif(ydim),k+dir_fcrdif(zdim))
-                     else
-                        ne_ratio(i,j,k) = 0.0
-                     endif
-                     wcr(icrc-ncre,i,j,k) = wcr(icrc,i,j,k) * ne_ratio(i,j,k)
+                     fcrdif_cren  = fcrdif_cren + K_crs_paral(icrc-ncre) * bcomp(crdim) * (bcomp(xdim)*dncr(xdim) + bcomp(ydim)*dncr(ydim) + bcomp(zdim)*dncr(zdim)) / bb
+                     wcr(icrc-ncre,i,j,k) = - fcrdif_cren * dt * cg%idl(crdim)
                   endif
 #endif /* COSM_RAY_ELECTRONS */
 
@@ -267,24 +299,10 @@ contains
             p3(:,:,:) = p3(:,:,:) - (cg%w(wcri)%span(icrc-ncre,int(cg%lhn(:,LO)+idm, kind=4), cg%lhn(:,HI)) - cg%w(wcri)%span(icrc-ncre,cg%lhn(:,LO), int(ndm, kind=4)))
             cg%u(icrs-ncre,hdm(xdim):cg%lhn(xdim,HI),hdm(ydim):cg%lhn(ydim,HI),hdm(zdim):cg%lhn(zdim,HI)) = cg%u(icrs-ncre,ldm(xdim):ndm(xdim),ldm(ydim):ndm(ydim),ldm(zdim):ndm(zdim))
             ne_ratio(:,:,:)  = 0.0
-            cgl => cgl%nxt
+         cgl => cgl%nxt
         enddo
       endif
 
 #endif /* COSM_RAY_ELECTRONS */
-
    end subroutine cr_diff
-!------------------------------
-   function int_is_gtzero(value)
-    use constants, only: zero, one
-    implicit none
-      real             :: int_is_gtzero
-      real, intent(in) :: value
-         if (value .ge. zero) then
-            int_is_gtzero = zero
-         else
-            int_is_gtzero = -one
-         endif
-   end function int_is_gtzero
-!------------------------------
 end module crdiffusion
