@@ -193,7 +193,7 @@ contains
       real                            :: sn_exp, sn_rdist2
       type(cg_list_element),  pointer :: cgl
       type(grid_container),   pointer :: cg
-      logical        :: first_run = .true., step_dist = .true.
+      logical        :: first_run = .true.
 #ifndef COSM_RAYS_SOURCES
       integer, parameter              :: icr_H1 = 1, icr_C12 = 2
 #endif /* !COSM_RAYS_SOURCES */
