@@ -157,26 +157,24 @@ contains
       use gravity,             only: source_terms_grav
       use particle_pub,        only: pset, psolver
 #endif /* GRAV */
-#if defined(COSM_RAYS) 
       use all_boundaries,      only: all_fluid_boundaries
       use initcosmicrays,      only: use_split
-      use fluidindex,          only: flind
 #if defined(MULTIGRID)
       use multigrid_diffusion, only: multigrid_solve_diff
 #endif /* MULTIGRID */
-#endif /* COSM_RAYS */
 #ifdef COSM_RAY_ELECTRONS
       use initcrspectrum,      only: ncre
 #endif /* COSM_RAY_ELECTRONS */
 #ifdef SHEAR
       use shear,               only: shear_3sweeps
 #endif /* SHEAR */
-
+#ifdef DEBUG
+      use piernikiodebug,   only: force_dumps
+#endif /* DEBUG */
       implicit none
 
       logical, intent(in) :: forward  !< If .true. then do X->Y->Z sweeps, if .false. then reverse that order
-
-      integer(kind=4) :: s, icrc      ! index of cr component in iarr_crs
+      integer(kind=4) :: s            !< dimension index
 
 #ifdef SHEAR
       call shear_3sweeps
@@ -186,32 +184,12 @@ contains
       call source_terms_grav
 #endif /* GRAV */
 
-#if defined(COSM_RAYS) 
-
       if (.not. use_split) then
 #if defined(MULTIGRID)
          call multigrid_solve_diff
          call all_fluid_boundaries
 #endif /* MULTIGRID */
-      else
-
-            do icrc=1, flind%crn%all
-               do s = xdim, zdim
-                  if (.not.skip_sweep(s)) call make_diff_sweep(icrc, s)
-               enddo
-            enddo
-#ifdef COSM_RAY_ELECTRONS
-            do icrc= flind%crn%all + 1, flind%crn%all + ncre
-               do s = xdim, zdim
-                  if (.not.skip_sweep(s)) then
-                     call make_diff_sweep(icrc, s)
-                     call make_diff_sweep(ncre + icrc, s)
-                  endif
-               enddo
-            enddo
-#endif /* COSM_RAY_ELECTRONS */
       endif
-#endif /* COSM_RAYS */
 
       call expanded_domain%delete ! at this point everything should be initialized after domain expansion and we no longer need this list
       if (use_fargo) then
@@ -221,11 +199,24 @@ contains
       else
          if (forward) then
             do s = xdim, zdim
-              if (.not.skip_sweep(s)) call make_adv_sweep(s, forward)
+              if (.not.skip_sweep(s)) then
+                  call make_adv_sweep(s, forward)
+                  call make_diff_sweep(s)
+#ifdef DEBUG
+                  call force_dumps
+#endif /* DEBUG */
+
+               endif
             enddo
          else
             do s = zdim, xdim, -I_ONE
-              if (.not.skip_sweep(s)) call make_adv_sweep(s, forward)
+               if (.not.skip_sweep(s)) then
+                  call make_diff_sweep(s)
+                  call make_adv_sweep(s, forward)
+#ifdef DEBUG
+                  call force_dumps
+#endif /* DEBUG */
+               endif
             enddo
          endif
       endif
@@ -233,7 +224,6 @@ contains
       if (associated(psolver)) call pset%evolve(psolver, t-dt, dt)
 #endif /* GRAV */
       if (associated(problem_customize_solution)) call problem_customize_solution(forward)
-      
 
    end subroutine make_3sweeps
 
@@ -249,10 +239,6 @@ contains
       use crdiffusion,    only: cr_diff
       use initcosmicrays, only: use_split
 #endif /* COSM_RAYS */
-#ifdef DEBUG
-      use piernikiodebug,   only: force_dumps
-#endif /* DEBUG */
-
       implicit none
 
       integer(kind=4), intent(in) :: dir      !< direction, one of xdim, ydim, zdim
@@ -277,9 +263,6 @@ contains
          if (geometry25D) call sweep(dir)
       endif
 
-#ifdef DEBUG
-      call force_dumps
-#endif /* DEBUG */
 
    end subroutine make_adv_sweep
 
@@ -287,31 +270,40 @@ contains
 !>
 !! \brief Perform single diffusion sweep in forward or backward direction
 !<
-   subroutine make_diff_sweep(icrc, dir)
+   subroutine make_diff_sweep(dir)
 
       use domain,         only: dom
       use sweeps,         only: sweep
 #ifdef COSM_RAYS
+      use fluidindex,     only: flind
       use crdiffusion,    only: cr_diff
       use initcosmicrays, only: use_split
 #endif /* COSM_RAYS */
-#ifdef DEBUG
-      use piernikiodebug,   only: force_dumps
-#endif /* DEBUG */
-
+#ifdef COSM_RAY_ELECTRONS
+      use initcrspectrum, only: ncre
+#endif
       implicit none
 
-      integer(kind=4), intent(in) :: icrc, dir      !< direction, one of xdim, ydim, zdim
+      integer(kind=4), intent(in) :: dir      !< direction, one of xdim, ydim, zdim
+      integer(kind=4)             :: icrc     !< cr diffusion index
 
 #ifdef COSM_RAYS
       if (dom%has_dir(dir)) then
-         call cr_diff(icrc,dir)
+#ifndef COSM_RAY_ELECTRONS
+         do icrc = 1, flind%crs%all
+            call cr_diff(icrc,dir)
+         enddo
+#else /* defined(COSM_RAY_ELECTRONS) */
+         do icrc = 1, flind%crn%all
+            call cr_diff(icrc,dir)
+         enddo
+         do icrc = 1 + flind%crn%all, flind%crn%all + ncre
+            call cr_diff(icrc,dir)      ! cresp number density
+            call cr_diff(icrc+ncre,dir) ! cresp energy density
+         enddo
+#endif /* !COSM_RAY_ELECTRONS */
       endif
 #endif /* COSM_RAYS */
-
-#ifdef DEBUG
-      call force_dumps
-#endif /* DEBUG */
 
    end subroutine make_diff_sweep
 
