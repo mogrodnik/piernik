@@ -40,7 +40,7 @@ module decomposition
    implicit none
 
    private
-   public :: cleanup_decomposition, init_decomposition, box_t, cuboid
+   public :: cleanup_decomposition, init_decomposition, box_t, cuboid, decompose_patch_rectlinear
 
    type :: cuboid
       integer(kind=8), dimension(xdim:zdim, LO:HI) :: se !< grid piece
