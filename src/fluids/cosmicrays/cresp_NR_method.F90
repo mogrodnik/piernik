@@ -216,14 +216,13 @@ contains
 
       use constants,       only: zero, I_FOUR
       use initcrspectrum,  only: e_small, q_big, max_p_ratio, arr_dim, arr_dim_q
-      use mpisetup,        only: master
 
       implicit none
 
       logical      :: first_run = .true.
 
       call initialize_arrays
-      if (master .and. first_run) then
+      if (first_run) then
          helper_arr_dim = int(arr_dim/I_FOUR,kind=4)
 
          if (.not. allocated(p_space)) allocate(p_space(1:helper_arr_dim)) ! these will be deallocated once initialization is over
@@ -254,6 +253,7 @@ contains
       use dataio_pub,     only: msg, printinfo, warn
       use initcrspectrum, only: q_big, force_init_NR, NR_run_refine_pf, p_fix_ratio, e_small_approx_init_cond, arr_dim, arr_dim_q, max_p_ratio, e_small
       use cresp_variables,only: clight_cresp
+      use mpisetup,       only: master, piernik_MPI_Bcast, piernik_MPI_Barrier
 
       implicit none
 
@@ -324,6 +324,8 @@ contains
          sml%ai%iend= arr_dim
          sml%ni%ibeg = 1
          sml%ni%iend = arr_dim
+
+         call divide_smap_limits( (/int(hdr_init%s_dim1,8), int(hdr_init%s_dim2,8), int(I_ONE,8)/), sml )
 ! --------------------
          hdr_init%s_amin   = alpha_tab_up(1)
          hdr_init%s_amax   = alpha_tab_up(arr_dim)
@@ -331,7 +333,7 @@ contains
          hdr_init%s_nmax   = n_tab_up(arr_dim)
 
          write (msg, "(A47,A2,A10)") "[cresp_NR_method] Preparing solution maps for (",bound_name(HI), ") boundary"
-         call printinfo(msg)
+         if (master) call printinfo(msg)
 
          call read_NR_smap_header("p_ratios_"//bound_name(HI), hdr_read, read_error)
          if (.not. read_error) then
@@ -348,15 +350,24 @@ contains
          endif
          if (force_init_NR .or. (read_error .or. (headers_match .eqv. .false.)) ) then
             call fill_boundary_grid(HI, p_ratios_up, f_ratios_up, sml)
+
+            call piernik_MPI_Bcast(p_ratios_up(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
+            call piernik_MPI_Bcast(f_ratios_up(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
          endif
 
          if (NR_run_refine_pf) then
             call assoc_pointers(HI)
             call refine_all_directions(HI)
+
+            call piernik_MPI_Bcast(p_ratios_up(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
+            call piernik_MPI_Bcast(f_ratios_up(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
          endif
 
-         call save_NR_smap(p_ratios_up, hdr_init, "p_ratios_", HI)
-         call save_NR_smap(f_ratios_up, hdr_init, "f_ratios_", HI)
+         call piernik_MPI_Barrier
+         if (master) then
+            call save_NR_smap(p_ratios_up, hdr_init, "p_ratios_", HI)
+            call save_NR_smap(f_ratios_up, hdr_init, "f_ratios_", HI)
+         endif
 !--------------------
          hdr_init%s_amin   = alpha_tab_lo(1)
          hdr_init%s_amax   = alpha_tab_lo(arr_dim)
@@ -364,7 +375,7 @@ contains
          hdr_init%s_nmax   = n_tab_lo(arr_dim)
 
          write (msg, "(A47,A2,A10)") "[cresp_NR_method] Preparing solution maps for (",bound_name(LO), ") boundary"
-         call printinfo(msg)
+         if (master) call printinfo(msg)
 
          call read_NR_smap_header("p_ratios_"//bound_name(LO), hdr_read, read_error)
          if (.not. read_error) then
@@ -381,16 +392,27 @@ contains
          endif
          if (force_init_NR .or. (read_error .or. (headers_match .eqv. .false.)) ) then
             call fill_boundary_grid(LO, p_ratios_lo, f_ratios_lo, sml)
+
+            call piernik_MPI_Bcast(p_ratios_lo(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
+            call piernik_MPI_Bcast(f_ratios_lo(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
          endif
 
          if (NR_run_refine_pf) then
             call assoc_pointers(LO)
             call refine_all_directions(LO)
+
+            call piernik_MPI_Bcast(p_ratios_lo(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
+            call piernik_MPI_Bcast(f_ratios_lo(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
          endif
 
-         call save_NR_smap(p_ratios_lo, hdr_init, "p_ratios_", LO)
-         call save_NR_smap(f_ratios_lo, hdr_init, "f_ratios_", LO)
+         call piernik_MPI_Barrier
+
+         if (master) then
+            call save_NR_smap(p_ratios_lo, hdr_init, "p_ratios_", LO)
+            call save_NR_smap(f_ratios_lo, hdr_init, "f_ratios_", LO)
+         endif
       endif
+
       a_min_q = one  + epsilon(one)
       a_max_q = (one + epsilon(one)) * p_fix_ratio
       j = min(arr_dim_q - int(arr_dim_q/100, kind=4), arr_dim_q - I_ONE)               ! BEWARE: magic number
@@ -424,9 +446,66 @@ contains
    end subroutine fill_guess_grids
 
 !----------------------------------------------------------------------------------------------------
+   subroutine divide_smap_limits(smap_dims, smlim)
+
+      use constants,      only: I_ZERO, I_ONE
+      use decomposition,  only: decompose_patch_rectlinear
+      use dataio_pub,     only: msg, printinfo
+      use mpisetup,       only: nproc, master, piernik_MPI_Barrier, piernik_MPI_Bcast, proc
+
+      implicit none
+
+      integer                                   :: i, j, iproc, leni, lenj, modi, modj
+      integer,         dimension(3)             :: smap_parts
+      integer(kind=8), dimension(3), intent(in) :: smap_dims
+      type(smaplmts)                            :: smlim
+
+      if (master) then
+         call decompose_patch_rectlinear(smap_parts, smap_dims, nproc, I_ZERO)
+      endif
+      call piernik_MPI_Barrier
+
+      call piernik_MPI_Bcast(smap_parts)
+
+      iproc  = 0
+
+      do i = I_ONE, smap_parts(1)
+         do j = I_ONE, smap_parts(2)
+            if (proc .eq. iproc) then
+
+               leni = int(smap_dims(1),4)/smap_parts(1)
+               modi = modulo(int(smap_dims(1),4),smap_parts(1))
+               if (i .le. (smap_parts(1) - modi)) then
+                  smlim%ai%ibeg = I_ONE + (i - I_ONE)  * leni
+                  smlim%ai%iend = smlim%ai%ibeg + leni - I_ONE
+               else
+                  smlim%ai%ibeg = I_ONE + (i - I_ONE - (smap_parts(1) - modi))  * (leni + I_ONE) + (smap_parts(1) - modi) * leni
+                  smlim%ai%iend = smlim%ai%ibeg + leni
+               endif
+
+               lenj = int(smap_dims(2),4)/smap_parts(2)
+               modj = modulo(int(smap_dims(2),4),smap_parts(2))
+               if (j .le. (smap_parts(2) - modj)) then
+                  smlim%ni%ibeg = I_ONE + (j - I_ONE)  * lenj
+                  smlim%ni%iend = smlim%ni%ibeg + lenj - I_ONE
+               else
+                  smlim%ni%ibeg = I_ONE + (j - I_ONE - (smap_parts(2) - modj))  * (lenj + I_ONE) + (smap_parts(2) - modj) * lenj
+                  smlim%ni%iend = smlim%ni%ibeg + lenj
+               endif
+            endif
+            iproc = iproc + I_ONE
+         enddo
+      enddo
+
+      call piernik_MPI_Barrier
+
+   end subroutine divide_smap_limits
+
+!----------------------------------------------------------------------------------------------------
    subroutine refine_all_directions(bound_case)
 
       use dataio_pub, only: die, msg, printinfo
+      use mpisetup,   only: master
 
       implicit none
 
@@ -437,7 +516,7 @@ contains
 #endif /* CRESP_VERBOSED */
 
       write(msg,'(3a)') "Running refine for:", bound_name(bound_case), " boundary"
-      call printinfo(msg)
+      if (master) call printinfo(msg)
       if (.not. allocated(p_space) .or. .not. allocated(q_space)) call die("[cresp_NR_method:refine_all_directions] refine_grids called after array deallocation, stopping")
 
       call refine_ij(p_p, p_f,  1, -1)
@@ -498,6 +577,7 @@ contains
       use constants,      only: zero
       use dataio_pub,     only: msg, printinfo
       use initcrspectrum, only: arr_dim, eps
+      use mpisetup,       only: master
 
       implicit none
 
@@ -522,7 +602,7 @@ contains
       fill_p = zero ; fill_f = zero
       x_step = zero
       write(msg, "(A,A2,A,I3,A)") "[cresp_NR_method:fill_boundary_grid] Solving solution maps for cutoff case (",bound_name(bound_case),"): DIM=",arr_dim,"**2"
-      call printinfo(msg)
+      if (master) call printinfo(msg)
 
       do i = sml%ai%ibeg, sml%ai%iend
          call add_dot( i .eq. arr_dim )
@@ -1494,6 +1574,7 @@ contains
       use constants, only: zero
       use dataio_pub,only: msg, printinfo, warn
       use func,      only: operator(.equals.)
+      use mpisetup,  only: master
 
       implicit none
 
@@ -1517,10 +1598,10 @@ contains
 
       if (.not. hdr_equal) then
          write(msg,"(A117)") "[cresp_NR_method:check_NR_smap_header] Headers differ (provided in ratios files vs. values resulting from parameters)"
-         call warn(msg)
+         if (master) call warn(msg)
       else
          write(msg,"(A115)") "[cresp_NR_method:check_NR_smap_header] Headers match (provided in ratios files vs. values resulting from parameters)"
-         call printinfo(msg)
+         if (master) call printinfo(msg)
       endif
 
    end subroutine check_NR_smap_header
