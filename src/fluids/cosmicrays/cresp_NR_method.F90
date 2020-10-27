@@ -241,7 +241,7 @@ contains
          first_run = .false.
       endif
 
-      call cresp_NR_mpi_exchange
+      call cresp_NR_mpi_exchange ! DEPRECATED
 
    end subroutine cresp_initialize_guess_grids
 
@@ -257,12 +257,13 @@ contains
 
       implicit none
 
-      integer(kind=4)      :: i, j
-      logical              :: read_error, headers_match, read_error_p, read_error_f
-      real                 :: a_min_q = big, a_max_q = small , q_in3, pq_cmplx
-      real, dimension(2)   :: a_min = big, a_max = small, n_min = big, n_max = small
-      type(map_header)     :: hdr_init, hdr_read
-      type(smaplmts)       :: sml
+      real                                :: a_min_q = big, a_max_q = small , q_in3, pq_cmplx
+      real, dimension(2)                  :: a_min = big, a_max = small, n_min = big, n_max = small
+      integer(kind=4)                     :: i, j
+      type(map_header)                    :: hdr_init, hdr_read
+      logical                             :: read_error, headers_match, read_error_p, read_error_f
+      real, dimension(:,:), allocatable   :: p_r, f_r
+      type(smaplmts)                      :: sml
 
       q_space = zero
       do i = 1, int(half*helper_arr_dim)
@@ -358,9 +359,6 @@ contains
          if (NR_run_refine_pf) then
             call assoc_pointers(HI)
             call refine_all_directions(HI)
-
-            call piernik_MPI_Bcast(p_ratios_up(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
-            call piernik_MPI_Bcast(f_ratios_up(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
          endif
 
          call piernik_MPI_Barrier
@@ -400,9 +398,6 @@ contains
          if (NR_run_refine_pf) then
             call assoc_pointers(LO)
             call refine_all_directions(LO)
-
-            call piernik_MPI_Bcast(p_ratios_lo(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
-            call piernik_MPI_Bcast(f_ratios_lo(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
          endif
 
          call piernik_MPI_Barrier
@@ -476,21 +471,21 @@ contains
                leni = int(smap_dims(1),4)/smap_parts(1)
                modi = modulo(int(smap_dims(1),4),smap_parts(1))
                if (i .le. (smap_parts(1) - modi)) then
-                  smlim%ai%ibeg = I_ONE + (i - I_ONE)  * leni
-                  smlim%ai%iend = smlim%ai%ibeg + leni - I_ONE
+                  smlim%ni%ibeg = I_ONE + (i - I_ONE)  * leni
+                  smlim%ni%iend = smlim%ni%ibeg + leni - I_ONE
                else
-                  smlim%ai%ibeg = I_ONE + (i - I_ONE - (smap_parts(1) - modi))  * (leni + I_ONE) + (smap_parts(1) - modi) * leni
-                  smlim%ai%iend = smlim%ai%ibeg + leni
+                  smlim%ni%ibeg = I_ONE + (i - I_ONE - (smap_parts(2) - modi))  * (leni + I_ONE) + (smap_parts(2) - modi) * leni
+                  smlim%ni%iend = smlim%ni%ibeg + leni
                endif
 
                lenj = int(smap_dims(2),4)/smap_parts(2)
                modj = modulo(int(smap_dims(2),4),smap_parts(2))
                if (j .le. (smap_parts(2) - modj)) then
-                  smlim%ni%ibeg = I_ONE + (j - I_ONE)  * lenj
-                  smlim%ni%iend = smlim%ni%ibeg + lenj - I_ONE
+                  smlim%ai%ibeg = I_ONE + (j - I_ONE)  * lenj
+                  smlim%ai%iend = smlim%ai%ibeg + lenj - I_ONE
                else
-                  smlim%ni%ibeg = I_ONE + (j - I_ONE - (smap_parts(2) - modj))  * (lenj + I_ONE) + (smap_parts(2) - modj) * lenj
-                  smlim%ni%iend = smlim%ni%ibeg + lenj
+                  smlim%ai%ibeg = I_ONE + (j - I_ONE - (smap_parts(1) - modj))  * (lenj + I_ONE) + (smap_parts(1) - modj) * lenj
+                  smlim%ai%iend = smlim%ai%ibeg + lenj
                endif
             endif
             iproc = iproc + I_ONE
@@ -605,7 +600,6 @@ contains
       if (master) call printinfo(msg)
 
       do i = sml%ai%ibeg, sml%ai%iend
-         call add_dot( i .eq. arr_dim )
          new_line = .true.
          prev_solution = prev_solution_1 ! easier to find when not searching from the top
          do j = sml%ni%ibeg, sml%ni%iend
@@ -667,6 +661,7 @@ contains
             if (exit_code) print *,""
 #endif /* CRESP_VERBOSED */
          enddo
+         call add_dot (i .eq. arr_dim)
       enddo
 
       fill_p = abs(fill_p)
