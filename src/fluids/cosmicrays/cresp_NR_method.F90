@@ -241,29 +241,31 @@ contains
          first_run = .false.
       endif
 
-      call cresp_NR_mpi_exchange ! DEPRECATED
-
    end subroutine cresp_initialize_guess_grids
 
 !----------------------------------------------------------------------------------------------------
 
-   subroutine fill_guess_grids
+   subroutine fill_guess_grids   ! TODO optimize me more!
 
       use constants,      only: zero, half, one, three, I_ONE, big, small
       use dataio_pub,     only: msg, printinfo, warn
       use initcrspectrum, only: q_big, force_init_NR, NR_run_refine_pf, p_fix_ratio, e_small_approx_init_cond, arr_dim, arr_dim_q, max_p_ratio, e_small
       use cresp_variables,only: clight_cresp
-      use mpisetup,       only: master, piernik_MPI_Bcast, piernik_MPI_Barrier
+      use mpisetup,       only: master, piernik_MPI_Allgatherv, piernik_MPI_Bcast, piernik_MPI_Barrier
 
       implicit none
 
       real                                :: a_min_q = big, a_max_q = small , q_in3, pq_cmplx
-      real, dimension(2)                  :: a_min = big, a_max = small, n_min = big, n_max = small
-      integer(kind=4)                     :: i, j
+      real, dimension(2)                  :: a_min   = big, a_max   = small, n_min = big, n_max = small
+      integer, dimension(:), allocatable  :: displac, elmts
       type(map_header)                    :: hdr_init, hdr_read
-      logical                             :: read_error, headers_match, read_error_p, read_error_f
-      real, dimension(:,:), allocatable   :: p_r, f_r
+      integer(kind=4)                     :: i, j
+      logical                             :: headers_match, read_error, read_error_f, read_error_p
+      real, dimension(:,:), allocatable   :: f_r, p_r
       type(smaplmts)                      :: sml
+
+      if (.not. allocated(f_r)) allocate(f_r(arr_dim, arr_dim))
+      if (.not. allocated(p_r)) allocate(p_r(arr_dim, arr_dim))
 
       q_space = zero
       do i = 1, int(half*helper_arr_dim)
@@ -311,7 +313,6 @@ contains
       hdr_init%s_pr     = max_p_ratio
       hdr_init%s_c      = clight_cresp
 
-
       do i = 1, arr_dim
          alpha_tab_lo(i) = ind_to_flog(i, a_min(LO), a_max(LO), arr_dim) ! a_min_lo * ten**((log10(a_max_lo/a_min_lo))/real(arr_dim-1)*real(i-1))
          alpha_tab_up(i) = ind_to_flog(i, a_min(HI), a_max(HI), arr_dim) ! a_min_up * ten**((log10(a_max_up/a_min_up))/real(arr_dim-1)*real(i-1))
@@ -320,13 +321,13 @@ contains
       enddo
 
       if (e_small_approx_init_cond == 1) then
-! TODO not yet paralelized, values to be passed to main solving routine
+
          sml%ai%ibeg = 1
          sml%ai%iend= arr_dim
          sml%ni%ibeg = 1
          sml%ni%iend = arr_dim
 
-         call divide_smap_limits( (/int(hdr_init%s_dim1,8), int(hdr_init%s_dim2,8), int(I_ONE,8)/), sml )
+         call divide_smap_limits( (/int(hdr_init%s_dim1,8), int(hdr_init%s_dim2,8), int(I_ONE,8)/), sml, displac, elmts )
 ! --------------------
          hdr_init%s_amin   = alpha_tab_up(1)
          hdr_init%s_amax   = alpha_tab_up(arr_dim)
@@ -349,11 +350,12 @@ contains
             write(msg,"(A44,A2,A10)") "[cresp_NR_method] Problem reading data for (",bound_name(HI), ") boundary"
             call warn(msg)
          endif
-         if (force_init_NR .or. (read_error .or. (headers_match .eqv. .false.)) ) then
-            call fill_boundary_grid(HI, p_ratios_up, f_ratios_up, sml)
 
-            call piernik_MPI_Bcast(p_ratios_up(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
-            call piernik_MPI_Bcast(f_ratios_up(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
+         if (force_init_NR .or. (read_error .or. (headers_match .eqv. .false.)) ) then
+            call fill_boundary_grid(HI, p_r, f_r, sml)   ! TODO optimize me more!
+
+            call piernik_MPI_Allgatherv(p_r(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend), elmts, displac, p_ratios_up)
+            call piernik_MPI_Allgatherv(f_r(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend), elmts, displac, f_ratios_up)
          endif
 
          if (NR_run_refine_pf) then
@@ -361,11 +363,11 @@ contains
             call refine_all_directions(HI)
          endif
 
-         call piernik_MPI_Barrier
          if (master) then
             call save_NR_smap(p_ratios_up, hdr_init, "p_ratios_", HI)
             call save_NR_smap(f_ratios_up, hdr_init, "f_ratios_", HI)
          endif
+         call piernik_MPI_Barrier
 !--------------------
          hdr_init%s_amin   = alpha_tab_lo(1)
          hdr_init%s_amax   = alpha_tab_lo(arr_dim)
@@ -389,10 +391,10 @@ contains
             call warn(msg)
          endif
          if (force_init_NR .or. (read_error .or. (headers_match .eqv. .false.)) ) then
-            call fill_boundary_grid(LO, p_ratios_lo, f_ratios_lo, sml)
+            call fill_boundary_grid(LO, p_r, f_r, sml)   ! TODO optimize me more!
 
-            call piernik_MPI_Bcast(p_ratios_lo(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
-            call piernik_MPI_Bcast(f_ratios_lo(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend))
+            call piernik_MPI_Allgatherv(p_r(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend), elmts, displac, p_ratios_lo)
+            call piernik_MPI_Allgatherv(f_r(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend), elmts, displac, f_ratios_lo)
          endif
 
          if (NR_run_refine_pf) then
@@ -441,19 +443,23 @@ contains
    end subroutine fill_guess_grids
 
 !----------------------------------------------------------------------------------------------------
-   subroutine divide_smap_limits(smap_dims, smlim)
+   subroutine divide_smap_limits(smap_dims, smlim, displacements, element_count)
 
       use constants,      only: I_ZERO, I_ONE
       use decomposition,  only: decompose_patch_rectlinear
-      use dataio_pub,     only: msg, printinfo
-      use mpisetup,       only: nproc, master, piernik_MPI_Barrier, piernik_MPI_Bcast, proc
+      use mpisetup,       only: nproc, master, piernik_MPI_Barrier, piernik_MPI_Bcast, proc, FIRST, LAST
 
       implicit none
 
-      integer                                   :: i, j, iproc, leni, lenj, modi, modj
+      integer                                   :: i, j, iproc, leni, lenj, modi, modj, elementslast
       integer,         dimension(3)             :: smap_parts
       integer(kind=8), dimension(3), intent(in) :: smap_dims
-      type(smaplmts)                            :: smlim
+      type(smaplmts), intent(inout)             :: smlim
+      type(smaplmts)                            :: smltmp
+      integer, allocatable, dimension(:)        :: displacements, element_count
+
+      if (.not. allocated(displacements)) allocate(displacements(FIRST:LAST))
+      if (.not. allocated(element_count)) allocate(element_count(FIRST:LAST))
 
       if (master) then
          call decompose_patch_rectlinear(smap_parts, smap_dims, nproc, I_ZERO)
@@ -462,32 +468,41 @@ contains
 
       call piernik_MPI_Bcast(smap_parts)
 
-      iproc  = 0
+      iproc            = 0
+      elementslast     = 0
+      displacements(:) = 0
 
       do i = I_ONE, smap_parts(1)
          do j = I_ONE, smap_parts(2)
-            if (proc .eq. iproc) then
 
-               leni = int(smap_dims(1),4)/smap_parts(1)
-               modi = modulo(int(smap_dims(1),4),smap_parts(1))
-               if (i .le. (smap_parts(1) - modi)) then
-                  smlim%ni%ibeg = I_ONE + (i - I_ONE)  * leni
-                  smlim%ni%iend = smlim%ni%ibeg + leni - I_ONE
-               else
-                  smlim%ni%ibeg = I_ONE + (i - I_ONE - (smap_parts(1) - modi))  * (leni + I_ONE) + (smap_parts(1) - modi) * leni
-                  smlim%ni%iend = smlim%ni%ibeg + leni
-               endif
-
-               lenj = int(smap_dims(2),4)/smap_parts(2)
-               modj = modulo(int(smap_dims(2),4),smap_parts(2))
-               if (j .le. (smap_parts(2) - modj)) then
-                  smlim%ai%ibeg = I_ONE + (j - I_ONE)  * lenj
-                  smlim%ai%iend = smlim%ai%ibeg + lenj - I_ONE
-               else
-                  smlim%ai%ibeg = I_ONE + (j - I_ONE - (smap_parts(2) - modj))  * (lenj + I_ONE) + (smap_parts(2) - modj) * lenj
-                  smlim%ai%iend = smlim%ai%ibeg + lenj
-               endif
+            leni = int(smap_dims(1),4)/smap_parts(1)
+            modi = modulo(int(smap_dims(1),4),smap_parts(1))
+            if (i .le. (smap_parts(1) - modi)) then
+               smltmp%ai%ibeg = I_ONE + (i - I_ONE)  * leni
+               smltmp%ai%iend = smltmp%ai%ibeg + leni - I_ONE
+            else
+               smltmp%ai%ibeg = I_ONE + (i - I_ONE - (smap_parts(1) - modi))  * (leni + I_ONE) + (smap_parts(1) - modi) * leni
+               smltmp%ai%iend = smltmp%ai%ibeg + leni
             endif
+
+            lenj = int(smap_dims(2),4)/smap_parts(2)
+            modj = modulo(int(smap_dims(2),4),smap_parts(2))
+            if (j .le. (smap_parts(2) - modj)) then
+               smltmp%ni%ibeg = I_ONE + (j - I_ONE)  * lenj
+               smltmp%ni%iend = smltmp%ni%ibeg + lenj - I_ONE
+            else
+               smltmp%ni%ibeg = I_ONE + (j - I_ONE - (smap_parts(2) - modj))  * (lenj + I_ONE) + (smap_parts(2) - modj) * lenj
+               smltmp%ni%iend = smltmp%ni%ibeg + lenj
+            endif
+
+            displacements(iproc) = displacements(max(0,iproc-1)) + elementslast
+            elementslast = (smltmp%ai%iend - smltmp%ai%ibeg + 1) * (smltmp%ni%iend - smltmp%ni%ibeg + 1)
+            element_count(iproc) = elementslast
+
+            if (proc .eq. iproc) then
+               smlim = smltmp
+            endif
+
             iproc = iproc + I_ONE
          enddo
       enddo
