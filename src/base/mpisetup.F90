@@ -46,7 +46,7 @@ module mpisetup
         &    buffer_dim, cbuff, ibuff, lbuff, rbuff, req, err_mpi, tag_ub, &
         &    master, slave, nproc, proc, FIRST, LAST, have_mpi, is_spawned, &
         &    piernik_MPI_Allreduce, piernik_MPI_Barrier, piernik_MPI_Bcast, report_to_master, &
-        &    report_string_to_master
+        &    report_string_to_master, piernik_MPI_Allgatherv
 
    integer(kind=4), protected :: nproc          !< number of processes
    integer(kind=4), protected :: proc           !< rank of my process
@@ -113,6 +113,10 @@ module mpisetup
       module procedure MPI_Bcast_arr3d_real4
       module procedure MPI_Bcast_arr3d_real8
    end interface piernik_MPI_Bcast
+
+   interface piernik_MPI_Allgatherv
+      module procedure MPI_Allgatherv_arr2d_real8
+   end interface piernik_MPI_Allgatherv
 
    interface piernik_MPI_Allreduce
       module procedure MPI_Allreduce_single_logical
@@ -902,6 +906,26 @@ contains
       call MPI_Allreduce(MPI_IN_PLACE, rvar4, size(rvar4, kind=4), MPI_REAL, mpiop(reduction), MPI_COMM_WORLD, err_mpi)
 
    end subroutine MPI_Allreduce_arr2d_real4
+!-----------------------------------------------------------------------------
+!>
+!! \brief Wrapper for MPI_Allgatherv
+!! Gather and propagate real(kind=8) 2D array
+!<
+   subroutine MPI_Allgatherv_arr2d_real8(rvar8, elmnt_count, displcmt, rvar8_tot)
+
+      use MPIF, only: MPI_DOUBLE_PRECISION, MPI_COMM_WORLD, MPI_Allgatherv
+
+      implicit none
+
+      real(kind=8), dimension(:,:), intent(inout)  :: rvar8, rvar8_tot
+      integer, dimension(nproc)                    :: elmnt_count, displcmt
+
+
+      call MPI_Allgatherv(rvar8, size(rvar8, kind=4), MPI_DOUBLE_PRECISION, rvar8_tot, &
+      &  elmnt_count, displcmt, MPI_DOUBLE_PRECISION, MPI_COMM_WORLD, err_mpi)
+
+
+   end subroutine MPI_Allgatherv_arr2d_real8
 !-----------------------------------------------------------------------------
 !>
 !! \brief Routine used to communicate events to master Python script
