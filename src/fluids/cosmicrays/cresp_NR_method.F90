@@ -474,7 +474,7 @@ contains
                   smlim%ni%ibeg = I_ONE + (i - I_ONE)  * leni
                   smlim%ni%iend = smlim%ni%ibeg + leni - I_ONE
                else
-                  smlim%ni%ibeg = I_ONE + (i - I_ONE - (smap_parts(2) - modi))  * (leni + I_ONE) + (smap_parts(2) - modi) * leni
+                  smlim%ni%ibeg = I_ONE + (i - I_ONE - (smap_parts(1) - modi))  * (leni + I_ONE) + (smap_parts(1) - modi) * leni
                   smlim%ni%iend = smlim%ni%ibeg + leni
                endif
 
@@ -484,7 +484,7 @@ contains
                   smlim%ai%ibeg = I_ONE + (j - I_ONE)  * lenj
                   smlim%ai%iend = smlim%ai%ibeg + lenj - I_ONE
                else
-                  smlim%ai%ibeg = I_ONE + (j - I_ONE - (smap_parts(1) - modj))  * (lenj + I_ONE) + (smap_parts(1) - modj) * lenj
+                  smlim%ai%ibeg = I_ONE + (j - I_ONE - (smap_parts(2) - modj))  * (lenj + I_ONE) + (smap_parts(2) - modj) * lenj
                   smlim%ai%iend = smlim%ai%ibeg + lenj
                endif
             endif
