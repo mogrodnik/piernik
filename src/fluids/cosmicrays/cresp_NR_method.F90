@@ -356,6 +356,10 @@ contains
 
             call piernik_MPI_Allgatherv(p_r(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend), elmts, displac, p_ratios_up)
             call piernik_MPI_Allgatherv(f_r(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend), elmts, displac, f_ratios_up)
+
+            ! if solving, execute refine for better solution map covering
+            call assoc_pointers(HI)
+            call refine_all_directions(HI)
          endif
 
          if (NR_run_refine_pf) then
@@ -395,6 +399,10 @@ contains
 
             call piernik_MPI_Allgatherv(p_r(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend), elmts, displac, p_ratios_lo)
             call piernik_MPI_Allgatherv(f_r(sml%ai%ibeg:sml%ai%iend, sml%ni%ibeg:sml%ni%iend), elmts, displac, f_ratios_lo)
+
+            ! if solving, execute refine for better solution map covering
+            call assoc_pointers(LO)
+            call refine_all_directions(LO)
          endif
 
          if (NR_run_refine_pf) then
@@ -439,6 +447,9 @@ contains
       enddo
       print *, "-----------"
 #endif /* CRESP_VERBOSED */
+
+      if (allocated(f_r)) deallocate(f_r)
+      if (allocated(p_r)) deallocate(p_r)
 
    end subroutine fill_guess_grids
 
@@ -598,6 +609,7 @@ contains
       logical                     :: exit_code, new_line
       type(smaplmts)              :: sml
 #ifdef CRESP_VERBOSED
+      integer                     :: found_solution = 0
       real, dimension(1:2)        :: x_in
 
       sought_by = SLV
@@ -673,6 +685,7 @@ contains
                endif
             endif
 #ifdef CRESP_VERBOSED
+            if (.not. exit_code) found_solution = found_solution + 1
             if (exit_code) print *,""
 #endif /* CRESP_VERBOSED */
          enddo
@@ -683,6 +696,8 @@ contains
       fill_f = abs(fill_f)
 
 #ifdef CRESP_VERBOSED
+      write (msg, "(A,I10,A)") "[fill_boundary_grid] Got ", found_solution, " valid points."
+      call printinfo(msg)
       print *,""
 #endif /* CRESP_VERBOSED */
 
