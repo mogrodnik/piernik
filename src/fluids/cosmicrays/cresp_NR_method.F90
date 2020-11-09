@@ -457,7 +457,6 @@ contains
    subroutine divide_smap_limits(smap_dims, smlim, displacements, element_count)
 
       use constants,      only: I_ZERO, I_ONE
-      use decomposition,  only: decompose_patch_rectlinear
       use mpisetup,       only: nproc, master, piernik_MPI_Barrier, piernik_MPI_Bcast, proc, FIRST, LAST
 
       implicit none
@@ -473,7 +472,7 @@ contains
       if (.not. allocated(element_count)) allocate(element_count(FIRST:LAST))
 
       if (master) then
-         call decompose_patch_rectlinear(smap_parts, smap_dims, nproc, I_ZERO)
+         call decompose_smap_rectlinear(smap_parts, smap_dims, nproc, I_ZERO)
       endif
       call piernik_MPI_Barrier
 
@@ -521,7 +520,145 @@ contains
       call piernik_MPI_Barrier
 
    end subroutine divide_smap_limits
+!----------------------------------------------------------------------------------------------------
+! WARNING the below is *almost* unchanged copy of decompose/decompose_patch_rectlinear.
+! It was imported and slightly modified here to employ its functions unaffected by global n_d size.
+! Should decompose_patch_rectlinear or any other decomposition procedure become able to be used by
+! a module independently on global domain, use that procedure and (TODO) remove this implementation.
+   subroutine decompose_smap_rectlinear(p_size, n_d, pieces, level_id)
 
+      use constants,  only: xdim, ydim, ndims, I_ZERO, I_ONE
+      use dataio_pub, only: printinfo, msg
+      use mpisetup,   only: master
+      use primes_utils, only: primes_t
+
+      implicit none
+
+      integer(kind=4), dimension(ndims), intent(out) :: p_size   !< number of pieces in each direction
+      integer(kind=8), dimension(ndims), intent(in)  :: n_d      !< size of the box to be divided
+      integer(kind=4),                   intent(in)  :: pieces   !< number of pieces
+      integer(kind=4),                   intent(in)  :: level_id !< level identifier (for informational use only)
+
+      real, parameter                                :: b_load_fac = 0.25 ! estimated increase of execution time after doubling the total size of internal boundaries.
+                                                                          ! \todo estimate this factor for massively parallel runs and for Intel processors
+
+      integer(kind=4), allocatable, dimension(:)     :: ppow
+      integer(kind=4), allocatable, dimension(:,:)   :: fac
+      integer(kind=4), dimension(ndims)              :: ldom
+      integer(kind=4)                                :: p, i, j, k, nf
+      integer                                        :: n, ii, bsize, smeff_dim
+      real                                           :: load_balance, best, quality
+      type(primes_t) :: primes
+      real           :: ideal_bsize = 200.
+      logical, dimension(ndims)     :: smhas_dir
+      logical                       :: is_uneven
+
+      smhas_dir(:) = n_d(:) > 1
+      smeff_dim = count(smhas_dir(:))
+
+      ideal_bsize = smeff_dim * (pieces * product(real(n_d(:)))**(smeff_dim-1))**(1./smeff_dim)
+
+      call primes%sieve(pieces) ! it is possible to use primes only to sqrt(nproc), but it is easier to have the full table. Cheap for any reasonable nproc.
+
+      p_size(:) = 1
+      if (pieces == 1) return
+
+      allocate(ppow(size(primes%tab)))
+
+      p = pieces
+      do i = I_ONE, int(size(primes%tab), kind=4)
+         ppow(i) = 0
+         do while (mod(p, primes%tab(i)) == 0)
+            ppow(i) = ppow(i) + I_ONE
+            p = p / primes%tab(i)
+         enddo
+      enddo
+
+      nf = int(count(ppow(:) > 0), kind=4)
+      allocate(fac(nf,3))
+      j = I_ONE
+      do i = I_ONE, int(size(primes%tab), kind=4)
+         if (ppow(i)>0) then
+            ! prime, its power and number of different decompositions in three dimensions for this prime
+            fac(j,:) = [ primes%tab(i), ppow(i), int((ppow(i)+1)*(ppow(i)+2)/2, kind=4) ]
+            j = j + I_ONE
+         endif
+      enddo
+      deallocate(ppow)
+
+      best = 0.
+      ii = 0
+      do while (all(fac(:,3) > 0))
+         ldom(:) = 1
+         do n = 1, nf ! find an unique decomposition of fac(n,2) into [i,j,k], all([i,j,k] >= 0) && i+j+k = fac(n,2). The decompositions are enumerated with fac(n,3).
+            i = int(sqrt(1./4.+2.*(fac(n,3)-1)) - 1./2., kind=4) ! i and k enumerate a point in a triangle: (i>=0 && k>=0 && i+k<=fac(n,2))
+            k = fac(n,3) - int(1 + i*(i+1)/2, kind=4)
+            i = fac(n,2) - i
+            j = fac(n,2) - (i + k)
+            ldom(:) = ldom(:) * fac(n,1)**[i, j, k]
+         enddo
+
+         bsize = int(sum(ldom(:)/real(n_d(:), kind=8) * product(int(n_d(:), kind=8)), MASK = n_d(:) > 1)) !ldom(1)*n_d(2)*n_d(3) + ldom(2)*n_d(1)*n_d(3) + ldom(3)*n_d(1)*n_d(2)
+         load_balance = product(real(n_d(:))) / ( real(pieces) * product( int((n_d(:)-1)/ldom(:)) + 1 ) )
+
+!  WARNING FIXME With COSM_RAY_ELECTRONS / CRESP sometimes the below returns ideal_bsize = 0.0 when run on 4 processors, leading to SIFGPE
+!  Introducing max(ideal_bsize, epsilon(ideal_bsize)) for stability
+         quality = load_balance/ (1 + b_load_fac*(bsize/ideal_bsize - 1.))
+!          quality = load_balance/ (1 + b_load_fac*(bsize/max(ideal_bsize, epsilon(ideal_bsize)) - 1.))
+         ! \todo add a factor that estimates lower cost when x-direction is not chopped too much
+         quality = quality * (1. - (0.001 * ldom(xdim) + 0.0001 * ldom(ydim))/pieces) ! \deprecated estimate these magic numbers
+
+         if (any(ldom(:) > n_d(:))) quality = 0
+
+#ifdef DEBUG
+         if (quality > 0 .and. master) then
+            ii = ii + 1
+            write(msg,'(a,i3,a,3i4,a,i10,2(a,f10.7))')"m:ddr ",ii," p_size= [",ldom(:)," ], bcells= ", bsize, ", balance = ", load_balance, ", est_quality = ", quality
+            call printinfo(msg)
+         endif
+#endif /* DEBUG */
+         if (quality > best) then
+            best = quality
+            p_size(:) = ldom(:)
+         endif
+         do j = I_ONE, nf ! search for next unique combination
+            if (fac(j,3) > 1) then
+               fac(j,3) = fac(j,3) - I_ONE
+               exit
+            else
+               if (j<nf) then
+                  fac(j,3) = int((fac(j,2)+1)*(fac(j,2)+2)/2, kind=4)
+               else
+                  fac(:,3) = I_ZERO ! no more combinations to try
+               endif
+            endif
+         enddo
+      enddo
+
+      deallocate(fac)
+
+      is_uneven = any(mod(n_d(:), int(p_size(:), kind=8)) /= 0)
+
+      if (master) then
+#ifdef DEBUG
+         write(msg,'(a,3f10.2,a,i10)')"m:ddr id p_size = [",(pieces/product(real(n_d(:), kind=8)))**(1./dom%eff_dim)*n_d(:),"], bcells= ", int(ideal_bsize)
+         call printinfo(msg)
+#endif /* DEBUG */
+         write(msg,'(a,i3,a,3i4,a)') "[decomposition:decompose_patch_rectlinear] Level ",level_id,": grid divided to [",p_size(:)," ] pieces"
+         call printinfo(msg)
+         if (is_uneven) then
+            write(msg,'(2(a,3i5),a)')"                                                      Sizes are from [", int(n_d(:)/p_size(:))," ] to [", &
+                 &                   int((n_d(:)-1)/p_size(:))+1," ] cells."
+            call printinfo(msg)
+            write(msg,'(a,f8.5)')    "                                                      Load balance is ", &
+                 &                   product(int(n_d(:), kind=8)) / ( real(pieces, kind=8) * product( int((n_d(:)-1)/p_size(:)) + 1 ) )
+         else
+            write(msg,'(a,3i5,a)')   "                                                      Size is [", int(n_d(:)/p_size(:))," ] cells."
+         endif
+         call printinfo(msg)
+      endif
+
+   end subroutine decompose_smap_rectlinear
 !----------------------------------------------------------------------------------------------------
    subroutine refine_all_directions(bound_case)
 
