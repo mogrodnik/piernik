@@ -40,7 +40,7 @@ module decomposition
    implicit none
 
    private
-   public :: cleanup_decomposition, init_decomposition, box_t, cuboid, decompose_patch_rectlinear
+   public :: cleanup_decomposition, init_decomposition, box_t, cuboid
 
    type :: cuboid
       integer(kind=8), dimension(xdim:zdim, LO:HI) :: se !< grid piece
@@ -522,9 +522,7 @@ contains
          bsize = int(sum(ldom(:)/real(n_d(:), kind=8) * product(int(n_d(:), kind=8)), MASK = n_d(:) > 1)) !ldom(1)*n_d(2)*n_d(3) + ldom(2)*n_d(1)*n_d(3) + ldom(3)*n_d(1)*n_d(2)
          load_balance = product(real(n_d(:))) / ( real(pieces) * product( int((n_d(:)-1)/ldom(:)) + 1 ) )
 
-!  WARNING FIXME With COSM_RAY_ELECTRONS / CRESP sometimes the below returns ideal_bsize = 0.0 when run on 4 processors, leading to SIFGPE
-!  Introducing max(ideal_bsize, epsilon(ideal_bsize)) for stability
-         quality = load_balance/ (1 + b_load_fac*(bsize/max(ideal_bsize, epsilon(ideal_bsize)) - 1.))
+         quality = load_balance/ (1 + b_load_fac*(bsize/ideal_bsize - 1.))
          ! \todo add a factor that estimates lower cost when x-direction is not chopped too much
          quality = quality * (1. - (0.001 * ldom(xdim) + 0.0001 * ldom(ydim))/pieces) ! \deprecated estimate these magic numbers
 
