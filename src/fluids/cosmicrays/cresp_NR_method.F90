@@ -215,7 +215,7 @@ contains
    subroutine cresp_initialize_guess_grids
 
       use constants,       only: zero, I_FOUR
-      use initcrspectrum,  only: e_small, q_big, max_p_ratio, arr_dim, arr_dim_q
+      use initcrspectrum,  only: q_big, arr_dim, arr_dim_q
 
       implicit none
 
@@ -251,7 +251,7 @@ contains
       use dataio_pub,     only: msg, printinfo, warn
       use initcrspectrum, only: q_big, force_init_NR, NR_run_refine_pf, p_fix_ratio, e_small_approx_init_cond, arr_dim, arr_dim_q, max_p_ratio, e_small
       use cresp_variables,only: clight_cresp
-      use mpisetup,       only: master, piernik_MPI_Allgatherv, piernik_MPI_Bcast, piernik_MPI_Barrier
+      use mpisetup,       only: master, piernik_MPI_Allgatherv, piernik_MPI_Barrier
 
       implicit none
 
@@ -549,7 +549,7 @@ contains
       integer                                        :: n, ii, bsize, smeff_dim
       real                                           :: load_balance, best, quality
       type(primes_t) :: primes
-      real           :: ideal_bsize = 200.
+      real           :: ideal_bsize
       logical, dimension(ndims)     :: smhas_dir
       logical                       :: is_uneven
 
@@ -746,9 +746,10 @@ contains
       logical                     :: exit_code, new_line
       type(smaplmts)              :: sml
 #ifdef CRESP_VERBOSED
-      integer                     :: found_solution = 0
+      integer                     :: found_solution
       real, dimension(1:2)        :: x_in
 
+      found_solution = 0
       sought_by = SLV
 #endif /* CRESP_VERBOSED */
 
@@ -1630,9 +1631,6 @@ contains
 !----------------------------------------------------------------------------------------------------
    subroutine read_NR_smap(NR_smap, vname, bc, exit_code)
 
-      use func,            only: operator(.equals.)
-      use initcrspectrum,  only: e_small, q_big, max_p_ratio
-
       implicit none
 
       real, dimension(:,:), intent(inout) :: NR_smap
@@ -1664,7 +1662,7 @@ contains
 
    subroutine read_NR_smap_header(var_name, hdr, exit_code)
 
-      use dataio_pub,   only: msg, printinfo, warn
+      use dataio_pub,   only: msg, warn
       use constants,    only: fmt_len
 
       implicit none
@@ -1685,7 +1683,8 @@ contains
       open(flun, file=f_name, status="old", position="rewind", IOSTAT=fstat)
 
       if (fstat > 0) then
-         write(msg,"(A8,I4,A8,2A20)") "IOSTAT:", fstat, ": file ", f_name, " does not exist!"; call warn(msg)
+         write(msg,"(A8,I4,A8,2A20)") "IOSTAT:", fstat, ": file ", f_name, " does not exist!"
+         call warn(msg)
          exit_code = .true.
          return
       endif
