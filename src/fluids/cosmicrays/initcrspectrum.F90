@@ -399,16 +399,28 @@ module initcrspectrum
 
 ! Input parameters check
       if (use_cresp .and. ncre <= I_ZERO)  then
-         write (msg,"(A,I4,A)") '[initcrspectrum:init_cresp] ncre   = ', ncre, '; cr-electrons NOT initnialized. Switching CRESP module off.'
-         call warn(msg)
+         if (master) then
+            write (msg,"(A,I4,A)") '[initcrspectrum:init_cresp] ncre   = ', ncre, '; cr-electrons NOT initnialized. Switching CRESP module off.'
+            call warn(msg)
+         endif
          use_cresp      = .false.
          use_cresp_evol = .false.
+         approx_cutoffs = .false.
          ncre           = 0
       endif
 
-      if (.not. use_cresp) return
+      if (ncre < 3 .and. use_cresp) then
+         if (ncre .eq. 2) then
+            if (master) call die("[initcrspectrum:init_cresp] CRESP algorithm requires ncre => 3, ncre = 2 is ambiguous - change ncre to either 3 or 1 for CRe single fluid.")
+         else
+            if (master) call warn("[initcrspectrum:init_cresp] ncre = 1: Switching CRESP module off to allow processing CRe as a single-fluid.")
+            use_cresp      = .false.  ! WARNING FIXME index array for number density (iarr_cre_n) still remains initialized at initcosmicrays
+            use_cresp_evol = .false.
+            approx_cutoffs = .false.
+         endif
+      endif
 
-      if (ncre < 3) call die("[initcrspectrum:init_cresp] CRESP algorithm currently requires at least 3 bins (ncre) in order to work properly, check your parameters.")
+      if (.not. use_cresp) return
 
       if (approx_cutoffs) then
          e_small_approx_p = 1
