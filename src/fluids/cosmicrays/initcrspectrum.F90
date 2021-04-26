@@ -41,7 +41,7 @@ module initcrspectrum
            & smallcren, smallcree, max_p_ratio, NR_iter_limit, force_init_NR, NR_run_refine_pf, NR_refine_solution_q, NR_refine_pf, nullify_empty_bins, synch_active, adiab_active, &
            & allow_source_spectrum_break, cre_active, tol_f, tol_x, tol_f_1D, tol_x_1D, arr_dim, arr_dim_q, eps, eps_det, w, p_fix, p_mid_fix, total_init_cree, p_fix_ratio,        &
            & spec_mod_trms, cresp_all_edges, cresp_all_bins, norm_init_spectrum, cresp, crel, dfpq, fsynchr, init_cresp, cleanup_cresp_sp, check_if_dump_fpq, cleanup_cresp_work_arrays, q_eps,       &
-           & u_b_max, def_dtsynch, def_dtadiab, write_cresp_to_restart, NR_smap_file, NR_allow_old_smaps, cresp_substep, n_substeps_max
+           & u_b_max, def_dtsynch, def_dtadiab, write_cresp_to_restart, NR_smap_file, NR_allow_old_smaps, cresp_substep, n_substeps_max, qm3pp_max
 
 ! contains routines reading namelist in problem.par file dedicated to cosmic ray electron spectrum and initializes types used.
 ! available via namelist COSMIC_RAY_SPECTRUM
@@ -104,6 +104,7 @@ module initcrspectrum
    real            :: tol_x_1D                    !< tolerance for x abs. error in NR algorithm (1D)
    integer(kind=4) :: arr_dim, arr_dim_q
    real            :: q_eps                       !< parameter for q tolerance (alpha_to_q)
+   real            :: qm3pp_max                   !< parameter for analytical approximation of q for large (p(i)/p(i-1))**(q(i) - 3)
    real            :: b_max_db, u_b_max           !< parameter limiting maximal value of B and implying maximal MF energy density u_b
 
    real, parameter :: eps = 1.0e-15          !< epsilon parameter for real number comparisons
@@ -243,11 +244,16 @@ module initcrspectrum
       arr_dim  = 200
       arr_dim_q = 500
       q_eps     = eps
+      qm3pp_max = 100.
 
       cresp_substep           = .false.
       n_substeps_max          = 100
 
       if (master) then
+
+         open(55, file="q_log.dat", status="unknown", position="rewind")   !  TODO remove me when job's done!
+         close(55)                                                         !  TODO remove me when job's done!
+
          if (.not.nh%initialized) call nh%init()
          open(newunit=nh%lun, file=nh%tmp1, status="unknown")
          write(nh%lun,nml=COSMIC_RAY_SPECTRUM)
@@ -329,6 +335,7 @@ module initcrspectrum
          rbuff(27) = p_diff
          rbuff(28) = q_eps
          rbuff(29) = b_max_db
+         rbuff(30) = qm3pp_max
 
          cbuff(1)  = initial_spectrum
       endif
@@ -402,6 +409,8 @@ module initcrspectrum
 
          q_eps                       = rbuff(28)
          b_max_db                    = rbuff(29)
+         qm3pp_max                   = rbuff(30)
+
          initial_spectrum            = trim(cbuff(1))
 
       endif
