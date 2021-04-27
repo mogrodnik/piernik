@@ -41,7 +41,7 @@ module initcrspectrum
            & smallcren, smallcree, max_p_ratio, NR_iter_limit, force_init_NR, NR_run_refine_pf, NR_refine_solution_q, NR_refine_pf, nullify_empty_bins, synch_active, adiab_active, &
            & allow_source_spectrum_break, cre_active, tol_f, tol_x, tol_f_1D, tol_x_1D, arr_dim, arr_dim_q, eps, eps_det, w, p_fix, p_mid_fix, total_init_cree, p_fix_ratio,        &
            & spec_mod_trms, cresp_all_edges, cresp_all_bins, norm_init_spectrum, cresp, crel, dfpq, fsynchr, init_cresp, cleanup_cresp_sp, check_if_dump_fpq, cleanup_cresp_work_arrays, q_eps,       &
-           & u_b_max, def_dtsynch, def_dtadiab, write_cresp_to_restart, NR_smap_file, NR_allow_old_smaps, cresp_substep, n_substeps_max, qm3pp_max
+           & u_b_max, def_dtsynch, def_dtadiab, write_cresp_to_restart, NR_smap_file, NR_allow_old_smaps, cresp_substep, n_substeps_max, qm3pp_max, qlog_lun
 
 ! contains routines reading namelist in problem.par file dedicated to cosmic ray electron spectrum and initializes types used.
 ! available via namelist COSMIC_RAY_SPECTRUM
@@ -106,6 +106,8 @@ module initcrspectrum
    real            :: q_eps                       !< parameter for q tolerance (alpha_to_q)
    real            :: qm3pp_max                   !< parameter for analytical approximation of q for large (p(i)/p(i-1))**(q(i) - 3)
    real            :: b_max_db, u_b_max           !< parameter limiting maximal value of B and implying maximal MF energy density u_b
+
+   integer, parameter :: qlog_lun = 55           !< lun for ASCII q_log file TODO remove me when done testing!
 
    real, parameter :: eps = 1.0e-15          !< epsilon parameter for real number comparisons
    real, parameter :: eps_det = eps * 1.0e-15
@@ -251,8 +253,8 @@ module initcrspectrum
 
       if (master) then
 
-         open(55, file="q_log.dat", status="unknown", position="rewind")   !  TODO remove me when job's done!
-         close(55)                                                         !  TODO remove me when job's done!
+         open(qlog_lun, file="q_log.dat", status="replace", position="rewind")   !  TODO remove me when job's done!
+         close(qlog_lun)                                                         !  TODO remove me when job's done!
 
          if (.not.nh%initialized) call nh%init()
          open(newunit=nh%lun, file=nh%tmp1, status="unknown")
