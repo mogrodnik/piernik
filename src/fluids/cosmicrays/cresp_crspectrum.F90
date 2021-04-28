@@ -1636,12 +1636,13 @@ contains
 
    subroutine ne_to_q(n, e, q, bins)
 
-      use constants,       only: zero, I_ONE
+      use constants,       only: zero, I_ONE, one, three, four
       use dataio_pub,      only: warn
       use cresp_NR_method, only: compute_q
       use cresp_variables, only: clight_cresp
       use initcosmicrays,  only: ncre
-      use initcrspectrum,  only: e_small
+      use initcrspectrum,  only: e_small, q_big, q_eps, qm3pp_max, qlog_lun
+      use mpisetup,        only: master   !  TODO remove me when done testing!
 
       implicit none
 
@@ -1669,8 +1670,30 @@ contains
             endif
          else
             q(i) = zero
-        endif
-        if (exit_code) fail_count_comp_q(i) = fail_count_comp_q(i) + I_ONE
+         endif
+
+         if (exit_code) then
+            fail_count_comp_q(i) = fail_count_comp_q(i) + I_ONE
+            if (master) then
+               open(qlog_lun, file="q_log.dat", status="old", position="append")
+
+               if (alpha_in .gt. q_eps) write(55, "(I3, 2L2, 4F18.9, 3E18.9)") i, exit_code, ( (p(i)/p(i-I_ONE))**(q(i) - three) .gt. qm3pp_max), alpha_in, p(i)/p(i-1), q(i), four + one / (alpha_in - one), (p(i)/p(i-1) )**(q(i)-three), e(i), n(i) !  TODO remove me when done testing
+               ! q_eps used here to exclude cases where n/e is of precision order
+
+               close(qlog_lun)
+            endif
+         endif
+
+         if (exit_code .eqv. .true.) then
+            if ((p(i)/p(i-1) )**(q(i)-three) .gt. qm3pp_max) then
+               if ( abs(alpha_in - one) .gt. 0.01 ) then
+                  q(i) = four + one / (alpha_in - one)
+                  q(i) = sign(q(i), one) * min(abs(q(i)), q_big)
+
+               endif
+            endif
+         endif
+
       enddo
 
    end subroutine ne_to_q
