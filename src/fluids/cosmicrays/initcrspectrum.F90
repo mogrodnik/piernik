@@ -39,7 +39,7 @@ module initcrspectrum
    private
    public :: use_cresp, use_cresp_evol, p_init, initial_spectrum, p_br_init, f_init, q_init, q_br_init, q_big, cfl_cre, cre_eff, expan_order, e_small, e_small_approx_p, e_small_approx_init_cond,  &
            & smallcren, smallcree, max_p_ratio, NR_iter_limit, force_init_NR, NR_run_refine_pf, NR_refine_solution_q, NR_refine_pf, nullify_empty_bins, synch_active, adiab_active, &
-           & allow_source_spectrum_break, cre_active, tol_f, tol_x, tol_f_1D, tol_x_1D, arr_dim, arr_dim_q, eps, eps_det, w, p_fix, p_mid_fix, total_init_cree, p_fix_ratio,        &
+           & allow_source_spectrum_break, cre_active, tol_f, tol_x, tol_f_1D, tol_x_1D, arr_dim, arr_dim_q, eps, eps_det, w, p_fix, p_mid_fix, total_init_cree, p_fix_ratio, q_fail,&
            & spec_mod_trms, cresp_all_edges, cresp_all_bins, norm_init_spectrum, cresp, crel, dfpq, fsynchr, init_cresp, cleanup_cresp_sp, check_if_dump_fpq, cleanup_cresp_work_arrays, q_eps,       &
            & u_b_max, def_dtsynch, def_dtadiab, write_cresp_to_restart, NR_smap_file, NR_allow_old_smaps, cresp_substep, n_substeps_max, qm3pp_max, qlog_lun
 
@@ -59,6 +59,7 @@ module initcrspectrum
    real            :: q_init                      !< initial value of power law-like spectrum exponent
    real            :: q_br_init                   !< initial q for low energy break
    real            :: q_big                       !< maximal amplitude of q
+   real            :: q_fail                      !< value of q if failed to find
    real            :: cfl_cre                     !< CFL parameter  for cr electrons
    real            :: cre_eff                     !< fraction of energy passed to cr-electrons by nucleons (mainly protons)
    real            :: K_cre_paral_1               !< maximal parallell diffusion coefficient value
@@ -185,7 +186,7 @@ module initcrspectrum
       namelist /COSMIC_RAY_SPECTRUM/ cfl_cre, p_lo_init, p_up_init, f_init, q_init, q_big, initial_spectrum, p_min_fix, p_max_fix, &
       &                         cre_eff, K_cre_paral_1, K_cre_perp_1, cre_active, K_cre_pow, expan_order, e_small, use_cresp, use_cresp_evol, &
       &                         e_small_approx_init_cond, p_br_init_lo, e_small_approx_p_lo, e_small_approx_p_up, force_init_NR,   &
-      &                         NR_iter_limit, max_p_ratio, synch_active, adiab_active, arr_dim, arr_dim_q, q_br_init,             &
+      &                         NR_iter_limit, max_p_ratio, synch_active, adiab_active, arr_dim, arr_dim_q, q_br_init, q_fail,     &
       &                         Gamma_min_fix, Gamma_max_fix, nullify_empty_bins, approx_cutoffs, NR_run_refine_pf, b_max_db,      &
       &                         NR_refine_solution_q, NR_refine_pf_lo, NR_refine_pf_up, smallcree, smallcren, p_br_init_up, p_diff,&
       &                         q_eps, NR_smap_file, cresp_substep, n_substeps_max
@@ -203,6 +204,7 @@ module initcrspectrum
       q_init            = 4.1
       q_br_def          = q_init
       q_big             = 30.0d0
+      q_fail            = 10.0
       p_br_init_lo      = p_br_def ! < in case it was not provided "powl" can be assumed
       p_br_init_up      = p_br_def ! < in case it was not provided "powl" can be assumed
       q_br_init         = q_br_def ! < in case it was not provided "powl" can be assumed
@@ -338,6 +340,7 @@ module initcrspectrum
          rbuff(28) = q_eps
          rbuff(29) = b_max_db
          rbuff(30) = qm3pp_max
+         rbuff(31) = q_fail
 
          cbuff(1)  = initial_spectrum
       endif
@@ -412,6 +415,7 @@ module initcrspectrum
          q_eps                       = rbuff(28)
          b_max_db                    = rbuff(29)
          qm3pp_max                   = rbuff(30)
+         q_fail                      = rbuff(31)
 
          initial_spectrum            = trim(cbuff(1))
 
@@ -450,6 +454,10 @@ module initcrspectrum
          if (master) call warn("[initcrspectrum:init_cresp] Approximation of boundary momenta is active -> modifying e_small_approx_init_cond to 1.")
       endif
 
+      if (q_fail .gt. q_big) then
+         q_fail = min(q_fail, q_big)
+         if (master) call warn("[initcrspectrum:init_cresp] Provided q_fail > q_big (limit) while q_fail should be less or equal q_big.")
+      endif
 ! countermeasure - in case unrecognized or invalid parameters are provided
 
       where (e_small_approx_p > 0) ;           e_small_approx_p = 1 ;    elsewhere ; e_small_approx_p = 0 ;      endwhere
