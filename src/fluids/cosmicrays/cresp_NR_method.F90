@@ -361,7 +361,7 @@ contains
       if (ilim .ge. qmaxiter) call die ("[cresp_NR_method:fill_guess_grids] Maximal iteration limit exceeded, q_grid might not have converged!")
 #ifdef CRESP_VERBOSED
       do i = 1, arr_dim_q
-         print "(A1,I3,A7,2F18.12)", "[ ", i,"] a : q ", q_grid(i), alpha_tab_q(i)
+         print "(A1,I3,A7,2F18.12)", "[ ", i,"] a : q ", alpha_tab_q(i), q_grid(i)
       enddo
 
       print *,"alpha_tab_lo(i),      alpha_tab_up(i),        n_tab_lo(i),        n_tab_up(i)  |       p_space(i),     q_space(i)"
@@ -1396,8 +1396,10 @@ contains
 
       if (NR_refine_solution_q) then
          alpha = alpha_in
-         call q_control(compute_q,exit_code)
-         call NR_algorithm_1D(compute_q, exit_code)
+         call q_control(compute_q, exit_code)
+         call NR_algorithm_1D(compute_q, exit_code) !< should return exit_code = .false. on success
+      else
+         exit_code = .false.
       endif
 
       if (abs(compute_q) > q_big) compute_q = sign(one, compute_q) * q_big
