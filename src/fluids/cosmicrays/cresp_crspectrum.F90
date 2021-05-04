@@ -38,7 +38,8 @@ module cresp_crspectrum
 
    private ! most of it
    public :: cresp_update_cell, cresp_init_state, cresp_get_scaled_init_spectrum, cleanup_cresp, cresp_allocate_all, &
-      &      src_gpcresp, p_rch_init, detect_clean_spectrum, cresp_find_prepare_spectrum, cresp_detect_negative_content
+      &      src_gpcresp, p_rch_init, detect_clean_spectrum, cresp_find_prepare_spectrum, cresp_detect_negative_content, &
+      &      cresp_find_prepare_spectrum_enpc
 
    integer, dimension(1:2)            :: fail_count_NR_2dim, fail_count_interpol
    integer(kind=4), allocatable, dimension(:) :: fail_count_comp_q
@@ -81,6 +82,7 @@ module cresp_crspectrum
    real, allocatable, dimension(:) :: n, e                                !> in-algorithm energy & number density
    real, allocatable, dimension(:) :: e_amplitudes_l, e_amplitudes_r
    real,    dimension(LO:HI)       :: e_threshold                         !> lower / upper energy needed for bin activation
+   real                            :: one_by_cl
    integer(kind=4), dimension(LO:HI) :: approx_p                            !> if one bin, switch off cutoff p approximation
    integer(kind=4), dimension(LO:HI) :: max_ic                              !> maximum i_cut
 
@@ -671,6 +673,120 @@ contains
       endif
 
    end subroutine cresp_find_prepare_spectrum
+
+!----------------------------------------------------------------------------------------------------
+   subroutine cresp_find_prepare_spectrum_enpc(n, e, empty_cell, i_up_out) ! EXPERIMENTAL
+
+      use constants,      only: I_ZERO, zero, I_ONE, one, small
+#ifdef CRESP_VERBOSED
+      use dataio_pub,     only: msg, printinfo, warn
+#endif /* CRESP_VERBOSED */
+      use diagnostics,    only: incr_vec
+      use initcosmicrays, only: ncre
+      use initcrspectrum, only: e_small, cresp_all_bins, p_fix, p_mid_fix
+
+      implicit none
+
+      real, dimension(ncre),     intent(inout)   :: n, e
+      real, dimension(ncre)                      :: enpc, p_l
+      logical, dimension(ncre)                   :: has_n_gt_zero, has_e_gt_zero
+      logical,                   intent(out)     :: empty_cell
+      integer(kind=4)                            :: i, num_has_gt_zero
+      integer, intent(out), optional             :: i_up_out
+      integer(kind=4), dimension(LO:HI)          :: approx_p_tmp
+
+      has_n_gt_zero(:) = .false. ; has_e_gt_zero(:)  = .false.
+      is_active_bin(:) = .false. ; is_active_edge(:) = .false.
+      num_has_gt_zero  = I_ZERO  ; num_active_bins   = I_ZERO
+      i_cut     = max_ic
+
+      if (allocated(active_bins))   deallocate(active_bins)
+      if (allocated(active_edges))  deallocate(active_edges)
+
+      do i = 1, ncre
+         has_n_gt_zero(i) = (n(i) > zero)
+         has_e_gt_zero(i) = (e(i) > zero)
+         if (has_n_gt_zero(i) .and. has_e_gt_zero(i)) then
+            num_has_gt_zero = num_has_gt_zero + I_ONE
+         endif
+      enddo
+
+! If cell is not empty, assume preliminary i_cut
+      if (num_has_gt_zero == I_ZERO) then
+         empty_cell = .true.
+         return
+      endif
+
+      p_l(:)       = p_fix(0:ncre-1)
+      enpc(:)      = zero
+
+      where (has_e_gt_zero .and. has_n_gt_zero)
+         enpc = e * one_by_cl / (max(n, small) * p_l)
+      endwhere
+
+      where (enpc .gt. one_by_cl)
+         is_active_bin = .true.
+      endwhere
+
+      num_active_bins = count(is_active_bin)
+
+! allocate and prepare active bins for spectrum evolution
+      if (num_active_bins > I_ZERO) then
+         allocate(active_bins(num_active_bins))
+         active_bins = I_ZERO
+         active_bins = pack(cresp_all_bins, is_active_bin)
+         i_cut(LO)   = active_bins(I_ONE)-I_ONE
+         i_cut(HI)   = active_bins(num_active_bins)
+         empty_cell  = .false.
+
+         if (present(i_up_out)) then
+            i_up_out = i_cut(HI)
+            return
+         endif
+! Construct index arrays for fixed edges betwen p_cut(LO) and p_cut(HI), active edges
+! before timestep
+
+         call arrange_assoc_active_edge_arrays(fixed_edges,  is_fixed_edge,  num_fixed_edges,  i_cut+pm)
+         call arrange_assoc_active_edge_arrays(active_edges, is_active_edge, num_active_edges, i_cut   )
+
+      else if (num_active_bins == I_ONE) then
+         if (i_cut(LO) > I_ZERO) then
+            i_cut(HI) = active_bins(num_active_bins)
+            i_cut(LO)    = i_cut(HI) -I_ONE
+            p_cut(LO)    = (I_ONE-approx_p(LO))*p_cut(LO) + approx_p(LO) * p_fix(i_cut(LO));  p(i_cut(LO)) = p_cut(LO)
+            approx_p(LO) = I_ZERO
+         else
+            i_cut(HI)    = active_bins(num_active_bins)
+            p_cut(HI)    = (I_ONE-approx_p(HI))*p_cut(HI) + approx_p(HI) * p_fix(i_cut(HI));  p(i_cut(HI)) = p_cut(HI)
+            approx_p(HI) = I_ZERO
+         endif
+      else
+         empty_cell = .true.
+         if (present(i_up_out)) then
+            i_up_out = i_cut(HI)
+         endif
+         return
+      endif
+
+      approx_p_tmp = approx_p                   !< Before computation of q and f for all bins approximation of cutoffs is disabled
+      approx_p     = I_ZERO
+
+      call ne_to_q(n, e, q, active_bins)        !< Compute power indexes for each bin at [t] and f on left bin faces at [t]
+
+      f = nq_to_f(p(I_ZERO:ncre-I_ONE), p(I_ONE:ncre), n(I_ONE:ncre), q(I_ONE:ncre), active_bins)  !< Compute values of distribution function f for active left edges at [t]
+
+      approx_p = approx_p_tmp                   !< After computation of q and f for all bins approximation of cutoffs is reenabled (if was active)
+
+      if (all(approx_p == I_ONE)) then
+         p(:)   = p_fix(:)
+         p(i_cut(LO)) = max(p_fix(i_cut(LO)), p_mid_fix(I_ONE))      ! do not want to have zero here
+         p(i_cut(HI)) = max(p_fix(i_cut(HI)), p_fix(I_ONE))
+
+         f(:i_cut(LO))  = zero
+         f(i_cut(HI):)  = zero
+      endif
+
+   end subroutine cresp_find_prepare_spectrum_enpc
 !----------------------------------------------------------------------------------------------------
 
    logical function assert_active_bin_via_nei(n_in, e_in, i_cutoff)
