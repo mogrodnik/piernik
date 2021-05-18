@@ -70,6 +70,12 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,Ecre,wave_data,ds,ncre,n3):
          for i3 in range(n3):
             I[i3] = stg.cJnu*B_perp[i3]**((stg.p+1.0)/2.0) * (1.0/nu_s)**((stg.p-1.0)/2.0) * Ecrp[i3] * ds
 
+         if stg.print_SI:  # TODO FIXME With 2 wavelengths provided getting stg.mode = "simple"; remove me when fixed
+            I2 = np.zeros_like(B_perp)
+            for i3 in range(n3):
+               elfq2 = electrons.crenpp(nu_2, ncre, B_perp[i3], Ecre[:,i3], p_fix)
+               I2[i3] = np.sqrt(nu_2*B_perp[i3]) * elfq2
+
       elif stg.mode == 'spectral':
          for i3 in range(n3):
             elfq = electrons.crenpp(nu_s, ncre, B_perp[i3], Ecre[:,i3], p_fix)
