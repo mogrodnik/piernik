@@ -42,6 +42,7 @@ print_SI = False
 print_RM = False
 print_df = False
 print_log = False
+print_prof = False
 
 suffix = 'png', #'pdf',
 
