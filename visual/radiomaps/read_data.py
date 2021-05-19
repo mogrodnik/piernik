@@ -218,7 +218,7 @@ def data_h5(plik,ax_set,wave_data):
          sys.stdout.write("\033[F") # Cursor up one line
          print('Layer: ', k, nz)
          for i in range (nx):
-            plot_data_arrays = stokes_params(Bp[i,klo:khi,k], Bq[i,klo:khi,k], Bn[i,klo:khi,k], rho_ion[i,klo:khi,k], Ecr[i,klo:khi,k], Ecre[:,i,klo:khi,k], wave_data, ds, ncre, khi-klo)
+            plot_data_arrays = stokes_params(Bp[i,klo:khi,k], Bq[i,klo:khi,k], Bn[i,klo:khi,k], rho_ion[i,klo:khi,k], Ecrp[i,klo:khi,k], Ecre[:,i,klo:khi,k], wave_data, ds, ncre, khi-klo)
             if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
                I[i,k] = plot_data_arrays[0]
             if stg.print_PI or stg.print_SI or stg.print_vec:
