@@ -67,15 +67,13 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
       fig = plt.figure(figsize=(7,5), dpi=150)
 
       ind_h, h_adj_edges = get_encompassed_range(datahshape, figh, hrange)
-      h_weighs = [1.] * (len(ind_h) + 1)
-      h_weighs[0] = h_adj_edges[0] ; h_weighs[-1] = h_adj_edges[1]
 
       mid_coord = (wxrng[iprof+1] + wxrng[iprof])*0.5
       ihb = max(ind_h[0]-1, 0)   ;  ihe = min(ind_h[-1]+1, datahshape)
 
       means = []
       for i in range(ihb, ihe, 1):
-         means.append(avg_vec_in_range(data[i][:], datawshape, [figw[0], figw[1]], [wxrng[iprof], wxrng[iprof+1]] ) * h_weighs[i - ihb] )
+         means.append(avg_vec_in_range(data[i][:], datawshape, [figw[0], figw[1]], [wxrng[iprof], wxrng[iprof+1]] ) )
 
       hdata = np.linspace(hrange[0], hrange[1], ihe-ihb)
 
