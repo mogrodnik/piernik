@@ -6,8 +6,10 @@ from settings import MHz, p_min_fix, p_max_fix, const_synch, maxcren
 _ncre_m2            = 0.      # initialized below (in prepare_coeff)
 _log10_pmax_by_pmin = 1.0     # initialized below (in prepare_coeff)
 _16p1_MHz           = 16.1 * MHz #
+p_fix               = []
 
-def prepare_coeff(ncre):
+def initialize_crspectrum_tools(ncre):
+   global p_fix
 # var_names now should be initialized with values from problem.par@hdf file
 # Initialize quantities dependent on read parameters and remaining constant throughout computation
    _ncre_m2             = float(ncre - 2.)
@@ -27,13 +29,13 @@ def prepare_coeff(ncre):
    p_fix[0]    = ( sqrt(p_fix[1] * p_fix[2]) ) / p_fix_ratio               #let us rid of zero values
    p_fix[ncre] = ( sqrt(p_fix[ncre-2]* p_fix[ncre-1]) ) * p_fix_ratio
    p_fix = asfarray(p_fix)
-   return p_fix
+   return
 
 def nu_B_to_p(nu, B_perp): # Based on approximation by Mulcahy et al. (2018) (eqn. 2), https://arxiv.org/abs/1804.00752
     p = 1956.0 * sqrt( (nu / _16p1_MHz ) / ( B_perp +1.e-24 ) ) # [B_perp] = mGs - assumed at input, [nu] = 16.1 MHz, but already present
     return p
 
-def nu_to_ind(nu, B_perp, ncre, p_fix):
+def nu_to_ind(nu, B_perp, ncre):
    p_nu = nu_B_to_p(nu, B_perp)
    nu_to_ind = int( (log10(p_nu/p_min_fix)/_log10_pmax_by_pmin) * _ncre_m2 + 1.0)
 
@@ -43,8 +45,8 @@ def nu_to_ind(nu, B_perp, ncre, p_fix):
       nu_to_ind = min(nu_to_ind +1,ncre)
    return nu_to_ind, p_nu
 
-def crenpp(nu_s, ncre, bperp, ecr, p_fix):
-   p_ind, p_nu = nu_to_ind(nu_s, bperp, ncre, p_fix)
+def crenpp(nu_s, ncre, bperp, ecr):
+   p_ind, p_nu = nu_to_ind(nu_s, bperp, ncre)
    n_ind = min(p_ind - 1, maxcren-1)
    #cren_i = 10**float(n_ind-11) #Ecr[n_ind,i3]
    cren_i = ecr[n_ind]
