@@ -9,8 +9,6 @@ from analytical_data import data_raw
 import settings as stg
 from settings import ncre
 #from __future__ import print_function
-#import electrons
-
 
 def data_a(ax_set,wave_data):
 
