@@ -8,10 +8,13 @@ Hz = 1 ; MHz = Hz * 1.0e6 ; GHz = MHz * 1.0e3 ; clight = 3.e8 #m/s
 metr = 1 ; cm = 0.01 * metr
 
 const_synch = 1.e8
-p_min_fix = 5.e0
+p_min_fix = 5.e0     #TODO !> if possible - read the below from h5file, if available
 p_max_fix = 3.e5
-ncre = 14
-maxcren = ncre # 12
+ncre      = 14
+maxcren   = ncre # 12
+q_eps     = 0.01
+q_big     = 30.
+arr_dim   = 200      #TODO <! if possible - read the above from h5file, if available
 
 # cJnu - a constant scaling synchrotron emissivity.
 cJnu = 1.0
