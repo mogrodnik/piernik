@@ -14,6 +14,7 @@ from read_data import *
 from convolution import data_beam_convolve
 from gauss_beam import gauss_beam
 from draw_map import draw_map
+from electrons import initialize_crspectrum_tools
 
 file_name = ""
 from_file = False
@@ -124,6 +125,7 @@ nu,   lbd   = stg.set_nuandlbd(nu_set,  lbd_set, 1)
 nu_2, lbd_2 = stg.set_nuandlbd(nu2_set, lbd2_set,2)
 wave_data = [nu, lbd, nu_2, lbd_2]
 #sys.exit()
+initialize_crspectrum_tools(ncre) # TODO FIXME probably should be initialized ONLY IF stg.mode == "spectral"
 
 if not from_file:
    # Analytical data might be used,for testing of the maping routines, to generate 3D arrays of CR energy density, gas density and magnetic fild.
