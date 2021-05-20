@@ -63,7 +63,6 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,Ecre,wave_data,ds,ncre,n3):
       cos_2psi = cos_psi**2 - sin_psi**2
 
    if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
-      p_fix = electrons.prepare_coeff(ncre)
       # The total intensity of synchrotron radiation emitted form each cell of lengths ds along the line of sight
       I = np.zeros_like(B_perp)
       if stg.mode == 'simple':
@@ -72,13 +71,13 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,Ecre,wave_data,ds,ncre,n3):
 
       elif stg.mode == 'spectral':
          for i3 in range(n3):
-            elfq = electrons.crenpp(nu_s, ncre, B_perp[i3], Ecre[:,i3], p_fix)
+            elfq = electrons.crenpp(nu_s, ncre, B_perp[i3], Ecre[:,i3])
             I[i3] = np.sqrt(nu_s*B_perp[i3]) * elfq
 
          if stg.print_SI:
             I2 = np.zeros_like(B_perp)
             for i3 in range(n3):
-               elfq2 = electrons.crenpp(nu_2, ncre, B_perp[i3], Ecre[:,i3], p_fix)
+               elfq2 = electrons.crenpp(nu_2, ncre, B_perp[i3], Ecre[:,i3])
                I2[i3] = np.sqrt(nu_2*B_perp[i3]) * elfq2
 
    if stg.print_PI or stg.print_SI or stg.print_vec:
