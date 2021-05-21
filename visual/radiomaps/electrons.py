@@ -1,4 +1,4 @@
-from numpy import log, log10, zeros, asfarray, sqrt, sign
+from numpy import log, log10, zeros, asfarray, sqrt, sign, pi
 from settings import MHz, p_min_fix, p_max_fix, const_synch, maxcren, arr_dim, q_big, q_eps
 
 # General constants and arrays here
@@ -8,6 +8,7 @@ _log10_pmax_by_pmin = 1.0     # initialized below (in prepare_coeff)
 _log10_enpc_ratio   = 1.0
 _16p1_MHz           = 16.1 * MHz
 _inittab_dim        = 0
+_fourXpi            = 4. * pi
 p_fix               = []
 
 def initialize_crspectrum_tools(ncre):
@@ -61,6 +62,28 @@ def crenpp(nu_s, ncre, bperp, ecr):
    else:
       delta_p = p_max_fix - p_i  # WARNING temporary fix
    elfq = const_synch * cren_i / delta_p
+   return elfq
+
+#=============================================================================================================================
+def crenppfq(nu_s, ncre, bperp, ecr, ncr):      # recovers spectral index q from electron energy and number density
+   p_ind, p_nu = nu_to_ind(nu_s, bperp, ncre)   # and calculates emissivity
+   i_bin  = min(p_ind - 1, maxcren-1)
+   cren_i = ncr[i_bin]
+   cree_i = ecr[i_bin]
+   p_i    = p_fix[p_ind]
+   p_im1  = p_fix[max(p_ind - 1, 0)]
+
+   q1     = 4.1
+   npq_nu = 0.0
+   if (cree_i > 0.0 and cren_i > 0.0):
+      enpc_bin = cree_i / (cren_i * 1.0 * p_im1)
+      q_bin     = interpolate_q(alpha = enpc_bin)
+      # slv_error = False
+      # q1, slv_error = ne_to_qNR(q1, enpc_bin, p_fix_ratio, slv_error) # possible, but computationally expensive
+      f_bin     = nq2f(cren_i, q_bin, p_im1, p_i) # zwraca wartosc f(p,q) na lewej scianie wybranego binu
+      npq_nu    = _fourXpi * f_bin * ((p_nu / p_im1)**(- q_bin)) * (p_nu)**2   # recovered N(p_nu)
+
+   elfq = const_synch * npq_nu
    return elfq
 
 #=============================================================================================================================
@@ -167,4 +190,16 @@ def interpolate_q(alpha):  # Finds value of spectral index 'q' by provided 'alph
       q_out  = q_grid[index] + (alpha - enpc_tab_q[index]) * ( q_grid[index] - q_grid[index2]) / (enpc_tab_q[index] - enpc_tab_q[index2])
 
    return q_out
-#
+#==============================================================================================================================
+
+def nq2f(n, q, p_l, p_r):
+      qm3       = q - 3.
+      three_m_q = 3. - q
+      if p_r > 0.0 and p_l > 0 :
+        pr_by_pl = p_r / p_l
+        nq2f = n / (_fourXpi * p_l**3)
+        if ( abs(qm3) > q_eps ):
+            nq2f = nq2f * three_m_q / (( pr_by_pl )**three_m_q - 1.0)
+        else:
+            nq2f = nq2f / log(pr_by_pl)
+      return nq2f
