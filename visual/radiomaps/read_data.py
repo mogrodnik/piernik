@@ -132,7 +132,13 @@ def data_h5(plik,ax_set,wave_data):
    print("Domain dimensions: ", 'xmin, xmax =(', xmin,',', xmax, '), ymin, ymax =(', ymin,',', ymax, '), zmin, zmax =(', zmin,',', zmax,')')
    nxd, nyd, nzd = attrs['n_d'][0:3]
    Ecrp     = np.zeros((nxd,nyd,nzd))
-   Ecre     = np.zeros((ncre,nxd,nyd,nzd))
+   if    (stg.mode == "spectral"):
+      Ecre     = np.zeros((ncre,nxd,nyd,nzd))
+      Ncre     = np.zeros((ncre,nxd,nyd,nzd))
+   elif  (stg.mode == "simple"):
+      Ecre     = []
+      Ncre     = []
+
    rho     = np.zeros((nxd,nyd,nzd))
    Bp      = np.zeros((nxd,nyd,nzd))
    Bq      = np.zeros((nxd,nyd,nzd))
@@ -174,11 +180,11 @@ def data_h5(plik,ax_set,wave_data):
       Bp[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g[bset[0]][:,:,:].swapaxes(0,2)
       Bq[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g[bset[1]][:,:,:].swapaxes(0,2)
       Bn[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] = -h5g[bset[2]][:,:,:].swapaxes(0,2)
-      if stg.mode == 'simple':
-         Ecrp[off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cr01'][:,:,:].swapaxes(0,2)
-      elif stg.mode == 'spectral':
+      Ecrp[off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cr01'][:,:,:].swapaxes(0,2)
+      if (stg.mode == 'spectral'):
          for ic in range(ncre):
-            Ecre[ic,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cren'+str(ic+1).zfill(2)][:,:,:].swapaxes(0,2)
+            Ecre[ic,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cree'+str(ic+1).zfill(2)][:,:,:].swapaxes(0,2)
+            Ncre[ic,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cren'+str(ic+1).zfill(2)][:,:,:].swapaxes(0,2)
 
    h5f.close()
    rho_ion = np.zeros_like(rho)
@@ -200,7 +206,11 @@ def data_h5(plik,ax_set,wave_data):
          sys.stdout.write("\033[F") # Cursor up one line
          print('Layer: ', i, ny)
          for j in range (nz):
-            plot_data_arrays = stokes_params(Bp[klo:khi,i,j], Bq[klo:khi,i,j], Bn[klo:khi,i,j], rho_ion[klo:khi,i,j], Ecrp[klo:khi,i,j], Ecre[:,klo:khi,i,j], wave_data, ds, ncre, khi-klo)
+            if (stg.mode == "spectral"):
+               plot_data_arrays = stokes_params(Bp[klo:khi,i,j], Bq[klo:khi,i,j], Bn[klo:khi,i,j], rho_ion[klo:khi,i,j], Ecrp[klo:khi,i,j], wave_data, ds, khi-klo, Ecre=Ecre[:,klo:khi,i,j], Ncre=ncre[:,klo:khi,i,j], ncre=ncre)
+            else:
+               plot_data_arrays = stokes_params(Bp[klo:khi,i,j], Bq[klo:khi,i,j], Bn[klo:khi,i,j], rho_ion[klo:khi,i,j], Ecrp[klo:khi,i,j], wave_data, ds, khi-klo)
+
             if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
                I[i,j] = plot_data_arrays[0]
             if stg.print_PI or stg.print_SI or stg.print_vec:
@@ -216,7 +226,11 @@ def data_h5(plik,ax_set,wave_data):
          sys.stdout.write("\033[F") # Cursor up one line
          print('Layer: ', k, nz)
          for i in range (nx):
-            plot_data_arrays = stokes_params(Bp[i,klo:khi,k], Bq[i,klo:khi,k], Bn[i,klo:khi,k], rho_ion[i,klo:khi,k], Ecrp[i,klo:khi,k], Ecre[:,i,klo:khi,k], wave_data, ds, ncre, khi-klo)
+            if (stg.mode == "spectral"):
+               plot_data_arrays = stokes_params(Bp[i,klo:khi,k], Bq[i,klo:khi,k], Bn[i,klo:khi,k], rho_ion[i,klo:khi,k], Ecrp[i,klo:khi,k], wave_data, ds, khi-klo, Ecre=Ecre[:,i,klo:khi,k], Ncre=Ncre[:,i,klo:khi,k], ncre=ncre)
+            else:
+               plot_data_arrays = stokes_params(Bp[i,klo:khi,k], Bq[i,klo:khi,k], Bn[i,klo:khi,k], rho_ion[i,klo:khi,k], Ecrp[i,klo:khi,k], wave_data, ds, khi-klo)
+
             if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
                I[i,k] = plot_data_arrays[0]
             if stg.print_PI or stg.print_SI or stg.print_vec:
@@ -231,7 +245,11 @@ def data_h5(plik,ax_set,wave_data):
          sys.stdout.write("\033[F") # Cursor up one line
          print('Layer: ', i, nx)
          for j in range (ny):
-            plot_data_arrays = stokes_params(Bp[i,j,klo:khi], Bq[i,j,klo:khi], Bn[i,j,klo:khi], rho_ion[i,j,klo:khi], Ecrp[i,j,klo:khi], Ecre[:,i,j,klo:khi], wave_data, ds, ncre, khi-klo)
+            if (stg.mode == "spectral"):
+               plot_data_arrays = stokes_params(Bp[i,j,klo:khi], Bq[i,j,klo:khi], Bn[i,j,klo:khi], rho_ion[i,j,klo:khi], Ecrp[i,j,klo:khi], wave_data, ds, khi-klo, Ecre=Ecre[:,i,j,klo:khi], Ncre=Ncre[:,i,j,klo:khi], ncre=ncre)
+            else:
+               plot_data_arrays = stokes_params(Bp[i,j,klo:khi], Bq[i,j,klo:khi], Bn[i,j,klo:khi], rho_ion[i,j,klo:khi], Ecrp[i,j,klo:khi], wave_data, ds, khi-klo)
+
             if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
                I[i,j] = plot_data_arrays[0]
             if stg.print_PI or stg.print_SI or stg.print_vec:
