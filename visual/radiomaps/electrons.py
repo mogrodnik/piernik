@@ -5,6 +5,7 @@ from settings import MHz, p_min_fix, p_max_fix, const_synch, maxcren, arr_dim, q
 # Optimize (minimize duplicated executions)
 _ncre_m2            = 0.      # initialized below (in prepare_coeff)
 _log10_pmax_by_pmin = 1.0     # initialized below (in prepare_coeff)
+_log10_enpc_ratio   = 1.0
 _16p1_MHz           = 16.1 * MHz
 _inittab_dim        = 0
 p_fix               = []
@@ -64,7 +65,7 @@ def crenpp(nu_s, ncre, bperp, ecr):
 
 #=============================================================================================================================
 def prepare_q_grid(p_fix_ratio):   # fills grid with values of spectral indices 'q' in range of given e / (n p c), for further q interpolation
-   global enpc_tab_q, q_grid, q_inittab, _inittab_dim
+   global enpc_tab_q, q_grid, _inittab_dim, _log10_enpc_ratio
    _inittab_dim = int(arr_dim / 4)
 
    q_grid    = zeros(arr_dim)    # will contain data for later interpolation
@@ -88,7 +89,9 @@ def prepare_q_grid(p_fix_ratio):   # fills grid with values of spectral indices 
       enpc_max = enpc_max * 0.9515  # WARNING Magic number
       for i in range(0, arr_dim):
          enpc_tab_q[i]  = enpc_min * 10.0**((log10(enpc_max / enpc_min)) / float(arr_dim) * float(i))
-      fill_q_grid(p_fix_ratio)
+      fill_q_grid(p_fix_ratio, q_inittab)
+
+   _log10_enpc_ratio = log10(enpc_tab_q[-1] / enpc_tab_q[0])
    return
 #=============================================================================================================================
 def ln_eval_array_val(i, arr_min, arr_max, min_index, max_index): #DEPRECATED here
@@ -96,8 +99,8 @@ def ln_eval_array_val(i, arr_min, arr_max, min_index, max_index): #DEPRECATED he
       ln_eval_array_val = (arr_min - log(float(min_index)) / b ) + log(float(i)) / b
       return ln_eval_array_val
 #=============================================================================================================================
-def fill_q_grid(p_fix_ratio):
-   global q_grid, enpc_tab_q, arr_dim, q_inittab
+def fill_q_grid(p_fix_ratio, q_init):
+   global q_grid, enpc_tab_q
    previous_solution = q_grid[int(len(q_grid)/2)]
    solving_error     = True
    qx                = previous_solution
@@ -106,7 +109,7 @@ def fill_q_grid(p_fix_ratio):
       qx, solving_error = ne_to_qNR(previous_solution, enpc_tab_q[i], p_fix_ratio, solving_error)
       if (solving_error):
          for j in range(1, _inittab_dim, 1):
-            qx = q_inittab[j]
+            qx = q_init[j]
             qx, solving_error = ne_to_qNR(qx, enpc_tab_q[i], p_fix_ratio, solving_error)
             if (not solving_error):
                q_grid[i]     = qx
@@ -140,7 +143,7 @@ def ne_to_qNR(x_init_guess, alpha, p_ratio, slv_error):   # Newton-Raphson-type 
   x_result = x
 
   return x_result, slv_error
-# =============================================================================================================================
+#=============================================================================================================================
 def alpha_to_q(x, alpha, p_ratio_4_q): # Using this function (Miniati, 2001, eq. 29; present also in cresp_NR_method.F90)
       q_in3 = 3. - x                   # we nunerically find spectral index 'q'.
       q_in4 = 1. + q_in3
@@ -153,3 +156,15 @@ def alpha_to_q(x, alpha, p_ratio_4_q): # Using this function (Miniati, 2001, eq.
       alpha_to_q = alpha_to_q - alpha
 
       return alpha_to_q
+#=============================================================================================================================
+def interpolate_q(alpha):  # Finds value of spectral index 'q' by provided 'alpha' = e/npc; faster than running ne_to_qNR
+   index = int((log10(alpha / enpc_tab_q[0]) / _log10_enpc_ratio) * (arr_dim - 1) ) # + 1
+   if (index < 0 or index > arr_dim - 2):
+      index = max(0, min(arr_dim - 2, index) )
+      q_out = q_grid[index]   # If alpha exceeds enpc_tab_q limits: force the closest limiting q
+   else:
+      index2 = index + 1      # Prepare and linearly interpolate
+      q_out  = q_grid[index] + (alpha - enpc_tab_q[index]) * ( q_grid[index] - q_grid[index2]) / (enpc_tab_q[index] - enpc_tab_q[index2])
+
+   return q_out
+#
