@@ -3,13 +3,13 @@ from settings import MHz, p_min_fix, p_max_fix, const_synch, maxcren, arr_dim, q
 
 # General constants and arrays here
 # Optimize (minimize duplicated executions)
-_ncre_m2            = 0.      # initialized below (in prepare_coeff)
-_log10_pmax_by_pmin = 1.0     # initialized below (in prepare_coeff)
-_log10_enpc_ratio   = 1.0
-_16p1_MHz           = 16.1 * MHz
-_inittab_dim        = 0
-_fourXpi            = 4. * pi
-p_fix               = []
+p_fix               = []           # initialized below (in initialize_crspectrum_tools)
+_16p1_MHz           = 16.1 * MHz   # needed by nu_B_to_p
+_fourXpi            = 4. * pi      # needed by nq2f and crenppfq
+_inittab_dim        = 0            # initialized below (in prepare_q_grid)
+_log10_pmax_by_pmin = 1.0          # initialized below (in initialize_crspectrum_tools)
+_log10_enpc_ratio   = 1.0          # initialized below (in prepare_q_grid)
+_ncre_m2            = 0.           # initialized below (in initialize_crspectrum_tools)
 
 def initialize_crspectrum_tools(ncre):
    global p_fix, _ncre_m2, _log10_pmax_by_pmin
