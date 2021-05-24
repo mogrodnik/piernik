@@ -131,6 +131,15 @@ def data_h5(plik,ax_set,wave_data):
    zmax = attrs['z-edge_position'][1]/1000.
    print("Domain dimensions: ", 'xmin, xmax =(', xmin,',', xmax, '), ymin, ymax =(', ymin,',', ymax, '), zmin, zmax =(', zmin,',', zmax,')')
    nxd, nyd, nzd = attrs['n_d'][0:3]
+   if (stg.allow_amr_upscaling):
+      lvl_min = 9999
+      lvl_max = 0
+      print('Finding max level')
+      for ig in range(h5f['grid_dimensions'].shape[0]):
+         h5g = h5f['data']['grid_000000'+str(ig).zfill(4)]
+         lvl_max = max(lvl_max, h5g.attrs['level'][0])
+         lvl_min = min(lvl_min, h5g.attrs['level'][0])
+
    Ecrp     = np.zeros((nxd,nyd,nzd))
    if    (stg.mode == "spectral"):
       Ecre     = np.zeros((ncre,nxd,nyd,nzd))
@@ -171,7 +180,8 @@ def data_h5(plik,ax_set,wave_data):
    print('Reconstructing domain from cg parts')
    grid = h5f['grid_dimensions']
    for ig in range(grid.shape[0]):
-      h5g = h5f['data']['grid_0000000'+str(ig).zfill(3)]
+      h5g = h5f['data']['grid_000000'+str(ig).zfill(4)]
+      lvl = h5g.attrs['level'][0]
       off = h5g.attrs['off']
       ngb = h5g.attrs['n_b']
       n_b = [int(ngb[0]), int(ngb[1]), int(ngb[2])]

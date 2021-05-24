@@ -15,6 +15,7 @@ maxcren   = ncre # 12
 q_eps     = 0.01
 q_big     = 30.
 arr_dim   = 200      #TODO <! if possible - read the above from h5file, if available
+allow_amr_upscaling = False
 
 # cJnu - a constant scaling synchrotron emissivity.
 cJnu = 1.0
