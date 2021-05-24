@@ -134,11 +134,20 @@ def data_h5(plik,ax_set,wave_data):
    if (stg.allow_amr_upscaling):
       lvl_min = 9999
       lvl_max = 0
+      ndims   = 0
+      for nd in [nxd, nyd, nzd]:
+         if (nd > 0): ndims = ndims + 1
+
       print('Finding max level')
       for ig in range(h5f['grid_dimensions'].shape[0]):
          h5g = h5f['data']['grid_000000'+str(ig).zfill(4)]
          lvl_max = max(lvl_max, h5g.attrs['level'][0])
          lvl_min = min(lvl_min, h5g.attrs['level'][0])
+
+      print('Min / max level of refinement: %3i  ---%3i' %(lvl_min, lvl_max) )
+      nxd = int(nxd * 2**lvl_max);  nyd = int(nyd * 2**lvl_max);  nzd = int(nzd * 2**lvl_max)
+      print("Effective resolution: [ %6i %6i %6i ]" %(nxd, nyd, nzd) )
+      gd_lvl_scales = [ 2.**(-ndims * item) for item in range(lvl_min, lvl_max + 1) ]
 
    Ecrp     = np.zeros((nxd,nyd,nzd))
    if    (stg.mode == "spectral"):
