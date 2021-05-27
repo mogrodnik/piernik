@@ -226,7 +226,7 @@ def data_h5(plik,ax_set,wave_data):
          print('Layer: ', i, ny)
          for j in range (nz):
             if (stg.mode == "spectral"):
-               plot_data_arrays = stokes_params(Bp[klo:khi,i,j], Bq[klo:khi,i,j], Bn[klo:khi,i,j], rho_ion[klo:khi,i,j], Ecrp[klo:khi,i,j], wave_data, ds, khi-klo, Ecre=Ecre[:,klo:khi,i,j], Ncre=ncre[:,klo:khi,i,j], ncre=ncre)
+               plot_data_arrays = stokes_params(Bp[klo:khi,i,j], Bq[klo:khi,i,j], Bn[klo:khi,i,j], rho_ion[klo:khi,i,j], Ecrp[klo:khi,i,j], wave_data, ds, khi-klo, Ecre=Ecre[:,klo:khi,i,j], Ncre=Ncre[:,klo:khi,i,j], ncre=ncre)
             else:
                plot_data_arrays = stokes_params(Bp[klo:khi,i,j], Bq[klo:khi,i,j], Bn[klo:khi,i,j], rho_ion[klo:khi,i,j], Ecrp[klo:khi,i,j], wave_data, ds, khi-klo)
 
