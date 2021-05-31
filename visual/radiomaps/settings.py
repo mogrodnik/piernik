@@ -17,6 +17,10 @@ q_big     = 30.
 arr_dim   = 200      #TODO <! if possible - read the above from h5file, if available
 allow_amr_upscaling = False
 
+# Read only one refinement level
+lvl_only = -1
+one_level = False
+
 # cJnu - a constant scaling synchrotron emissivity.
 cJnu = 1.0
 # x_ion - ionization degree of the thermal gas (a number in the range [0-1])
