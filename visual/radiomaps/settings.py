@@ -137,7 +137,7 @@ def title(lab,attr):
    return lab+lbdcm+' | t = '+str(round(time))+' Myr'
 
 def etyfil(ax,file_name,nu):
-   return "_"+ax+"_"+file_name.split('/')[-1]+'_nu'+str(int(nu/MHz)).zfill(3)+'MHz'
+   return "_"+ax+"_"+file_name.split('/')[-1]+'_nu'+str(int(nu/MHz)).zfill(3)+'MHz'+('_lvl%i'%lvl_only if one_level else '')
 
 # dok - parameter determining spatial separation of vectors on the map
 def dokv(ff,ax_set):
