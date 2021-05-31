@@ -30,14 +30,14 @@ nu2_set  = -1.0
 def cli_params(argv):
    # The function serves for reading and interpretation of the comand line input parameters
    try:
-      opts,args=getopt.getopt(argv,"adhf:ik:l:m:n:prtsuvxyz",["help","file","convolve","log"])
+      opts,args=getopt.getopt(argv,"adhf:ik:l:m:n:R:prtsuvxyz",["help","file","convolve","log"])
       #print opts,"op",args,"arg"
    except getopt.GetoptError:
       print("Error: unknown parameter")
       sys.exit(2)
    for opt, arg in opts:
       if opt in ("-h", "--help"):
-         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -k sets the second wavelength for sectral index maps. \n -n sets the frequency \n -m sets the second frequency for spectral index maps \n -s convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i generates the map of Spectral Index (SI) \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale")
+         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -k sets the second wavelength for sectral index maps. \n -n sets the frequency \n -m sets the second frequency for spectral index maps \n -s convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i generates the map of Spectral Index (SI) \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -R integer reads and plots only one refinement level")
          sys.exit()
       elif opt == '-x':
          global ax_set, ax
@@ -102,6 +102,10 @@ def cli_params(argv):
       elif opt in ("-c", "--convolve"):
          global convol
          convol=True
+
+      elif opt in ("-R"):
+         stg.lvl_only = int(arg)
+         stg.one_level = True
 
       elif opt in ("-f", "--file"):
          global file_name
