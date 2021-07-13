@@ -153,7 +153,7 @@ def data_h5(plik,ax_set,wave_data):
 
       nxd = int(nxd * 2**lvl_scale);  nyd = int(nyd * 2**lvl_scale);  nzd = int(nzd * 2**lvl_scale)
       print("Effective resolution: [ %6i %6i %6i ]" %(nxd, nyd, nzd) )
-      gd_lvl_scales = [ 2.**(-ndims * item) for item in range(lvl_min, lvl_max + 1) ]
+      gd_lvl_scales = [ 2.**(-ndims * item) for item in range(lvl_max, lvl_min-1, -1)]
       levels = [ level for level in range(lvl_min, lvl_max +1)]
    else:
       levels = [0]
