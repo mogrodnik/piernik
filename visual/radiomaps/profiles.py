@@ -99,6 +99,8 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
       plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".png")
       plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".pdf")
 
+      plt.close(fig)
+
 def avg_vec_in_range(vec_data, sec_dim, sec_lims, sec_where):
    twidth = (sec_lims[1] - sec_lims[0])
    dwidth = twidth / sec_dim              # WARNING Assumes uniform distances
