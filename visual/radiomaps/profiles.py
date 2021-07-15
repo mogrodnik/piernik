@@ -22,6 +22,7 @@ nxboxesd= 9             # number of boxes (as in Mulcachy et al 2018, fig. 14)
 kpcasecd= 46./1000.     # 1'' equivalent to 46 pc as default
 labelnam= {"SI":"spectral index", "TP":"total intensity", "PI":"polarized intensity"}
 plt_grds= [True, True]
+use_def_ranges = False
 
 def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
 
@@ -48,6 +49,10 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
    figh_tot = figext_tot[3] - figext_tot[2]
    figw = [figext_tot[0], figext_tot[1]]
    figh = [figext_tot[2], figext_tot[3]]
+
+   if (not use_def_ranges):
+      wrange = [figext_tot[0] , figext_tot[1] ]
+      hrange = [figext_tot[0] , figext_tot[1] ]
 
    wcell = figw_tot / data_shape[0]
    hcell = figh_tot / data_shape[1]
