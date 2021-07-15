@@ -119,7 +119,7 @@ def cli_params(argv):
          except:
             yt_depth   = "max"
          stg.use_yt = True
-         print("Modules data_h5_yt and yt will be imported, width resolution: %i" %(yt_imres))
+         print("Modules data_h5_yt and yt will be imported, depth %10.1f resolution: %i" %(yt_depth, yt_imres))
 
       elif opt in ("-f", "--file"):
          global file_name
@@ -191,7 +191,7 @@ print("From_file: ", from_file)
 etyfil = stg.etyfil(ax,file_name,nu)
 attr = [time,lbd,lbd_2]
 
-if (stg.use_yt): plot_file = plot_file + "_yt"+str(yt_imres)
+if (stg.use_yt): etyfil = etyfil + "_yt_res"+str(yt_imres)+"depth"+str(round(yt_depth))
 
 if stg.print_TP:
    # Drawing Total Power (TP) map
