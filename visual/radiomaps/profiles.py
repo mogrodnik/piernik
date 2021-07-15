@@ -75,7 +75,7 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
       ind_h, h_adj_edges = get_encompassed_range(datahshape, figh, hrange)
 
       mid_coord = (wxrng[iprof+1] + wxrng[iprof])*0.5
-      ihb = max(ind_h[0]-1, 0)   ;  ihe = min(ind_h[-1]+1, datahshape)
+      ihb = max(ind_h[0]-1, 0)   ;  ihe = min(ind_h[-1]+1, datahshape-1)
 
       means = []
       for i in range(ihb, ihe, 1):
@@ -114,7 +114,7 @@ def avg_vec_in_range(vec_data, sec_dim, sec_lims, sec_where):
    num_avg     = float(len(indices_in))
    avg_section = update_average(avg_section, num_avg, vec_data[max(indices_in[0]-1, 0)], incrs[0])
    num_avg     = num_avg + incrs[0]
-   avg_section = update_average(avg_section, num_avg, vec_data[max(indices_in[-1]+1, 0)], incrs[1])
+   avg_section = update_average(avg_section, num_avg, vec_data[max(indices_in[-1], 0)], incrs[1])
    return avg_section
 
 def get_encompassed_range(sec_dim, sec_lims, sec_where):
