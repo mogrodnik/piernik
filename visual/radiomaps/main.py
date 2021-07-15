@@ -15,6 +15,8 @@ from convolution import data_beam_convolve
 from gauss_beam import gauss_beam
 from draw_map import draw_map
 from electrons import initialize_crspectrum_tools
+from profiles  import plot_profile
+
 
 file_name = ""
 from_file = False
@@ -32,14 +34,15 @@ yt_depth = "max"
 def cli_params(argv):
    # The function serves for reading and interpretation of the comand line input parameters
    try:
-      opts,args=getopt.getopt(argv,"adhf:ik:l:m:n:R:prtsuvxyz",["help","file","convolve","log","yt="])
+
+      opts,args=getopt.getopt(argv,"adhf:ik:l:m:n:R:pPrtsuvxyz",["help","file","convolve","log","yt="])
       #print opts,"op",args,"arg"
    except getopt.GetoptError:
       print("Error: unknown parameter")
       sys.exit(2)
    for opt, arg in opts:
       if opt in ("-h", "--help"):
-         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -k sets the second wavelength for sectral index maps. \n -n sets the frequency \n -m sets the second frequency for spectral index maps \n -s convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i generates the map of Spectral Index (SI) \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -R integer reads and plots only one refinement level \n --yt RESX,DEPTH use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>) with depth -DEPTH:DEPTH. Slower method, but works well with all levels of AMR data")
+         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -k sets the second wavelength for sectral index maps. \n -n sets the frequency \n -m sets the second frequency for spectral index maps \n -s convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i generates the map of Spectral Index (SI) \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -R integer reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale\n --yt RESX,DEPTH use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>) with depth -DEPTH:DEPTH. Slower method, but works well with all levels of AMR data")
          sys.exit()
       elif opt == '-x':
          global ax_set, ax
@@ -100,6 +103,9 @@ def cli_params(argv):
 
       elif opt in ("--log"):
          stg.print_log = True
+
+      elif opt == "-P":
+         stg.print_prof = True
 
       elif opt in ("-c", "--convolve"):
          global convol
@@ -196,11 +202,14 @@ if (stg.use_yt): etyfil = etyfil + "_yt_res"+str(yt_imres)+"depth"+str(round(yt_
 if stg.print_TP:
    # Drawing Total Power (TP) map
    draw_map( I.T, vecs, figext, ax_set, attr, etyfil, 'TP', from_file)
+   if (stg.print_prof): plot_profile(I.T, figext, ax_set, etyfil, 'TP')
 if stg.print_PI:
    # Drawing Polarized Intensity (PI) map
    draw_map(PI.T, vecs, figext, ax_set, attr, etyfil, 'PI', from_file)
+   if (stg.print_prof): plot_profile(PI.T, figext, ax_set, etyfil, 'PI')
 if stg.print_SI:
    draw_map(SI.T, vecs, figext, ax_set, attr, etyfil, 'SI', from_file)
+   if (stg.print_prof): plot_profile(SI.T, figext, ax_set, etyfil, 'SI')
 if stg.print_RM:
    if np.max(RM) != 1.0 or np.min(RM) != 0.0:
       # We draw the Faraday rotation - Rotation measue (RM) only if RM != 0
