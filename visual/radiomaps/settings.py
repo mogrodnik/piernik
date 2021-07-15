@@ -16,6 +16,7 @@ q_eps     = 0.01
 q_big     = 30.
 arr_dim   = 200      #TODO <! if possible - read the above from h5file, if available
 allow_amr_upscaling = False
+use_yt    = False
 
 # Read only one refinement level
 lvl_only = -1
