@@ -21,6 +21,7 @@ iranged = [0.1,  30.]   # range in observable            (as in Mulcachy et al 2
 nxboxesd= 9             # number of boxes (as in Mulcachy et al 2018, fig. 14)
 kpcasecd= 46./1000.     # 1'' equivalent to 46 pc as default
 labelnam= {"SI":"spectral index", "TP":"total intensity", "PI":"polarized intensity"}
+plt_grds= [True, True]
 
 def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
 
@@ -80,6 +81,9 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
       plt.axes().tick_params(axis='y', which='minor', left=True)
       plt.xlabel("Distance from the disk plane (kpc)", fontsize=fsize)
       plt.ylabel("Averaged %s at %5.1f kpc" %(labelnam[label], mid_coord), fontsize=fsize)
+
+      plt.grid(plt_grds[0], 'major', 'x', ls='--', lw=.5, c='k', alpha=.3)
+      plt.grid(plt_grds[1], 'major', 'y', ls='--', lw=.5, c='k', alpha=.3)
 
       if (stg.print_log and (label == "TP" or label == "PI")):
          means = np.power(10., means)
