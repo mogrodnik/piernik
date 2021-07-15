@@ -31,6 +31,9 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,**kwargs):
    I_sum, Q_sum, U_sum, RM_sum, SI, Q, U = [], [], [], [], [], [], []
    nu_s, lambda_s, nu_2, lambda_2 = wave_data
    n = len(rho_ion)
+# Vectorize ds to make it universal for either yt analysis or h5py script parts
+   if (not stg.use_yt):
+      ds = np.ones(n) * ds
 # modulus of magnetic field vector
    #B_tot = np.sqrt((Bp**2+Bq**2+Bn**2))
 # modulus of the perpendiculat (to the line of sight) component of B
@@ -74,7 +77,7 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,**kwargs):
       I = np.zeros_like(B_perp)
       if stg.mode == 'simple':
          for i3 in range(n3):
-            I[i3] = stg.cJnu*B_perp[i3]**((stg.p+1.0)/2.0) * (1.0/nu_s)**((stg.p-1.0)/2.0) * Ecrp[i3] * ds
+            I[i3] = stg.cJnu*B_perp[i3]**((stg.p+1.0)/2.0) * (1.0/nu_s)**((stg.p-1.0)/2.0) * Ecrp[i3] * ds[i3]
 
       elif stg.mode == 'spectral':
          for i3 in range(n3):
