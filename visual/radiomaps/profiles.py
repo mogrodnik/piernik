@@ -20,7 +20,7 @@ hranged = [-3.22, 3.22] # ranges from disk plane  in kpc (as in Mulcachy et al 2
 iranged = [0.1,  30.]   # range in observable            (as in Mulcachy et al 2018, fig. 14)
 nxboxesd= 9             # number of boxes (as in Mulcachy et al 2018, fig. 14)
 kpcasecd= 46./1000.     # 1'' equivalent to 46 pc as default
-labelnam= {"SI":"spectral index", "TP":"total intensity", "PI":"polarized intensity"}
+labelnam= {"SI":"Spectral index", "TP":"Total intensity", "PI":"Polarized intensity"}
 plt_grds= [True, True]
 use_def_ranges = False
 
@@ -29,6 +29,10 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
    if (ax_set == 2):
       print("\033[93m Axis set is 'z', omitting profile plotting. \033[0m")
       return # do nothing - no profiles to plot, if disk is shown face-on
+   elif (ax_set == 1):
+      ax_w = "x"
+   elif (ax_set == 0):
+      ax_w = "y"
 
    data_shape = np.shape(data) # expecting 2-dim data, WARNING - obtained data is reversed
    data[data == -np.inf] = 0.     # remove infs
