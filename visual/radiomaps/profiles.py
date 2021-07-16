@@ -70,7 +70,7 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
       wxrng.append(wxrng[0] + (i+1) * wwidth)
 
    for iprof in range(nxboxes):
-      fig = plt.figure(figsize=(7,5), dpi=150)
+      fig, ax = plt.subplots(figsize=(7,5), dpi=150)
 
       ind_h, h_adj_edges = get_encompassed_range(datahshape, figh, hrange)
 
@@ -83,22 +83,21 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
 
       hdata = np.linspace(hrange[0], hrange[1], ihe-ihb)
 
-      plt.axes().tick_params(axis='y', which='minor', left=True)
-      plt.xlabel("Distance from the disk plane (kpc)", fontsize=fsize)
-      plt.ylabel("Averaged %s at %5.1f kpc" %(labelnam[label], mid_coord), fontsize=fsize)
-
-      plt.grid(plt_grds[0], 'major', 'x', ls='--', lw=.5, c='k', alpha=.3)
-      plt.grid(plt_grds[1], 'major', 'y', ls='--', lw=.5, c='k', alpha=.3)
+      xlab = "Distance from the disk plane (kpc)"
+      ylab = "Averaged %s at %5.1f kpc" %(labelnam[label], mid_coord)
+      title = ""
 
       if (stg.print_log and (label == "TP" or label == "PI")):
          means = np.power(10., means)
-         plt.yscale("log")
-      plt.scatter(hdata, means, color="xkcd:red", marker = "X")
-      plt.plot(   hdata, means, color="xkcd:blue", linewidth=0.75)
+         scaletype = "log"
+      else:
+         scaletype = "lin"
+      ax = plot_one_profile(ax, hdata, means, xlab, ylab, title, scaletype, plot_labels=True, plot_title=False)
 
       plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".png")
       plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".pdf")
 
+      ax.clear()
       plt.close(fig)
 
 def avg_vec_in_range(vec_data, sec_dim, sec_lims, sec_where):
@@ -136,3 +135,22 @@ def update_average(avg_val, avg_num, avg_update, incr):
    denom_new = avg_num + incr
    avg_val_new = avg_val + (avg_update - avg_val) / (avg_num + incr) # This allows to update cell-average by factor of cell
    return avg_val_new
+
+def plot_one_profile(ax, xdata, ydata, xlabel, ylabel, title, scaletype, plot_labels, plot_title):
+
+   if plot_labels:
+      ax.set_xlabel(xlabel, fontsize=fsize)
+      ax.set_ylabel(ylabel, fontsize=fsize)
+   if plot_title:
+      ax.set_title(title, fontsize=fsize)
+
+   ax.set_yscale(scaletype)
+   #ax.errorbar(xdata, ydata, yerr=yerrdata)
+
+   ax.grid(plt_grds[0], 'major', 'x', ls='--', lw=.5, c='k', alpha=.3)
+   ax.grid(plt_grds[1], 'major', 'y', ls='--', lw=.5, c='k', alpha=.3)
+
+   ax.scatter(xdata, ydata, color="xkcd:red",  marker = "+")
+   ax.plot(   xdata, ydata, color="xkcd:blue", linewidth=0.75)
+
+   return ax
