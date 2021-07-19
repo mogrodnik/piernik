@@ -23,6 +23,7 @@ kpcasecd= 46./1000.     # 1'' equivalent to 46 pc as default
 labelnam= {"SI":"Spectral index", "TP":"Total intensity", "PI":"Polarized intensity"}
 plt_grds= [True, True]
 use_def_ranges = True
+plot_one_fig = True
 inches_ax = 2.
 aspect_ax = 6.
 
@@ -99,15 +100,16 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
       ylab = "Averaged %s at %5.1f kpc" %(labelnam[label], mid_coord)
       title = ""
 
-      fig_one, ax = plt.subplots(figsize=(7,5), dpi=150)
+      if (not plot_one_fig):
+         fig_one, ax = plt.subplots(figsize=(7,5), dpi=150)
 
-      ax = plot_one_profile(ax, hdata, means, xlab, ylab, title, scaletype, plot_labels=[True, True], plot_title=False)
+         ax = plot_one_profile(ax, hdata, means, xlab, ylab, title, scaletype, plot_labels=[True, True], plot_title=False)
 
-      plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".png")
-      plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".pdf")
+         plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".png")
+         plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".pdf")
 
-      ax.clear()
-      plt.close(fig_one)
+         ax.clear()
+         plt.close(fig_one)
 
       axm = axs[iprof]
       xlab = "z (kpc) at %s = %5.1f kpc" %(ax_w, mid_coord)
@@ -115,8 +117,8 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
 
    mfig.supylabel("%s (averaged over %s)" %(labelnam[label], ax_w), fontsize = fsize*1.5)
    plt.tight_layout()
-   plt.savefig(label + "_profiles_" + ety_file + ".png")
-   plt.savefig(label + "_profiles_" + ety_file + ".pdf")
+   plt.savefig(label + "_profiles" + ety_file + ".png")
+   plt.savefig(label + "_profiles" + ety_file + ".pdf")
    plt.close(mfig)
 
 def avg_vec_in_range(vec_data, sec_dim, sec_lims, sec_where):
