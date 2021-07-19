@@ -172,4 +172,5 @@ def plot_one_profile(ax, xdata, ydata, xlabel, ylabel, title, scaletype, plot_la
    if plot_labels[0]: ax.set_xlabel(xlabel, fontsize=fsize)
    if plot_labels[1]: ax.set_ylabel(ylabel, fontsize=fsize)
 
+   ax.tick_params(labelsize = fsize * 0.95)
    return ax
