@@ -23,6 +23,7 @@ kpcasecd= 46./1000.     # 1'' equivalent to 46 pc as default
 labelnam= {"SI":"Spectral index", "TP":"Total intensity", "PI":"Polarized intensity"}
 plt_grds= [True, True]
 use_def_ranges = True
+plot_errorbars = True
 plot_one_fig = True
 inches_ax = 2.
 aspect_ax = 6.
@@ -87,8 +88,11 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
       ihb = max(ind_h[0]-1, 0)   ;  ihe = min(ind_h[-1]+1, datahshape-1)
 
       means = []
+      stds  = []
       for i in range(ihb, ihe, 1):
-         means.append(avg_vec_in_range(data[i][:], datawshape, [figw[0], figw[1]], [wxrng[iprof], wxrng[iprof+1]] ) )
+         avg, std = avg_std_section(data[i][:], datawshape, [figw[0], figw[1]], [wxrng[iprof], wxrng[iprof+1]])
+         means.append(avg)
+         stds.append(std)
 
       if (stg.print_log and (label == "TP" or label == "PI")):
          means = np.power(10., means)
@@ -105,7 +109,7 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
       if (not plot_one_fig):
          fig_one, ax = plt.subplots(figsize=(7,5), dpi=150)
 
-         ax = plot_one_profile(ax, hdata, means, xlab, ylab, title, scaletype, plot_labels=[True, True], plot_title=False)
+         ax = plot_one_profile(ax, hdata, means, stds, xlab, ylab, title, scaletype, plot_labels=[True, True], plot_title=False)
 
          plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".png")
          plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".pdf")
@@ -115,7 +119,7 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
 
       axm = axs[iprof]
       xlab = "z (kpc) at %s = %5.1f kpc" %(ax_w, mid_coord)
-      axm = plot_one_profile(axm, hdata, means, xlab, ylab, title, scaletype, plot_labels=[True, False], plot_title=(iprof == 0))
+      axm = plot_one_profile(axm, hdata, means, stds, xlab, ylab, title, scaletype, plot_labels=[True, False], plot_title=(iprof == 0))
 
    mfig.supylabel("%s (averaged over %s)" %(labelnam[label], ax_w), fontsize = fsize*1.5)
    plt.tight_layout()
@@ -139,6 +143,18 @@ def avg_vec_in_range(vec_data, sec_dim, sec_lims, sec_where):
    avg_section = update_average(avg_section, num_avg, vec_data[max(indices_in[-1], 0)], incrs[1])
    return avg_section
 
+def avg_std_section(vec_data, sec_dim, sec_lims, sec_where):
+   twidth = (sec_lims[1] - sec_lims[0])
+   dwidth = twidth / sec_dim              # WARNING Assumes uniform distances
+   indices_in, incrs = get_encompassed_range(sec_dim, sec_lims, sec_where)
+   indices_in.insert(0, max(indices_in[0],  0))
+   indices_in.insert(0, min(indices_in[-1], sec_dim))
+
+   avg_vec = np.mean(vec_data[indices_in])
+   std_vec = np.std( vec_data[indices_in])
+
+   return avg_vec, std_vec
+
 def get_encompassed_range(sec_dim, sec_lims, sec_where):
    indices_whole = []   ;     i = 0
    bnd_factors   = [0., 0.]
@@ -159,18 +175,21 @@ def update_average(avg_val, avg_num, avg_update, incr):
    avg_val_new = avg_val + (avg_update - avg_val) / (avg_num + incr) # This allows to update cell-average by factor of cell
    return avg_val_new
 
-def plot_one_profile(ax, xdata, ydata, xlabel, ylabel, title, scaletype, plot_labels, plot_title):
+def plot_one_profile(ax, xdata, ydata, yerrdata, xlabel, ylabel, title, scaletype, plot_labels, plot_title):
 
    if plot_title:
       ax.set_title(title, fontsize=fsize)
 
    ax.set_yscale(scaletype)
-   #ax.errorbar(xdata, ydata, yerr=yerrdata)
 
    ax.grid(plt_grds[0], 'major', 'x', ls='--', lw=.5, c='k', alpha=.3)
    ax.grid(plt_grds[1], 'major', 'y', ls='--', lw=.5, c='k', alpha=.3)
 
-   ax.scatter(xdata, ydata, color="xkcd:red",  marker = "+")
+   if (plot_errorbars):
+      ax.errorbar(xdata, ydata, yerr=yerrdata, color="xkcd:red",  marker = "+")
+   else:
+      ax.scatter(xdata, ydata, color="xkcd:red",  marker = "+")
+
    ax.plot(   xdata, ydata, color="xkcd:blue", linewidth=0.75)
 
    if plot_labels[0]: ax.set_xlabel(xlabel, fontsize=fsize)
