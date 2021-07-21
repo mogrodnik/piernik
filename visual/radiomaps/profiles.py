@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 
 #przeznaczeniem tego modulu jest przygotowanie usrednionych w plaszczyznie X profili emisji i innych obserwabli
 #w zalozeniu profil rzutuje na os X emisje w funkcji odleglosci od dysku (z lub h). Os Y prezentuje wartosc obserwabli.
-#nxboxes - liczba zakresow
-#wrange  - calkowity zakres szerokosci, ktory zostanie podzielony na nxboxes kawalkow i w ktorym obserwabla bedzie usredniana
+#nwboxes - liczba zakresow
+#wrange  - calkowity zakres szerokosci, ktory zostanie podzielony na nwboxes kawalkow i w ktorym obserwabla bedzie usredniana
 #hrange  - wysokosc w kpc, rzutuje na zakres w osi X profili
 #irange  - zakres wartosci obserwabli
 
@@ -18,7 +18,7 @@ fsize   = 14
 wranged = [-7.37, 7.37] # ranges from disk center in kpc (as in Mulcachy et al 2018, fig. 14)
 hranged = [-3.22, 3.22] # ranges from disk plane  in kpc (as in Mulcachy et al 2018, fig. 14)
 iranged = [0.1,  30.]   # range in observable            (as in Mulcachy et al 2018, fig. 14)
-nxboxesd= 9             # number of boxes (as in Mulcachy et al 2018, fig. 14)
+nwboxesd= 9             # number of boxes (as in Mulcachy et al 2018, fig. 14)
 kpcasecd= 46./1000.     # 1'' equivalent to 46 pc as default
 labelnam= {"SI":"Spectral index", "TP":"Total intensity", "PI":"Polarized intensity"}
 plt_grds= [True, True]
@@ -27,8 +27,10 @@ plot_one_fig = True
 inches_ax = 2.
 aspect_ax = 6.
 
+# main plotting function: processess data and produces plot files
 def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
 
+# establish 'width' (ordinate) axis
    if (ax_set == 2):
       print("\033[93m Axis set is 'z', omitting profile plotting. \033[0m")
       return # do nothing - no profiles to plot, if disk is shown face-on
@@ -37,48 +39,48 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
    elif (ax_set == 0):
       ax_w = "y"
 
+# get shape of the data
    data_shape = np.shape(data) # expecting 2-dim data, WARNING - obtained data is reversed
    data[data == -np.inf] = 0.     # remove infs
 
+# assume larger data length in width
    datawshape = max(data_shape)
    datahshape = min(data_shape)
 
    if stg.print_log:
       data = np.log10(data)
 
+# get keyword arguments
    wrange = kwargs.get("w", wranged)
    hrange = kwargs.get("h", hranged)
    irange = kwargs.get("z", iranged)
-   nxboxes= kwargs.get("n", nxboxesd)
+   nwboxes= kwargs.get("n", nwboxesd)
    kpcasec= kwargs.get("s", kpcasecd)
 
+# Get physical size of the data
    figw_tot = figext_tot[1] - figext_tot[0]
    figh_tot = figext_tot[3] - figext_tot[2]
-   figw = [figext_tot[0], figext_tot[1]]
-   figh = [figext_tot[2], figext_tot[3]]
+   figw     = [figext_tot[0], figext_tot[1]]
+   figh     = [figext_tot[2], figext_tot[3]]
 
    if (not use_def_ranges):
       wrange = [figext_tot[0] , figext_tot[1] ]
       hrange = [figext_tot[0] , figext_tot[1] ]
 
+# wcell and hcell are array cell sizes:
    wcell = figw_tot / data_shape[0]
    hcell = figh_tot / data_shape[1]
 
-   if (nxboxes is int(nxboxes**0.5)**2):
-      n_r = int(nxboxes**0.5)
-      n_c = int(nxboxes**0.5)
-   else:
-      n_r = int(nxboxes**0.5)
-      n_c = math.ceil(float(nxboxes) / float(n_r))
-
-   wwidth   = (wrange[1] - wrange[0]) / nxboxes
+# Establish width ranges for the sections
+   wwidth   = (wrange[1] - wrange[0]) / nwboxes
    wxrng    = [wrange[0]]
-   for i in range(nxboxes):
+   for i in range(nwboxes):
       wxrng.append(wxrng[0] + (i+1) * wwidth)
 
-   mfig, axs = plt.subplots(nrows=nxboxes, ncols=1, figsize=(inches_ax * aspect_ax, inches_ax * nxboxes), dpi=150)
+   mfig, axs = plt.subplots(nrows=nwboxes, ncols=1, figsize=(inches_ax * aspect_ax, inches_ax * nwboxes), dpi=150)
 
-   for iprof in range(nxboxes):
+# prepare and save profile(s)
+   for iprof in range(nwboxes):
       ind_h, h_adj_edges = get_encompassed_range(datahshape, figh, hrange)
 
       mid_coord = (wxrng[iprof+1] + wxrng[iprof])*0.5
