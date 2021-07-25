@@ -29,7 +29,7 @@ inches_ax = 2.
 aspect_ax = 6.
 
 # main plotting function: processess data and produces plot files
-def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
+def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs):
 
 # establish 'width' (ordinate) axis
    if (ax_set == 2):
@@ -39,6 +39,10 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
       ax_w = "x"
    elif (ax_set == 0):
       ax_w = "y"
+# Unpack time and wavelength info
+   time = attributes[0]
+   lbd1 = attributes[1]
+   lbd2 = attributes[2]
 
 # get shape of the data
    data_shape = np.shape(data) # expecting 2-dim data, WARNING - obtained data is reversed
@@ -104,11 +108,10 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
 
       xlab = "Distance from the disk plane (kpc)"
       ylab = "Averaged %s at %5.1f kpc" %(labelnam[label], mid_coord)
-      title = ""
+      title = "Time = %10.2f Myr" %time   # WARNING assuming units
 
       if (not plot_one_fig):
          fig_one, ax = plt.subplots(figsize=(7,5), dpi=150)
-
          ax = plot_one_profile(ax, hdata, means, stds, xlab, ylab, title, scaletype, plot_labels=[True, True], plot_title=False)
 
          plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".png")
@@ -119,10 +122,12 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, **kwargs):
 
       axm = axs[iprof]
       xlab = "z (kpc) at %s = %5.1f kpc" %(ax_w, mid_coord)
-      axm = plot_one_profile(axm, hdata, means, stds, xlab, ylab, title, scaletype, plot_labels=[True, False], plot_title=(iprof == 0))
+      axm = plot_one_profile(axm, hdata, means, stds, xlab, ylab, title, scaletype, plot_labels=[True, False], plot_title=False)
 
-   mfig.supylabel("%s (averaged over %s)" %(labelnam[label], ax_w), fontsize = fsize*1.5)
-   plt.tight_layout()
+   mfig.suptitle(title, fontsize = fsize*1.35)
+   mfig.supylabel("%s (averaged over %s) at $\lambda=$ %8.2f m" %(labelnam[label], ax_w, lbd1), fontsize = fsize*1.5)
+   #plt.tight_layout()
+   plt.tight_layout(rect=[0., 0., 1., 0.99]) # tight_layout may clip suptitle
    plt.savefig(label + "_profiles" + ety_file + ".png")
    plt.savefig(label + "_profiles" + ety_file + ".pdf")
    plt.close(mfig)

@@ -202,14 +202,14 @@ if (stg.use_yt): etyfil = etyfil + "_yt_res"+str(yt_imres)+"depth"+str(round(yt_
 if stg.print_TP:
    # Drawing Total Power (TP) map
    draw_map( I.T, vecs, figext, ax_set, attr, etyfil, 'TP', from_file)
-   if (stg.print_prof): plot_profile(I.T, figext, ax_set, etyfil, 'TP')
+   if (stg.print_prof): plot_profile(I.T, figext, ax_set, etyfil, 'TP', attr)
 if stg.print_PI:
    # Drawing Polarized Intensity (PI) map
    draw_map(PI.T, vecs, figext, ax_set, attr, etyfil, 'PI', from_file)
-   if (stg.print_prof): plot_profile(PI.T, figext, ax_set, etyfil, 'PI')
+   if (stg.print_prof): plot_profile(PI.T, figext, ax_set, etyfil, 'PI', attr)
 if stg.print_SI:
    draw_map(SI.T, vecs, figext, ax_set, attr, etyfil, 'SI', from_file)
-   if (stg.print_prof): plot_profile(SI.T, figext, ax_set, etyfil, 'SI')
+   if (stg.print_prof): plot_profile(SI.T, figext, ax_set, etyfil, 'SI', attr)
 if stg.print_RM:
    if np.max(RM) != 1.0 or np.min(RM) != 0.0:
       # We draw the Faraday rotation - Rotation measue (RM) only if RM != 0
