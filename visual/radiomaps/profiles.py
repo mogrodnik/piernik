@@ -104,7 +104,7 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
       else:
          scaletype = "lin"
 
-      hdata = np.linspace(hrange[0]+ 0.5*hcell, hrange[1], ihe-ihb)
+      hdata = np.linspace(hrange[0], hrange[1], ihe-ihb)
 
       xlab = "Distance from the disk plane (kpc)"
       ylab = "Averaged %s at %5.1f kpc" %(labelnam[label], mid_coord)
