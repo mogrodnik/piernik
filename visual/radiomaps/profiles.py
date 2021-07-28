@@ -21,9 +21,11 @@ iranged = [0.1,  30.]   # range in observable            (as in Mulcachy et al 2
 nwboxesd= 9             # number of boxes (as in Mulcachy et al 2018, fig. 14)
 kpcasecd= 46./1000.     # 1'' equivalent to 46 pc as default
 labelnam= {"SI":"Spectral index", "TP":"Total intensity", "PI":"Polarized intensity"}
+ylimsdef= {"SI":(-3.,0.5), "TP":(1.e-2, 5.e0), "PI":(1.e-3, 5.e-1)}
 plt_grds= [True, True]
 use_def_ranges = True
 plot_errorbars = True
+use_def_ylims  = True
 plot_one_fig = True
 inches_ax = 2.
 aspect_ax = 6.
@@ -112,7 +114,7 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
 
       if (not plot_one_fig):
          fig_one, ax = plt.subplots(figsize=(7,5), dpi=150)
-         ax = plot_one_profile(ax, hdata, means, stds, xlab, ylab, title, scaletype, plot_labels=[True, True], plot_title=False)
+         ax = plot_one_profile(ax, hdata, means, stds, xlab, ylab, title, label, scaletype, plot_labels=[True, True], plot_title=False)
 
          plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".png")
          plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".pdf")
@@ -122,7 +124,7 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
 
       axm = axs[iprof]
       xlab = "z (kpc) at %s = %5.1f kpc" %(ax_w, mid_coord)
-      axm = plot_one_profile(axm, hdata, means, stds, xlab, ylab, title, scaletype, plot_labels=[True, False], plot_title=False)
+      axm = plot_one_profile(axm, hdata, means, stds, xlab, ylab, title, label, scaletype, plot_labels=[True, False], plot_title=False)
 
    mfig.suptitle(title, fontsize = fsize*1.35)
    mfig.supylabel("%s (averaged over %s) at $\lambda=$ %8.2f m" %(labelnam[label], ax_w, lbd1), fontsize = fsize*1.5)
@@ -180,12 +182,14 @@ def update_average(avg_val, avg_num, avg_update, incr):
    avg_val_new = avg_val + (avg_update - avg_val) / (avg_num + incr) # This allows to update cell-average by factor of cell
    return avg_val_new
 
-def plot_one_profile(ax, xdata, ydata, yerrdata, xlabel, ylabel, title, scaletype, plot_labels, plot_title):
+def plot_one_profile(ax, xdata, ydata, yerrdata, xlabel, ylabel, title, label, scaletype, plot_labels, plot_title):
 
    if plot_title:
       ax.set_title(title, fontsize=fsize)
 
    ax.set_yscale(scaletype)
+   if use_def_ylims: # if true, using global 'ylimsdef' via passed 'label' variable
+      ax.set_ylim(ylimsdef[label][0], ylimsdef[label][1])
 
    ax.grid(plt_grds[0], 'major', 'x', ls='--', lw=.5, c='k', alpha=.3)
    ax.grid(plt_grds[1], 'major', 'y', ls='--', lw=.5, c='k', alpha=.3)
