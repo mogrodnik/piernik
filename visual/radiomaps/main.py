@@ -35,14 +35,14 @@ def cli_params(argv):
    # The function serves for reading and interpretation of the comand line input parameters
    try:
 
-      opts,args=getopt.getopt(argv,"adhf:ik:l:m:n:R:pPrtsuvxyz",["help","file","convolve","log","yt="])
+      opts,args=getopt.getopt(argv,"adhf:ik:l:m:n:R:pPrtsuvxyz",["help","file","convolve","log","yt=","tz=","pz=","iz=","rz=","pr=","vp="])
       #print opts,"op",args,"arg"
    except getopt.GetoptError:
       print("Error: unknown parameter")
       sys.exit(2)
    for opt, arg in opts:
       if opt in ("-h", "--help"):
-         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -k sets the second wavelength for sectral index maps. \n -n sets the frequency \n -m sets the second frequency for spectral index maps \n -s convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i generates the map of Spectral Index (SI) \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -R integer reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale\n --yt RESX,DEPTH use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>) with depth -DEPTH:DEPTH. Slower method, but works well with all levels of AMR data")
+         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -k sets the second wavelength for sectral index maps. \n -n sets the frequency \n -m sets the second frequency for spectral index maps \n -s convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i generates the map of Spectral Index (SI) \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -R integer reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale\n --yt RESX,DEPTH use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>) with depth -DEPTH:DEPTH. Slower method, but works well with all levels of AMR data\n --{tz|pz|rz|iz} vmin,vmax \t to set plot limits for the given field (TP, PI, SI or RM, respectively)\n --pr width,height to set the absolute limits of plotted physical space \n --vp DVEC to set vector coverage")
          sys.exit()
       elif opt == '-x':
          global ax_set, ax
@@ -126,6 +126,28 @@ def cli_params(argv):
             yt_depth   = "max"
          stg.use_yt = True
          print("Modules data_h5_yt and yt will be imported, depth %10.1f resolution: %i" %(yt_depth, yt_imres))
+      elif opt in ("--tz"):
+         aux = arg.split(",")
+         stg.Tvmn_user, stg.Tvmx_user = float(aux[0]), float(aux[1])
+
+      elif opt in ("--pz"):
+         aux = arg.split(",")
+         stg.Pvmn_user, stg.Pvmx_user = float(aux[0]), float(aux[1])
+
+      elif opt in ("--rz"):
+         aux = arg.split(",")
+         stg.Rvmn_user, stg.Rvmx_user = float(aux[0]), float(aux[1])
+
+      elif opt in ("--iz"):
+         aux = arg.split(",")
+         stg.Svmn_user, stg.Svmx_user = float(aux[0]), float(aux[1])
+
+      elif opt in ("--pr"):
+         aux = arg.split(",")
+         stg.px_user, stg.pz_user = float(aux[0]), float(aux[1])
+
+      elif opt in ("--vp"):
+         stg.dokv_user = int(arg)
 
       elif opt in ("-f", "--file"):
          global file_name
