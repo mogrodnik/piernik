@@ -199,13 +199,25 @@ def fvmax(lab,ff,data):
          return 0.0, np.max(data)*norm(lab)
    else:
       if lab == 'TP':
-         vmn, vmx = 0.0, 20.
+         if (Tvmn_user == False and Tvmx_user == False):
+            vmn, vmx = 0.0, 20.
+         else:
+            vmn, vmx = Tvmn_user, Tvmx_user
       if lab == 'PI':
-         vmn, vmx = 0.0 , 20000.
+         if (Pvmn_user == False and Pvmx_user == False):
+            vmn, vmx = 0.0, 20000.
+         else:
+            vmn, vmx = Pvmn_user, Pvmx_user
       if lab == 'SI':
-         vmn, vmx = -2.0 , 0.0
+         if (Svmn_user == False and Svmx_user == False):
+            vmn, vmx = -2.0, 0.0
+         else:
+            vmn, vmx = Svmn_user, Svmx_user
       if lab == 'RM':
-         vmn, vmx = -100., 100.
+         if (Rvmn_user == False and Rvmx_user == False):
+            vmn, vmx = -100., 100.
+         else:
+            vmn, vmx = Rvmn_user, Rvmx_user
       if print_log:
          vmn, vmx = -6., -2.
    return vmn, vmx
