@@ -156,10 +156,13 @@ def etyfil(ax,file_name,nu):
 # dok - parameter determining spatial separation of vectors on the map
 def dokv(ff,ax_set):
    if ff:
-      if ax_set == 2:
-         dok = 15
+      if (dokv_user == False):
+         if ax_set == 2:
+            dok = 15
+         else:
+            dok = 15
       else:
-         dok = 15
+         dok = dokv_user
    else:
       dok = sigma
    return dok
