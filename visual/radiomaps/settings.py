@@ -55,6 +55,18 @@ print_prof = False
 
 suffix = 'png', #'pdf',
 
+px_user   = False
+pz_user   = False
+Tvmn_user = False
+Tvmx_user = False
+Pvmn_user = False
+Pvmx_user = False
+Rvmn_user = False
+Rvmx_user = False
+Svmn_user = False
+Svmx_user = False
+dokv_user = False
+
 def RMunit():
    # RM = 0,812 * B_{||} * rho_i * ds * (cm/pc)**3 * (mgs/muG) * (Msun/mH) * (102/136) [rad/m**2]
    mgs_muG = 2.8519
