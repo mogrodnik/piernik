@@ -56,8 +56,14 @@ def scalevec(axis):
       return 0.08
 
 def plotext(axis):
-   px = 25.0
-   pz = 19.2
+   if (stg.px_user != False):
+      px = stg.px_user
+   else:
+      px = 25.0
+   if (stg.pz_user != False):
+      pz = stg.pz_user
+   else:
+      pz = 19.2
    if axis == 2:
       return [-px,px,-px,px]
    else:
