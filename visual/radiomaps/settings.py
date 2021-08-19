@@ -222,5 +222,14 @@ def fvmax(lab,ff,data):
          else:
             vmn, vmx = Rvmn_user, Rvmx_user
       if print_log:
-         vmn, vmx = -6., -2.
+         if (  lab == "TP" and (Tvmn_user != False and Tvmx_user != False)):
+            vmn, vmx = np.log10(Tvmn_user), np.log10(Tvmx_user)
+         elif (lab == "PI" and (Pvmn_user != False and Pvmx_user != False)):
+            vmn, vmx = np.log10(Pvmn_user), np.log10(Pvmx_user)
+         elif (lab == "SI" and (Svmn_user != False and Svmx_user != False)): # TODO FIXME Is there a point for logscale being allowed for SI?
+            vmn, vmx = np.log10(Svmn_user), np.log10(Svmx_user)
+         elif (lab == "RM" and (Rvmn_user != False and Rvmx_user != False)):
+            vmn, vmx = np.log10(Rvmn_user), np.log10(Rvmx_user)
+         else:
+            vmn, vmx = -6., -2.
    return vmn, vmx
