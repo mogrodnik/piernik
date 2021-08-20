@@ -121,7 +121,10 @@ def draw_map(data,vecs,figext,axis,attr,plot_file,lab,ff):
 # vmin_, vmax_ -  minimum i maksimum of the color scale
 
    if stg.print_log:
-      data = np.log10(data)
+      if (lab == "TP" or lab == "PI"):
+         data = np.log10(data)
+      else:
+         data = np.where(data >= 0., np.log10(data), -np.log10(-data))
 
    vmin_, vmax_ = stg.fvmax(lab,ff,data)
 
