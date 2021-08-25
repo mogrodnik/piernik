@@ -172,9 +172,9 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
          Ecrp     =  R[ecrp_lbl][iRsort].v
 
          if (modenum == 1):
-            Ecre = [R[ecre_lbl[l]][iRsort].v for l in cre_iter]
-            Ncre = [R[ncre_lbl[l]][iRsort].v for l in cre_iter]
-            plot_data_arrays = stokes_params(Bp, Bq, Bn, rho_ion, Ecrp, wave_data, ds, lends, Ecre=Ecre[:], Ncre=Ncre[:], ncre=ncre) # Does not contain khi-klo! - irrelevant for ray (supplying length of ds)
+            Ecre = np.array([R[ecre_lbl[l]][iRsort].v for l in cre_iter])
+            Ncre = np.array([R[ncre_lbl[l]][iRsort].v for l in cre_iter])
+            plot_data_arrays = stokes_params(Bp, Bq, Bn, rho_ion, Ecrp, wave_data, ds, lends, Ecre=Ecre, Ncre=Ncre, ncre=ncre) # Does not contain khi-klo! - irrelevant for ray (supplying length of ds)
          else:
             plot_data_arrays = stokes_params(Bp, Bq, Bn, rho_ion, Ecrp, wave_data, ds, lends) # Does not contain khi-klo! - irrelevant for ray (supplying length of ds)
 

@@ -82,7 +82,7 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,**kwargs):
       elif stg.mode == 'spectral':
          for i3 in range(n3):
             #elfq = electrons.crenpp(nu_s, ncre, B_perp[i3], Ecre[:,i3])            # DEPRECATED
-            elfq = electrons.crenppfq(nu_s, ncre, B_perp[i3], Ecre[:][i3], Ncre[:][i3])
+            elfq = electrons.crenppfq(nu_s, ncre, B_perp[i3], Ecre[:,i3], Ncre[:,i3])
             I[i3] = np.sqrt(nu_s*B_perp[i3]) * elfq
 
          if stg.print_SI:
