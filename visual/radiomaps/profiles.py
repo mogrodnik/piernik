@@ -104,7 +104,7 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
          means = np.power(10., means)
          scaletype = "log"
       else:
-         scaletype = "lin"
+         scaletype = "linear"
 
       hdata = np.linspace(hrange[0], hrange[1], ihe-ihb)
 
