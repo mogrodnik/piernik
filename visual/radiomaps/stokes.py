@@ -4,7 +4,7 @@ import numpy as np
 import electrons
 import settings as stg
 
-def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,**kwargs):
+def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
 # This is the core procedure to compute Stokes parameters I, Q, U
 # and the rotation measur RM for polarized radio waves
 # emitted along the line of sight.
@@ -21,12 +21,6 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,**kwargs):
 # nu_s - frequency of the observed synchrotron radiation
 # cJnu - a constant scaling synchrotron emissivity.
 # cJnu= 2.344*(1.60219)^(p-2)*10^(8-24p)*a(p) (stg)
-
-# Loaded if stg.mode == "spectral"
-   if (stg.mode == "spectral"):
-      Ecre = kwargs.get("Ecre", [])
-      Ncre = kwargs.get("Ncre", [])
-      ncre = kwargs.get("ncre", 0)
 
    I_sum, Q_sum, U_sum, RM_sum, SI, Q, U = [], [], [], [], [], [], []
    nu_s, lambda_s, nu_2, lambda_2 = wave_data
