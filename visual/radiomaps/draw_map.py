@@ -80,8 +80,7 @@ def prepare_draw(lab,attr,axis):
    gs00.update(left=lef, right=0.835, bottom=le, top=0.95, wspace=0.1, hspace=0.4)
    ax = py.subplot(gs00[:,:])
 
-   if axis==2:
-      ax.set_title(stg.title(lab,attr),fontsize=fsize)
+   ax.set_title(stg.title(lab,attr),fontsize=fsize)
 
    ax.set_xlabel(chosxlab(axis),fontsize=fsize)
    ax.set_ylabel(chosylab(axis),fontsize=fsize)
