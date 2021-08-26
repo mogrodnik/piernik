@@ -59,6 +59,7 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
    bx_lbl = "mag_field_x"
    by_lbl = "mag_field_y"
    bz_lbl = "mag_field_z"
+   sorT_lbl = "t"
    cre_iter = list(range(ncre)) # Do not use range generator each time (saves time if stg.spectral_mode)
    for ic in cre_iter:
       ecre_lbl.append('cree'+str(ic+1).zfill(2))
@@ -147,14 +148,14 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
          rendv[i_h] = rbegv[i_h]
 
          R = h5ds.ray(rbegv, rendv)
-         iRsort = np.argsort(R["t"])
+         iRsort = np.argsort(R[sorT_lbl])
          lends    =  R.shape[0]
 
          if (lends == 0): # Countermeasure againt empty vector from yt - probably bug due to coordinates pointing right in between cells.
             rbegv[i_h] = rbeg[i_h] + j * dh + 1e-6 # WARNING: if pointing right in between cells I'm assuming it's supposed to be the next one
             rendv[i_h] = rbegv[i_h]
             R = h5ds.ray(rbegv, rendv)
-            iRsort = np.argsort(R["t"])
+            iRsort = np.argsort(R[sorT_lbl])
             lends    =  R.shape[0]
 
          # WARNING yt.ray object is unsorted by default, sorting adds ~20% to total execution time
