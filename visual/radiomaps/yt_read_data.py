@@ -124,6 +124,7 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
    Q  = np.zeros((imres[0],imres[1]))
    U  = np.zeros((imres[0],imres[1]))
    RM = np.zeros((imres[0],imres[1]))
+   Ecrp = []
 
    # Prepare the limits of plotted area to be returned, NOTICE formally these are the same as provided by settings.plotext
    x = np.linspace(rbeg[i_w] / 1000., rend[i_w] / 1000., imres[0])
@@ -169,13 +170,13 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
          Bp       =  R[bset[0]][iRsort].v
          Bq       =  R[bset[1]][iRsort].v
          Bn       =  R[bset[2]][iRsort].v
-         Ecrp     =  R[ecrp_lbl][iRsort].v
 
          if (modenum == 1):
             Ecre = np.array([R[ecre_lbl[l]][iRsort].v for l in cre_iter])
             Ncre = np.array([R[ncre_lbl[l]][iRsort].v for l in cre_iter])
             plot_data_arrays = stokes_params(Bp, Bq, Bn, rho_ion, Ecrp, wave_data, ds, lends, Ecre=Ecre, Ncre=Ncre, ncre=ncre) # Does not contain khi-klo! - irrelevant for ray (supplying length of ds)
          else:
+            Ecrp =  R[ecrp_lbl][iRsort].v
             plot_data_arrays = stokes_params(Bp, Bq, Bn, rho_ion, Ecrp, wave_data, ds, lends) # Does not contain khi-klo! - irrelevant for ray (supplying length of ds)
 
          if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:

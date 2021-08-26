@@ -215,11 +215,12 @@ def data_h5(plik,ax_set,wave_data):
          Bp[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g[bset[0]][:,:,:].swapaxes(0,2)
          Bq[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g[bset[1]][:,:,:].swapaxes(0,2)
          Bn[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] = -h5g[bset[2]][:,:,:].swapaxes(0,2)
-         Ecrp[off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cr01'][:,:,:].swapaxes(0,2)
          if (stg.mode == 'spectral'):
             for ic in range(ncre):
                Ecre[ic,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cree'+str(ic+1).zfill(2)][:,:,:].swapaxes(0,2)
                Ncre[ic,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cren'+str(ic+1).zfill(2)][:,:,:].swapaxes(0,2)
+         else:
+            Ecrp[off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cr01'][:,:,:].swapaxes(0,2)
 
    h5f.close()
    rho_ion = np.zeros_like(rho)
