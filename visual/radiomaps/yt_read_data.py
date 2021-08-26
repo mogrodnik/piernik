@@ -49,13 +49,6 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
    zmin = DLedge[ax_map["z"]]
    zmax = DRedge[ax_map["z"]]
 
-   # NOTICE Introduce "modenum" integer switch to speed up determining the right syntax to call of function stokes_params
-   modenum = 0
-   if stg.mode == "simple":
-      modenum = 0
-   elif stg.mode == "spectral":
-      modenum = 1
-
    print("Domain dimensions: ", 'xmin, xmax =(', xmin,',', xmax, '), ymin, ymax =(', ymin,',', ymax, '), zmin, zmax =(', zmin,',', zmax,')')
 
    # Labels are defined below
@@ -66,7 +59,7 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
    bx_lbl = "mag_field_x"
    by_lbl = "mag_field_y"
    bz_lbl = "mag_field_z"
-   cre_iter = list(range(ncre)) # Do not use range generator each time (saves time if mode == "spectral")
+   cre_iter = list(range(ncre)) # Do not use range generator each time (saves time if stg.spectral_mode)
    for ic in cre_iter:
       ecre_lbl.append('cree'+str(ic+1).zfill(2))
       ncre_lbl.append('cren'+str(ic+1).zfill(2))
@@ -171,7 +164,7 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
          Bq       =  R[bset[1]][iRsort].v
          Bn       =  R[bset[2]][iRsort].v
 
-         if (modenum == 1):
+         if (stg.spectral_mode):
             Ecre = np.array([R[ecre_lbl[l]][iRsort].v for l in cre_iter])
             Ncre = np.array([R[ncre_lbl[l]][iRsort].v for l in cre_iter])
             plot_data_arrays = stokes_params(Bp, Bq, Bn, rho_ion, Ecrp, wave_data, ds, lends, Ecre=Ecre, Ncre=Ncre, ncre=ncre) # Does not contain khi-klo! - irrelevant for ray (supplying length of ds)

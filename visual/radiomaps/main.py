@@ -117,7 +117,7 @@ def cli_params(argv):
 
       elif opt in ("-S", "--spectral"):
          stg.spectral_mode = True
-         stg.mode = "spectral"
+         stg.mode = "spectral"   # DEPRECATED
          print("Proceeding with spectral method")
 
       elif opt in ("--yt"):
@@ -176,7 +176,7 @@ nu,   lbd   = stg.set_nuandlbd(nu_set,  lbd_set, 1)
 nu_2, lbd_2 = stg.set_nuandlbd(nu2_set, lbd2_set,2)
 wave_data = [nu, lbd, nu_2, lbd_2]
 #sys.exit()
-initialize_crspectrum_tools(ncre) # TODO FIXME probably should be initialized ONLY IF stg.mode == "spectral"
+initialize_crspectrum_tools(ncre) # TODO FIXME probably should be initialized ONLY IF stg.spectral_mode
 
 if not from_file:
    # Analytical data might be used,for testing of the maping routines, to generate 3D arrays of CR energy density, gas density and magnetic fild.

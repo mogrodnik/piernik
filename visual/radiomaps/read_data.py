@@ -165,10 +165,10 @@ def data_h5(plik,ax_set,wave_data):
          raise ValueError("Picked refinement level %i (-R option) not present in provided file. Available range is %i:%i" %(stg.lvl_only, lvl_min, lvl_max))
 
    Ecrp     = np.zeros((nxd,nyd,nzd))
-   if    (stg.mode == "spectral"):
+   if    (stg.spectral_mode):
       Ecre     = np.zeros((ncre,nxd,nyd,nzd))
       Ncre     = np.zeros((ncre,nxd,nyd,nzd))
-   elif  (stg.mode == "simple"):
+   else:
       Ecre     = []
       Ncre     = []
 
@@ -242,7 +242,7 @@ def data_h5(plik,ax_set,wave_data):
          sys.stdout.write("\033[F") # Cursor up one line
          print('Layer: ', i, ny)
          for j in range (nz):
-            if (stg.mode == "spectral"):
+            if (stg.spectral_mode):
                plot_data_arrays = stokes_params(Bp[klo:khi,i,j], Bq[klo:khi,i,j], Bn[klo:khi,i,j], rho_ion[klo:khi,i,j], Ecrp[klo:khi,i,j], wave_data, ds, khi-klo, Ecre=Ecre[:,klo:khi,i,j], Ncre=Ncre[:,klo:khi,i,j], ncre=ncre)
             else:
                plot_data_arrays = stokes_params(Bp[klo:khi,i,j], Bq[klo:khi,i,j], Bn[klo:khi,i,j], rho_ion[klo:khi,i,j], Ecrp[klo:khi,i,j], wave_data, ds, khi-klo)
@@ -262,7 +262,7 @@ def data_h5(plik,ax_set,wave_data):
          sys.stdout.write("\033[F") # Cursor up one line
          print('Layer: ', k, nz)
          for i in range (nx):
-            if (stg.mode == "spectral"):
+            if (stg.spectral_mode):
                plot_data_arrays = stokes_params(Bp[i,klo:khi,k], Bq[i,klo:khi,k], Bn[i,klo:khi,k], rho_ion[i,klo:khi,k], Ecrp[i,klo:khi,k], wave_data, ds, khi-klo, Ecre=Ecre[:,i,klo:khi,k], Ncre=Ncre[:,i,klo:khi,k], ncre=ncre)
             else:
                plot_data_arrays = stokes_params(Bp[i,klo:khi,k], Bq[i,klo:khi,k], Bn[i,klo:khi,k], rho_ion[i,klo:khi,k], Ecrp[i,klo:khi,k], wave_data, ds, khi-klo)
@@ -281,7 +281,7 @@ def data_h5(plik,ax_set,wave_data):
          sys.stdout.write("\033[F") # Cursor up one line
          print('Layer: ', i, nx)
          for j in range (ny):
-            if (stg.mode == "spectral"):
+            if (stg.spectral_mode):
                plot_data_arrays = stokes_params(Bp[i,j,klo:khi], Bq[i,j,klo:khi], Bn[i,j,klo:khi], rho_ion[i,j,klo:khi], Ecrp[i,j,klo:khi], wave_data, ds, khi-klo, Ecre=Ecre[:,i,j,klo:khi], Ncre=Ncre[:,i,j,klo:khi], ncre=ncre)
             else:
                plot_data_arrays = stokes_params(Bp[i,j,klo:khi], Bq[i,j,klo:khi], Bn[i,j,klo:khi], rho_ion[i,j,klo:khi], Ecrp[i,j,klo:khi], wave_data, ds, khi-klo)
