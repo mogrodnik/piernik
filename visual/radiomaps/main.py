@@ -35,14 +35,14 @@ def cli_params(argv):
    # The function serves for reading and interpretation of the comand line input parameters
    try:
 
-      opts,args=getopt.getopt(argv,"adhf:ik:l:m:n:R:pPrtsuvxyz",["help","file","convolve","log","yt=","tz=","pz=","iz=","rz=","pr=","vp="])
+      opts,args=getopt.getopt(argv,"adhf:ik:l:m:n:R:pPrtSsuvxyz",["help","file","convolve","log","spectral","yt=","tz=","pz=","iz=","rz=","pr=","vp="])
       #print opts,"op",args,"arg"
    except getopt.GetoptError:
       print("Error: unknown parameter")
       sys.exit(2)
    for opt, arg in opts:
       if opt in ("-h", "--help"):
-         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -k sets the second wavelength for sectral index maps. \n -n sets the frequency \n -m sets the second frequency for spectral index maps \n -s convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i generates the map of Spectral Index (SI) \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -R integer reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale\n --yt RESX,DEPTH use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>) with depth -DEPTH:DEPTH. Slower method, but works well with all levels of AMR data\n --{tz|pz|rz|iz} vmin,vmax \t to set plot limits for the given field (TP, PI, SI or RM, respectively)\n --pr width,height to set the absolute limits of plotted physical space \n --vp DVEC to set vector coverage")
+         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -k sets the second wavelength for sectral index maps. \n -n sets the frequency \n -m sets the second frequency for spectral index maps \n -s convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i generates the map of Spectral Index (SI) \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -S --spectral to generate synchrotron radiation maps using electron number and energy density data \n -R integer reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale\n --yt RESX,DEPTH use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>) with depth -DEPTH:DEPTH. Slower method, but works well with all levels of AMR data\n --{tz|pz|rz|iz} vmin,vmax \t to set plot limits for the given field (TP, PI, SI or RM, respectively)\n --pr width,height to set the absolute limits of plotted physical space \n --vp DVEC to set vector coverage")
          sys.exit()
       elif opt == '-x':
          global ax_set, ax
@@ -114,6 +114,11 @@ def cli_params(argv):
       elif opt in ("-R"):
          stg.lvl_only = int(arg)
          stg.one_level = True
+
+      elif opt in ("-S", "--spectral"):
+         stg.spectral_mode = True
+         stg.mode = "spectral"
+         print("Proceeding with spectral method")
 
       elif opt in ("--yt"):
          global yt_imres, yt_depth
@@ -220,7 +225,7 @@ etyfil = stg.etyfil(ax,file_name,nu)
 attr = [time,lbd,lbd_2]
 
 if (stg.use_yt): etyfil = etyfil + "_yt_res"+str(yt_imres)+"depth"+str(round(yt_depth))
-
+if (stg.spectral_mode): etyfil = etyfil + "_spectral"
 if stg.print_TP:
    # Drawing Total Power (TP) map
    draw_map( I.T, vecs, figext, ax_set, attr, etyfil, 'TP', from_file)

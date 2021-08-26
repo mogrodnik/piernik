@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 import numpy as np
 
+spectral_mode = False   # maps generated on the base of single CR protons distribution
+# spectral_mode = True  # maps generated on the base of CR electrons spectrum
 mode = 'simple'   # maps generated on the base of single CR protons distribution
 #mode = 'spectral' # maps generated on the base of CR electrons spectrum
+
 
 Hz = 1 ; MHz = Hz * 1.0e6 ; GHz = MHz * 1.0e3 ; clight = 3.e8 #m/s
 metr = 1 ; cm = 0.01 * metr
 
-const_synch = 1.e8
+const_synch = 1. #1.e8  # DEPRECATED ??
 p_min_fix = 5.e0     #TODO !> if possible - read the below from h5file, if available
 p_max_fix = 3.e5
 ncre      = 14
