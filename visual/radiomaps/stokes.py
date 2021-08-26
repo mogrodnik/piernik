@@ -76,14 +76,14 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
       else:
          for i3 in range(n3):
             #elfq = electrons.crenpp(nu_s, ncre, B_perp[i3], Ecre[:,i3])            # DEPRECATED
-            elfq = electrons.crenppfq(nu_s, ncre, B_perp[i3], Ecre[:,i3], Ncre[:,i3])
+            elfq = electrons.crenppfq(0, ncre, B_perp[i3], Ecre[:,i3], Ncre[:,i3])  # "0" stands for nu index, for optimization
             I[i3] = np.sqrt(nu_s*B_perp[i3]) * elfq
 
          if stg.print_SI:
             I2 = np.zeros_like(B_perp)
             for i3 in range(n3):
                #elfq2 = electrons.crenpp(nu_2, ncre, B_perp[i3], Ecre[:,i3])        # DEPRECATED
-               elfq2 = electrons.crenppfq(nu_2, ncre, B_perp[i3], Ecre[:][i3], Ncre[:][i3])
+               elfq2 = electrons.crenppfq(1, ncre, B_perp[i3], Ecre[:][i3], Ncre[:][i3]) # "1" stands for nu_2 index, for optimization
                I2[i3] = np.sqrt(nu_2*B_perp[i3]) * elfq2
 
    if stg.print_PI or stg.print_SI or stg.print_vec:

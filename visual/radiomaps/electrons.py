@@ -10,9 +10,13 @@ _inittab_dim        = 0            # initialized below (in prepare_q_grid)
 _log10_pmax_by_pmin = 1.0          # initialized below (in initialize_crspectrum_tools)
 _log10_enpc_ratio   = 1.0          # initialized below (in prepare_q_grid)
 _ncre_m2            = 0.           # initialized below (in initialize_crspectrum_tools)
+_const_1956_x_sqrt_nu_by_16p1MHz      = []
+_smallB             = 1.e-24
+_one                = 1.0
+_zero               = 0.0
 
-def initialize_crspectrum_tools(ncre):
-   global p_fix, _ncre_m2, _log10_pmax_by_pmin
+def initialize_crspectrum_tools(ncre, nu):
+   global p_fix, _ncre_m2, _log10_pmax_by_pmin, _const_1956_x_sqrt_nu_by_16p1MHz
 # var_names now should be initialized with values from problem.par@hdf file
 # Initialize quantities dependent on read parameters and remaining constant throughout computation
    _ncre_m2             = float(ncre - 2.)
@@ -32,18 +36,29 @@ def initialize_crspectrum_tools(ncre):
    p_fix = asfarray(p_fix)
 
    prepare_q_grid(p_fix_ratio)
+   initialize_freqs(nu)
 
    return
+#=============================================================================================================================
+def initialize_freqs(nu):
+   global _const_1956_x_sqrt_nu_by_16p1MHz
+   for i in range(len(nu)):
+      _const_1956_x_sqrt_nu_by_16p1MHz.append( 1956. * sqrt( nu[i] / _16p1_MHz) )
 
 #=============================================================================================================================
 def nu_B_to_p(nu, B_perp): # Based on approximation by Mulcahy et al. (2018) (eqn. 2), https://arxiv.org/abs/1804.00752
    # WARNING !!! cutoff momenta are not precisely described here !!! WARNING
-   p = 1956.0 * sqrt( (nu / _16p1_MHz ) / ( B_perp +1.e-24 ) ) # [B_perp] = mGs - assumed at input, [nu] = 16.1 MHz, but already present
+   p = _const_1956 * sqrt( (nu / _16p1_MHz ) / ( B_perp + _smallB ) ) # [B_perp] = mGs - assumed at input, [nu] = 16.1 MHz, but already present
    return p
 #=============================================================================================================================
-def nu_to_ind(nu, B_perp, ncre):
-   p_nu = nu_B_to_p(nu, B_perp)
-   nu_to_ind = int( (log10(p_nu/p_min_fix)/_log10_pmax_by_pmin) * _ncre_m2 + 1.0)
+def nu_all_B_to_p(B_perp, nui): # Based on approximation by Mulcahy et al. (2018) (eqn. 2), https://arxiv.org/abs/1804.00752
+   # As in function nu_B_to_p, but omitting some multiplications and powers
+   p = _const_1956_x_sqrt_nu_by_16p1MHz[nui] / ( B_perp + _smallB )**0.5 # [B_perp] = mGs - assumed at input, [nu] = 16.1 MHz, but already present
+   return p
+#=============================================================================================================================
+def nu_to_ind(nu_ind, B_perp, ncre):
+   p_nu = nu_all_B_to_p(B_perp, nu_ind)
+   nu_to_ind = int( (log10(p_nu/p_min_fix)/_log10_pmax_by_pmin) * _ncre_m2 + _one)
 
    if nu_to_ind > ncre: nu_to_ind = ncre
    if nu_to_ind < 0: nu_to_ind = 0
@@ -65,8 +80,8 @@ def crenpp(nu_s, ncre, bperp, ecr):
    return elfq
 
 #=============================================================================================================================
-def crenppfq(nu_s, ncre, bperp, ecr, ncr):      # recovers spectral index q from electron energy and number density
-   p_ind, p_nu = nu_to_ind(nu_s, bperp, ncre)   # and calculates emissivity
+def crenppfq(nu_ind, ncre, bperp, ecr, ncr):      # recovers spectral index q from electron energy and number density
+   p_ind, p_nu = nu_to_ind(nu_ind, bperp, ncre)   # and calculates emissivity
    i_bin  = min(p_ind - 1, maxcren-1)
    cren_i = ncr[i_bin]
    cree_i = ecr[i_bin]
@@ -74,9 +89,9 @@ def crenppfq(nu_s, ncre, bperp, ecr, ncr):      # recovers spectral index q from
    p_im1  = p_fix[max(p_ind - 1, 0)]
 
    q1     = 4.1
-   npq_nu = 0.0
-   if (cree_i > 0.0 and cren_i > 0.0):
-      enpc_bin = cree_i / (cren_i * 1.0 * p_im1)
+   npq_nu = _zero
+   if (cree_i > _zero and cren_i > _zero):
+      enpc_bin = cree_i / (cren_i * _one * p_im1)
       q_bin     = interpolate_q(alpha = enpc_bin)
       # slv_error = False
       # q1, slv_error = ne_to_qNR(q1, enpc_bin, p_fix_ratio, slv_error) # possible, but computationally expensive
@@ -195,11 +210,11 @@ def interpolate_q(alpha):  # Finds value of spectral index 'q' by provided 'alph
 def nq2f(n, q, p_l, p_r):
       qm3       = q - 3.
       three_m_q = 3. - q
-      if p_r > 0.0 and p_l > 0 :
+      if p_r > _zero and p_l > _zero :
         pr_by_pl = p_r / p_l
         nq2f = n / (_fourXpi * p_l**3)
         if ( abs(qm3) > q_eps ):
-            nq2f = nq2f * three_m_q / (( pr_by_pl )**three_m_q - 1.0)
+            nq2f = nq2f * three_m_q / (( pr_by_pl )**three_m_q - _one)
         else:
             nq2f = nq2f / log(pr_by_pl)
       return nq2f
