@@ -27,6 +27,7 @@ use_def_ranges = True
 plot_errorbars = True
 use_def_ylims  = True
 plot_one_fig = True
+save_data    = True  # in case the profiles are to be plotted in a different way
 inches_ax = 2.
 aspect_ax = 6.
 
@@ -85,7 +86,8 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
       wxrng.append(wxrng[0] + (i+1) * wwidth)
 
    mfig, axs = plt.subplots(nrows=nwboxes, ncols=1, figsize=(inches_ax * aspect_ax, inches_ax * nwboxes), dpi=150)
-
+   means_save = []
+   stds_save  = []
 # prepare and save profile(s)
    for iprof in range(nwboxes):
       ind_h, h_adj_edges = get_encompassed_range(datahshape, figh, hrange)
@@ -125,6 +127,8 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
       axm = axs[iprof]
       xlab = "z (kpc) at %s = %5.1f kpc" %(ax_w, mid_coord)
       axm = plot_one_profile(axm, hdata, means, stds, xlab, ylab, title, label, scaletype, plot_labels=[True, False], plot_title=False)
+      means_save.append(means)
+      stds_save.append(stds)
 
    mfig.suptitle(title, fontsize = fsize*1.35)
    mfig.supylabel("%s (averaged over %s) at $\lambda=$ %8.2f m" %(labelnam[label], ax_w, lbd1), fontsize = fsize*1.5)
@@ -133,6 +137,19 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
    plt.savefig(label + "_profiles" + ety_file + ".png")
    plt.savefig(label + "_profiles" + ety_file + ".pdf")
    plt.close(mfig)
+
+   if (save_data):
+      fP = open(label+ety_file+"_profile_data.dat", "w+")
+      fP.write("#     dist\t")
+      for wi in range(nwboxes):
+         fP.write(" %8s(p %2i)\t  %8s(p %2i)\t" %("mean",wi,"std",wi))
+      fP.write("\n")
+      for i in range(len(hdata)):
+         fP.write("%12.5f\t" %hdata[i])
+         for wi in range(nwboxes):
+            fP.write(" %14.8e\t  %14.8e\t " %(means_save[wi][i], stds_save[wi][i]))
+         fP.write("\n") # should add new line
+      fP.close()
 
 def avg_vec_in_range(vec_data, sec_dim, sec_lims, sec_where):
    twidth = (sec_lims[1] - sec_lims[0])
