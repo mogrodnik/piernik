@@ -18,6 +18,6 @@ def data_beam_convolve(data,beam,nbeam):
    data_ext[nbeam:npm+nbeam,nbeam:nqm+nbeam] = data
 
    image_ext=signal.convolve(data,beam)
-   image =image_ext[nbeam/2:npm+nbeam/2,nbeam/2:nqm+nbeam/2]
+   image =image_ext[int(nbeam/2):int(npm+nbeam/2),int(nbeam/2):int(nqm+nbeam/2)]
 
    return image
