@@ -25,9 +25,9 @@ ax_set= 0
 convol= False
 handSI, handPI, handRM, handTP, handVC, pretVC = False, False, False, False, False, False
 lbd_set  = -1.0
-lbd2_set = -1.0
+lbd2_set = -1.0   # DEPRECATED
 nu_set   = -1.0
-nu2_set  = -1.0
+nu2_set  = -1.0   # DEPRECATED
 yt_imres = 0
 yt_depth = "max"
 
@@ -61,11 +61,11 @@ def cli_params(argv):
          global lbd_set
          lbd_set = float(arg)
 
-      elif opt == "-k":
+      elif opt == "-k":    # DEPRECATED
          global lbd2_set
          lbd2_set = float(arg)
 
-      elif opt == "-m":
+      elif opt == "-m":    # DEPRECATED
          global nu2_set
          nu2_set = float(arg)
 
