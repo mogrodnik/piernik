@@ -197,7 +197,7 @@ print("Frequencies (MHz):", [ round(item / 1.e6, 2) for item in nu])
 nu_2, lbd_2 = stg.set_nuandlbd(nu2_set, lbd2_set,2)   # DEPRECATED
 wave_data = [nu, lbd, nu_2, lbd_2]
 #sys.exit()
-initialize_crspectrum_tools(ncre, [nu, nu_2]) # TODO FIXME probably should be initialized ONLY IF stg.spectral_mode
+if (stg.spectral_mode): initialize_crspectrum_tools(ncre, [nu, nu_2])
 
 if not from_file:
    # Analytical data might be used,for testing of the maping routines, to generate 3D arrays of CR energy density, gas density and magnetic fild.
