@@ -195,9 +195,10 @@ print("Wavelengths (m):  ", lbd)
 print("Frequencies (MHz):", [ round(item / 1.e6, 2) for item in nu])
 
 nu_2, lbd_2 = stg.set_nuandlbd(nu2_set, lbd2_set,2)   # DEPRECATED
-wave_data = [nu, lbd, nu_2, lbd_2]
+#wave_data = [nu, lbd, nu_2, lbd_2]
+wave_data = [nu, lbd]
 #sys.exit()
-if (stg.spectral_mode): initialize_crspectrum_tools(ncre, [nu, nu_2])
+if (stg.spectral_mode): initialize_crspectrum_tools(ncre, nu)
 
 if not from_file:
    # Analytical data might be used,for testing of the maping routines, to generate 3D arrays of CR energy density, gas density and magnetic fild.
