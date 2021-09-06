@@ -24,10 +24,11 @@ ax = 'x'
 ax_set= 0
 convol= False
 handSI, handPI, handRM, handTP, handVC, pretVC = False, False, False, False, False, False
-lbd_set  = -1.0
+lbd_set  = [-1.0]
 lbd2_set = -1.0   # DEPRECATED
-nu_set   = -1.0
-nu2_set  = -1.0   # DEPRECATED
+nu_set   = [-1.0]
+nu2_set  = -1.0   #
+si_set   = []
 yt_imres = 0
 yt_depth = "max"
 
@@ -35,14 +36,14 @@ def cli_params(argv):
    # The function serves for reading and interpretation of the comand line input parameters
    try:
 
-      opts,args=getopt.getopt(argv,"adhf:ik:l:m:n:R:cpPrtSuvxyz",["help","file","convolve","log","spectral","yt=","tz=","pz=","iz=","rz=","pr=","vp="])
+      opts,args=getopt.getopt(argv,"adhf:i:k:l:m:n:R:cpPrtSuvxyz",["help","file","convolve","log","spectral","yt=","tz=","pz=","iz=","rz=","pr=","vp="])
       #print opts,"op",args,"arg"
    except getopt.GetoptError:
       print("Error: unknown parameter")
       sys.exit(2)
    for opt, arg in opts:
       if opt in ("-h", "--help"):
-         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -k sets the second wavelength for sectral index maps. \n -n sets the frequency \n -m sets the second frequency for spectral index maps \n -c convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i generates the map of Spectral Index (SI) \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -S --spectral to generate synchrotron radiation maps using electron number and energy density data \n -R integer reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale\n --yt RESX,DEPTH use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>) with depth -DEPTH:DEPTH. Slower method, but works well with all levels of AMR data\n --{tz|pz|rz|iz} vmin,vmax \t to set plot limits for the given field (TP, PI, SI or RM, respectively)\n --pr width,height to set the absolute limits of plotted physical space \n --vp DVEC to set vector coverage")
+         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -k sets the second wavelength for sectral index maps. \n -n sets the frequency \n -m sets the second frequency for spectral index maps \n -c convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i pair1,pair2,.. generates the map of Spectral Index (SI), requires additional input: list indexes of of pairs of wavelengths or frequencies provided in -l or -n (e.g., 01,02)  \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -S --spectral to generate synchrotron radiation maps using electron number and energy density data \n -R integer reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale\n --yt RESX,DEPTH use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>) with depth -DEPTH:DEPTH. Slower method, but works well with all levels of AMR data\n --{tz|pz|rz|iz} vmin,vmax \t to set plot limits for the given field (TP, PI, SI or RM, respectively)\n --pr width,height to set the absolute limits of plotted physical space \n --vp DVEC to set vector coverage")
          sys.exit()
       elif opt == '-x':
          global ax_set, ax
@@ -59,7 +60,9 @@ def cli_params(argv):
 
       elif opt == "-l":
          global lbd_set
-         lbd_set = float(arg)
+         lbd_set = [ float(item) for item in arg.split(",")]
+         msg = "(WIP) List of wavelengths:", lbd_set, ", exiting"
+         print(msg)
 
       elif opt == "-k":    # DEPRECATED
          global lbd2_set
@@ -71,11 +74,16 @@ def cli_params(argv):
 
       elif opt == "-n":
          global nu_set
-         nu_set = float(arg)
+         nu_set = [ float(item) for item in arg.split(",")]
+         msg = "(WIP) List of frequencies:", nu_set, ", exiting"
+         print(msg)
 
       elif opt == "-i":
-         global handSI
+         global handSI, si_set
          handSI = True
+         si_set = [ (int(item[0]), int(item[1])) for item in arg.split(",")]
+         msg = "(WIP) SI pairs:", si_set
+         print(msg)
 
       elif opt == "-p":
          global handPI
@@ -172,8 +180,21 @@ if handPI or handRM or handSI or handTP:
 if pretVC:
    stg.print_vec = handVC
 
-nu,   lbd   = stg.set_nuandlbd(nu_set,  lbd_set, 1)
-nu_2, lbd_2 = stg.set_nuandlbd(nu2_set, lbd2_set,2)
+if (len(nu_set) > len(lbd_set)):
+   lbd_set = [-1. for i in range(len(nu_set))]
+else:
+   nu_set =  [-1. for i in range(len(lbd_set))]
+
+nu  = [ 0. for i in range(len(lbd_set)) ]
+lbd = [ 0. for i in range(len(lbd_set)) ]
+
+for i in range(len(lbd_set)):
+   nu[i],   lbd[i]   = stg.set_nuandlbd(nu_set[i],  lbd_set[i], i)
+
+print("Wavelengths (m):  ", lbd)
+print("Frequencies (MHz):", [ round(item / 1.e6, 2) for item in nu])
+
+nu_2, lbd_2 = stg.set_nuandlbd(nu2_set, lbd2_set,2)   # DEPRECATED
 wave_data = [nu, lbd, nu_2, lbd_2]
 #sys.exit()
 initialize_crspectrum_tools(ncre, [nu, nu_2]) # TODO FIXME probably should be initialized ONLY IF stg.spectral_mode
