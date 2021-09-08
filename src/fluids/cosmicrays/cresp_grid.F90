@@ -99,7 +99,7 @@ contains
 
       call p_rch_init               !< sets the right pointer for p_rch function, based on used Taylor expansion coefficient
 
-      call cresp_init_state(norm_init_spectrum%n, norm_init_spectrum%e)   !< initialize spectrum here, f_init should be 1.0
+      call cresp_init_state(norm_init_spectrum%n, norm_init_spectrum%e, norm_init_spectrum%q)   !< initialize spectrum here, f_init should be 1.0
 
       if (master) call printinfo(" [cresp_grid:cresp_init_grid] CRESP initialized")
 
