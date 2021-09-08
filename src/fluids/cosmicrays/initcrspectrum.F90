@@ -130,6 +130,7 @@ module initcrspectrum
    type cr_spectrum
       real, allocatable, dimension(:) :: e
       real, allocatable, dimension(:) :: n
+      real, allocatable, dimension(:) :: q
    end type cr_spectrum
 
    type(cr_spectrum) :: cresp
@@ -643,14 +644,18 @@ contains
 
       if (.not. allocated(cresp%n)) call my_allocate_with_index(cresp%n, ncre, I_ONE)
       if (.not. allocated(cresp%e)) call my_allocate_with_index(cresp%e, ncre, I_ONE)
+      if (.not. allocated(cresp%q)) call my_allocate_with_index(cresp%q, ncre, I_ONE)
       if (.not. allocated(norm_init_spectrum%n)) call my_allocate_with_index(norm_init_spectrum%n, ncre, I_ONE)
       if (.not. allocated(norm_init_spectrum%e)) call my_allocate_with_index(norm_init_spectrum%e, ncre, I_ONE)
+      if (.not. allocated(norm_init_spectrum%q)) call my_allocate_with_index(norm_init_spectrum%q, ncre, I_ONE)
 
       cresp%e = zero
       cresp%n = zero
+      cresp%q = zero
 
       norm_init_spectrum%n = zero
       norm_init_spectrum%e = zero
+      norm_init_spectrum%q = zero
 
    end subroutine init_cresp_types
 
@@ -768,8 +773,10 @@ contains
 
       if (allocated(cresp%n))   call my_deallocate(cresp%n)
       if (allocated(cresp%e))   call my_deallocate(cresp%e)
+      if (allocated(cresp%q))   call my_deallocate(cresp%q)
       if (allocated(norm_init_spectrum%n))   call my_deallocate(norm_init_spectrum%n)
       if (allocated(norm_init_spectrum%e))   call my_deallocate(norm_init_spectrum%e)
+      if (allocated(norm_init_spectrum%q))   call my_deallocate(norm_init_spectrum%q)
 
       if (allocated(p_fix)) call my_deallocate(p_fix)
       if (allocated(p_mid_fix)) call my_deallocate(p_mid_fix)

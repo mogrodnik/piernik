@@ -902,7 +902,7 @@ contains
 
    end subroutine arrange_assoc_active_edge_arrays
 !-------------------------------------------------------------------------------------------------
-   subroutine cresp_init_state(init_n, init_e)
+   subroutine cresp_init_state(init_n, init_e, init_q)
 
       use constants,       only: zero, I_ZERO, I_ONE
       use cresp_NR_method, only: bound_name
@@ -914,7 +914,7 @@ contains
 
       implicit none
 
-      real, dimension(I_ONE:ncre), intent(out) :: init_n, init_e
+      real, dimension(I_ONE:ncre), intent(out) :: init_n, init_e, init_q
       integer                                  :: i, k
       integer(kind=4)                          :: co
       integer(kind=4), dimension(LO:HI)        :: i_ch
@@ -931,6 +931,7 @@ contains
 
       init_e = zero
       init_n = zero
+      init_q = zero
 
       f = zero ; q = zero ; p = zero ; n = zero ; e = zero
 
@@ -1061,6 +1062,7 @@ contains
 
       init_n = n
       init_e = e
+      init_q = q
 
       total_init_cree = sum(e) !< total_init_cree value is used for initial spectrum scaling when spectrum is injected by source.
       call deallocate_active_arrays
@@ -1641,7 +1643,7 @@ contains
       use cresp_NR_method, only: compute_q
       use cresp_variables, only: clight_cresp
       use initcosmicrays,  only: ncre
-      use initcrspectrum,  only: e_small, q_lim_err, q_big
+      use initcrspectrum,  only: e_small, q_lim_err, q_big, norm_init_spectrum
 
       implicit none
 
@@ -1667,7 +1669,7 @@ contains
             else
                q(i) = compute_q(alpha_in, exit_code)
             endif
-            if (exit_code .eqv. .true. .and. abs(q(i)) .eq. q_big) q(i) = sign(one, q(i)) * q_lim_err  ! limit maximal amplitude of q to q_lim_err instead of q_big
+            if (exit_code .eqv. .true. .and. abs(q(i)) .eq. q_big) q(i) = norm_init_spectrum%q(i)  ! limit maximal amplitude of q to q_lim_err instead of q_big
          else
             q(i) = zero
          endif
