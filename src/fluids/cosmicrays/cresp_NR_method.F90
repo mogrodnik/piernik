@@ -1391,6 +1391,8 @@ contains
             compute_q = -q_big         !< should be consistent with q_grid(arr_dim_q)
          endif
          return                        ! < returns compute_q withh exit_code = .true.
+      else
+         exit_code = .false.           !< no failure exit code should be returned, which may still be changed by NR_algorithm_1D if called
       endif
 
       loc_2 = loc_1 + I_ONE
