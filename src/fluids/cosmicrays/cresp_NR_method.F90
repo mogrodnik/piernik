@@ -288,13 +288,17 @@ contains
       use dataio_pub,      only: die
       use initcrspectrum,  only: arr_dim, arr_dim_q, e_small, max_p_ratio, p_fix_ratio, q_big
 
+      use constants,       only: cbuff_len
+      use dataio_pub,      only: problem_name, nh
+      use mpisetup,        only: master
+
       implicit none
 
       real               :: a_min_q = big, a_max_q = small , q_in3, pq_cmplx
       real, dimension(2) :: a_min   = big, a_max   = small, n_min = big, n_max = small
       integer(kind=4)    :: i, j, ilim = 0, qmaxiter = 100
       type(map_header), dimension(2), intent(inout) :: hdr_init
-
+      character(len=cbuff_len+6)                    :: qfname
 
       q_space = zero
       do i = I_ONE, int(half*helper_arr_dim, kind=4)
@@ -393,6 +397,15 @@ contains
       hdr_init(2)%s_amax = alpha_tab_up(arr_dim)
       hdr_init(2)%s_nmin = n_tab_up(1)
       hdr_init(2)%s_nmax = n_tab_up(arr_dim)
+
+      if (master) then
+         qfname = "q_" // trim(problem_name) // ".dat"
+         open(newunit=nh%lun, file=qfname, position="rewind", status="unknown")
+         do i = 1, arr_dim_q
+            write(nh%lun,"(2F12.6)") alpha_tab_q(i), q_grid(i)
+         enddo
+         close(nh%lun)
+      endif
 
 
    end subroutine init_smap_array_values
