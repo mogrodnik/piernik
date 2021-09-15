@@ -258,9 +258,14 @@ contains
 
 ! edt(1:ncre) = e(1:ncre) *(one-0.5*dt*r(1:ncre)) - (eflux(1:ncre) - eflux(0:ncre-1))/(one+0.5*dt*r(1:ncre))   !!! oryginalnie u Miniatiego
 ! Compute coefficients R_i needed to find energy in [t,t+dt]
-         call cresp_compute_r(sptab%ub, sptab%ud, p_next, active_bins_next)                 ! new active bins already received some particles, Ri is needed for those bins too
+!          call cresp_compute_r(sptab%ub, sptab%ud, p_next, active_bins_next)                 ! new active bins already received some particles, Ri is needed for those bins too
 
-         edt(1:ncre) = edt(1:ncre) *(one-dt*r(1:ncre))
+!          edt(1:ncre) = edt(1:ncre) *(one-dt*r(1:ncre))
+
+!          edt(1:ncre) = edt(1:ncre) * (urel_T(p_fix(1:ncre))/urel_T(p_upw(1:ncre))) ! Girichidis et al., eqn. 58
+         edt(2:ncre-1) = edt(2:ncre-1) * 0.5 * (p_fix(1:ncre-2) / p_upw(1:ncre-2) + p_fix(2:ncre-1)/p_upw(2:ncre-1)) ! based on Girichidis 2020 - MNRAS 491, 993–1007 (2020), eqn. 58
+         edt(1)        = edt(1)    * (p_fix(1) / p_upw(1) )             ! Flux possible only through one interface
+         edt(ncre)     = edt(ncre) * (p_fix(ncre-1) / p_upw(ncre-1) )   ! Flux possible only through one interface
 
          if ((del_i(HI) == 0) .and. (approx_p(HI) > 0) .and. (i_cut_next(HI)-1 > 0)) then
             if (.not. assert_active_bin_via_nei(ndt(i_cut_next(HI)), edt(i_cut_next(HI)), i_cut_next(HI))) then
@@ -1627,6 +1632,25 @@ contains
       endwhere                                                                  !< range of values ofr_num and r_den is very wide
 
    end subroutine cresp_compute_r
+
+!-------------------------------------------------------------------------------------------------
+! Compute ultrarelativistic kinetic energy
+!-------------------------------------------------------------------------------------------------
+   function urel_T(p)
+
+      use constants,          only: zero, one
+      use cresp_variables,    only: clight_cresp
+      use initcosmicrays,     only: ncre
+
+      implicit none
+
+      real, dimension(1:ncre), intent(in)    :: p
+      real, dimension(1:ncre)                :: urel_T
+
+      urel_T = one
+      urel_T(1:ncre) = p(1:ncre) * clight_cresp
+
+   end function urel_T
 
 !-------------------------------------------------------------------------------------------------
 !
