@@ -125,9 +125,9 @@ def prepare_q_grid(p_fix_ratio):   # fills grid with values of spectral indices 
    enpc_tab_q     = zeros(arr_dim)
    enpc_tab_q[:]  = enpc_min
 
-   j = arr_dim - int(arr_dim/(arr_dim / 10.))
-   while (q_grid[j] <= (-q_big) and (q_grid[arr_dim-1] <= (-q_big)) ):
-      enpc_max = enpc_max * 0.9515  # WARNING Magic number
+   j = min(arr_dim - int(arr_dim / (arr_dim / 100.)), arr_dim - 1)
+   while (q_grid[j] <= (-q_big) and (q_grid[arr_dim - 1] <= (-q_big))):
+      enpc_max = enpc_max - enpc_max * 0.005    # WARNING Magic number
       for i in range(0, arr_dim):
          enpc_tab_q[i]  = enpc_min * 10.0**((log10(enpc_max / enpc_min)) / float(arr_dim) * float(i))
       fill_q_grid(p_fix_ratio, q_inittab)

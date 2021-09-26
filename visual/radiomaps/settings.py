@@ -15,9 +15,9 @@ p_min_fix = 5.e0     #TODO !> if possible - read the below from h5file, if avail
 p_max_fix = 3.e5
 ncre      = 14
 maxcren   = ncre # 12
-q_eps     = 0.01
+q_eps     = 0.001
 q_big     = 30.
-arr_dim   = 200      #TODO <! if possible - read the above from h5file, if available
+arr_dim   = 1000      #TODO <! if possible - read the above from h5file, if available
 allow_amr_upscaling = False
 use_yt    = False
 
