@@ -56,8 +56,14 @@ def scalevec(axis):
       return 0.08
 
 def plotext(axis):
-   px = 25.0
-   pz = 19.2
+   if (stg.px_user != False):
+      px = stg.px_user
+   else:
+      px = 25.0
+   if (stg.pz_user != False):
+      pz = stg.pz_user
+   else:
+      pz = 19.2
    if axis == 2:
       return [-px,px,-px,px]
    else:
@@ -74,8 +80,7 @@ def prepare_draw(lab,attr,axis):
    gs00.update(left=lef, right=0.835, bottom=le, top=0.95, wspace=0.1, hspace=0.4)
    ax = py.subplot(gs00[:,:])
 
-   if axis==2:
-      ax.set_title(stg.title(lab,attr),fontsize=fsize)
+   ax.set_title(stg.title(lab,attr),fontsize=fsize)
 
    ax.set_xlabel(chosxlab(axis),fontsize=fsize)
    ax.set_ylabel(chosylab(axis),fontsize=fsize)
@@ -115,7 +120,10 @@ def draw_map(data,vecs,figext,axis,attr,plot_file,lab,ff):
 # vmin_, vmax_ -  minimum i maksimum of the color scale
 
    if stg.print_log:
-      data = np.log10(data)
+      if (lab == "TP" or lab == "PI"):
+         data = np.log10(data)
+      else:
+         data = np.where(data >= 0., np.log10(data), -np.log10(-data))
 
    vmin_, vmax_ = stg.fvmax(lab,ff,data)
 

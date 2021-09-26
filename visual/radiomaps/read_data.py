@@ -131,11 +131,44 @@ def data_h5(plik,ax_set,wave_data):
    zmax = attrs['z-edge_position'][1]/1000.
    print("Domain dimensions: ", 'xmin, xmax =(', xmin,',', xmax, '), ymin, ymax =(', ymin,',', ymax, '), zmin, zmax =(', zmin,',', zmax,')')
    nxd, nyd, nzd = attrs['n_d'][0:3]
+   if (stg.allow_amr_upscaling or stg.one_level):
+      lvl_min = 9999
+      lvl_max = 0
+      ndims   = 0
+      for nd in [nxd, nyd, nzd]:
+         if (nd > 0): ndims = ndims + 1
+
+      for ig in range(h5f['grid_dimensions'].shape[0]):
+         h5g = h5f['data']['grid_000000'+str(ig).zfill(4)]
+         lvl_max = max(lvl_max, h5g.attrs['level'][0])
+         lvl_min = min(lvl_min, h5g.attrs['level'][0])
+
+      print('Min / max level of refinement: %3i  ---%3i' %(lvl_min, lvl_max) )
+      if (stg.allow_amr_upscaling):
+         lvl_scale = lvl_max
+      elif (stg.one_level):
+         lvl_scale = stg.lvl_only
+      else:
+         lvl_scale = 0 # does not change n_d in any way
+
+      nxd = int(nxd * 2**lvl_scale);  nyd = int(nyd * 2**lvl_scale);  nzd = int(nzd * 2**lvl_scale)
+      print("Effective resolution: [ %6i %6i %6i ]" %(nxd, nyd, nzd) )
+      gd_lvl_scales = [ 2.**(-ndims * item) for item in range(lvl_max, lvl_min-1, -1)]
+      levels = [ level for level in range(lvl_min, lvl_max +1)]
+   else:
+      levels = [0]
+
+   if (stg.one_level):
+      if (stg.lvl_only in levels) :
+         levels = [stg.lvl_only]
+      else:
+         raise ValueError("Picked refinement level %i (-R option) not present in provided file. Available range is %i:%i" %(stg.lvl_only, lvl_min, lvl_max))
+
    Ecrp     = np.zeros((nxd,nyd,nzd))
-   if    (stg.mode == "spectral"):
+   if    (stg.spectral_mode):
       Ecre     = np.zeros((ncre,nxd,nyd,nzd))
       Ncre     = np.zeros((ncre,nxd,nyd,nzd))
-   elif  (stg.mode == "simple"):
+   else:
       Ecre     = []
       Ncre     = []
 
@@ -171,20 +204,23 @@ def data_h5(plik,ax_set,wave_data):
    print('Reconstructing domain from cg parts')
    grid = h5f['grid_dimensions']
    for ig in range(grid.shape[0]):
-      h5g = h5f['data']['grid_0000000'+str(ig).zfill(3)]
+      h5g = h5f['data']['grid_000000'+str(ig).zfill(4)]
+      lvl = h5g.attrs['level'][0]
       off = h5g.attrs['off']
       ngb = h5g.attrs['n_b']
       n_b = [int(ngb[0]), int(ngb[1]), int(ngb[2])]
       ce  = n_b+off
-      rho[off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['density'][:,:,:].swapaxes(0,2)
-      Bp[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g[bset[0]][:,:,:].swapaxes(0,2)
-      Bq[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g[bset[1]][:,:,:].swapaxes(0,2)
-      Bn[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] = -h5g[bset[2]][:,:,:].swapaxes(0,2)
-      Ecrp[off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cr01'][:,:,:].swapaxes(0,2)
-      if (stg.mode == 'spectral'):
-         for ic in range(ncre):
-            Ecre[ic,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cree'+str(ic+1).zfill(2)][:,:,:].swapaxes(0,2)
-            Ncre[ic,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cren'+str(ic+1).zfill(2)][:,:,:].swapaxes(0,2)
+      if (lvl in levels):
+         rho[off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['density'][:,:,:].swapaxes(0,2)
+         Bp[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g[bset[0]][:,:,:].swapaxes(0,2)
+         Bq[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g[bset[1]][:,:,:].swapaxes(0,2)
+         Bn[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] = -h5g[bset[2]][:,:,:].swapaxes(0,2)
+         if (stg.mode == 'spectral'):
+            for ic in range(ncre):
+               Ecre[ic,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cree'+str(ic+1).zfill(2)][:,:,:].swapaxes(0,2)
+               Ncre[ic,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cren'+str(ic+1).zfill(2)][:,:,:].swapaxes(0,2)
+         else:
+            Ecrp[off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cr01'][:,:,:].swapaxes(0,2)
 
    h5f.close()
    rho_ion = np.zeros_like(rho)
@@ -206,8 +242,8 @@ def data_h5(plik,ax_set,wave_data):
          sys.stdout.write("\033[F") # Cursor up one line
          print('Layer: ', i, ny)
          for j in range (nz):
-            if (stg.mode == "spectral"):
-               plot_data_arrays = stokes_params(Bp[klo:khi,i,j], Bq[klo:khi,i,j], Bn[klo:khi,i,j], rho_ion[klo:khi,i,j], Ecrp[klo:khi,i,j], wave_data, ds, khi-klo, Ecre=Ecre[:,klo:khi,i,j], Ncre=ncre[:,klo:khi,i,j], ncre=ncre)
+            if (stg.spectral_mode):
+               plot_data_arrays = stokes_params(Bp[klo:khi,i,j], Bq[klo:khi,i,j], Bn[klo:khi,i,j], rho_ion[klo:khi,i,j], Ecrp[klo:khi,i,j], wave_data, ds, khi-klo, Ecre=Ecre[:,klo:khi,i,j], Ncre=Ncre[:,klo:khi,i,j], ncre=ncre)
             else:
                plot_data_arrays = stokes_params(Bp[klo:khi,i,j], Bq[klo:khi,i,j], Bn[klo:khi,i,j], rho_ion[klo:khi,i,j], Ecrp[klo:khi,i,j], wave_data, ds, khi-klo)
 
@@ -226,7 +262,7 @@ def data_h5(plik,ax_set,wave_data):
          sys.stdout.write("\033[F") # Cursor up one line
          print('Layer: ', k, nz)
          for i in range (nx):
-            if (stg.mode == "spectral"):
+            if (stg.spectral_mode):
                plot_data_arrays = stokes_params(Bp[i,klo:khi,k], Bq[i,klo:khi,k], Bn[i,klo:khi,k], rho_ion[i,klo:khi,k], Ecrp[i,klo:khi,k], wave_data, ds, khi-klo, Ecre=Ecre[:,i,klo:khi,k], Ncre=Ncre[:,i,klo:khi,k], ncre=ncre)
             else:
                plot_data_arrays = stokes_params(Bp[i,klo:khi,k], Bq[i,klo:khi,k], Bn[i,klo:khi,k], rho_ion[i,klo:khi,k], Ecrp[i,klo:khi,k], wave_data, ds, khi-klo)
@@ -245,7 +281,7 @@ def data_h5(plik,ax_set,wave_data):
          sys.stdout.write("\033[F") # Cursor up one line
          print('Layer: ', i, nx)
          for j in range (ny):
-            if (stg.mode == "spectral"):
+            if (stg.spectral_mode):
                plot_data_arrays = stokes_params(Bp[i,j,klo:khi], Bq[i,j,klo:khi], Bn[i,j,klo:khi], rho_ion[i,j,klo:khi], Ecrp[i,j,klo:khi], wave_data, ds, khi-klo, Ecre=Ecre[:,i,j,klo:khi], Ncre=Ncre[:,i,j,klo:khi], ncre=ncre)
             else:
                plot_data_arrays = stokes_params(Bp[i,j,klo:khi], Bq[i,j,klo:khi], Bn[i,j,klo:khi], rho_ion[i,j,klo:khi], Ecrp[i,j,klo:khi], wave_data, ds, khi-klo)

@@ -4,7 +4,7 @@ import numpy as np
 import electrons
 import settings as stg
 
-def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,**kwargs):
+def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
 # This is the core procedure to compute Stokes parameters I, Q, U
 # and the rotation measur RM for polarized radio waves
 # emitted along the line of sight.
@@ -22,15 +22,12 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,**kwargs):
 # cJnu - a constant scaling synchrotron emissivity.
 # cJnu= 2.344*(1.60219)^(p-2)*10^(8-24p)*a(p) (stg)
 
-# Loaded if stg.mode == "spectral"
-   if (stg.mode == "spectral"):
-      Ecre = kwargs.get("Ecre", [])
-      Ncre = kwargs.get("Ncre", [])
-      ncre = kwargs.get("ncre", 0)
-
    I_sum, Q_sum, U_sum, RM_sum, SI, Q, U = [], [], [], [], [], [], []
    nu_s, lambda_s, nu_2, lambda_2 = wave_data
    n = len(rho_ion)
+# Vectorize ds to make it universal for either yt analysis or h5py script parts
+   if (not stg.use_yt):
+      ds = np.ones(n) * ds
 # modulus of magnetic field vector
    #B_tot = np.sqrt((Bp**2+Bq**2+Bn**2))
 # modulus of the perpendiculat (to the line of sight) component of B
@@ -72,21 +69,21 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,**kwargs):
    if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
       # The total intensity of synchrotron radiation emitted form each cell of lengths ds along the line of sight
       I = np.zeros_like(B_perp)
-      if stg.mode == 'simple':
+      if not stg.spectral_mode:
          for i3 in range(n3):
-            I[i3] = stg.cJnu*B_perp[i3]**((stg.p+1.0)/2.0) * (1.0/nu_s)**((stg.p-1.0)/2.0) * Ecrp[i3] * ds
+            I[i3] = stg.cJnu*B_perp[i3]**((stg.p+1.0)/2.0) * (1.0/nu_s)**((stg.p-1.0)/2.0) * Ecrp[i3] * ds[i3]
 
-      elif stg.mode == 'spectral':
+      else:
          for i3 in range(n3):
             #elfq = electrons.crenpp(nu_s, ncre, B_perp[i3], Ecre[:,i3])            # DEPRECATED
-            elfq = electrons.crenppfq(nu_s, ncre, B_perp[i3], Ecre[:,i3], Ncre[:,i3])
+            elfq = electrons.crenppfq(0, ncre, B_perp[i3], Ecre[:,i3], Ncre[:,i3])  # "0" stands for nu index, for optimization
             I[i3] = np.sqrt(nu_s*B_perp[i3]) * elfq
 
          if stg.print_SI:
             I2 = np.zeros_like(B_perp)
             for i3 in range(n3):
                #elfq2 = electrons.crenpp(nu_2, ncre, B_perp[i3], Ecre[:,i3])        # DEPRECATED
-               elfq2 = electrons.crenppfq(nu_2, ncre, B_perp[i3], Ecre[:,i3], Ncre[:,i3])
+               elfq2 = electrons.crenppfq(1, ncre, B_perp[i3], Ecre[:][i3], Ncre[:][i3]) # "1" stands for nu_2 index, for optimization
                I2[i3] = np.sqrt(nu_2*B_perp[i3]) * elfq2
 
    if stg.print_PI or stg.print_SI or stg.print_vec:

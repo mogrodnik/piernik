@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 import numpy as np
 
+spectral_mode = False   # maps generated on the base of single CR protons distribution
+# spectral_mode = True  # maps generated on the base of CR electrons spectrum
 mode = 'simple'   # maps generated on the base of single CR protons distribution
 #mode = 'spectral' # maps generated on the base of CR electrons spectrum
+
 
 Hz = 1 ; MHz = Hz * 1.0e6 ; GHz = MHz * 1.0e3 ; clight = 3.e8 #m/s
 metr = 1 ; cm = 0.01 * metr
 
-const_synch = 1.e8
+const_synch = 1. #1.e8  # DEPRECATED ??
 p_min_fix = 5.e0     #TODO !> if possible - read the below from h5file, if available
 p_max_fix = 3.e5
 ncre      = 14
@@ -15,6 +18,12 @@ maxcren   = ncre # 12
 q_eps     = 0.01
 q_big     = 30.
 arr_dim   = 200      #TODO <! if possible - read the above from h5file, if available
+allow_amr_upscaling = False
+use_yt    = False
+
+# Read only one refinement level
+lvl_only = -1
+one_level = False
 
 # cJnu - a constant scaling synchrotron emissivity.
 cJnu = 1.0
@@ -45,8 +54,21 @@ print_SI = False
 print_RM = False
 print_df = False
 print_log = False
+print_prof = False
 
 suffix = 'png', #'pdf',
+
+px_user   = False
+pz_user   = False
+Tvmn_user = False
+Tvmx_user = False
+Pvmn_user = False
+Pvmx_user = False
+Rvmn_user = False
+Rvmx_user = False
+Svmn_user = False
+Svmx_user = False
+dokv_user = False
 
 def RMunit():
    # RM = 0,812 * B_{||} * rho_i * ds * (cm/pc)**3 * (mgs/muG) * (Msun/mH) * (102/136) [rad/m**2]
@@ -132,15 +154,18 @@ def title(lab,attr):
    return lab+lbdcm+' | t = '+str(round(time))+' Myr'
 
 def etyfil(ax,file_name,nu):
-   return "_"+ax+"_"+file_name.split('/')[-1]+'_nu'+str(int(nu/MHz)).zfill(3)+'MHz'
+   return "_"+ax+"_"+file_name.split('/')[-1]+'_nu'+str(int(nu/MHz)).zfill(3)+'MHz'+('_lvl%i'%lvl_only if one_level else '')
 
 # dok - parameter determining spatial separation of vectors on the map
 def dokv(ff,ax_set):
    if ff:
-      if ax_set == 2:
-         dok = 15
+      if (dokv_user == False):
+         if ax_set == 2:
+            dok = 15
+         else:
+            dok = 15
       else:
-         dok = 15
+         dok = dokv_user
    else:
       dok = sigma
    return dok
@@ -180,13 +205,34 @@ def fvmax(lab,ff,data):
          return 0.0, np.max(data)*norm(lab)
    else:
       if lab == 'TP':
-         vmn, vmx = 0.0, 20.
+         if (Tvmn_user == False and Tvmx_user == False):
+            vmn, vmx = 0.0, 20.
+         else:
+            vmn, vmx = Tvmn_user, Tvmx_user
       if lab == 'PI':
-         vmn, vmx = 0.0 , 20000.
+         if (Pvmn_user == False and Pvmx_user == False):
+            vmn, vmx = 0.0, 20000.
+         else:
+            vmn, vmx = Pvmn_user, Pvmx_user
       if lab == 'SI':
-         vmn, vmx = -2.0 , 0.0
+         if (Svmn_user == False and Svmx_user == False):
+            vmn, vmx = -2.0, 0.0
+         else:
+            vmn, vmx = Svmn_user, Svmx_user
       if lab == 'RM':
-         vmn, vmx = -100., 100.
+         if (Rvmn_user == False and Rvmx_user == False):
+            vmn, vmx = -100., 100.
+         else:
+            vmn, vmx = Rvmn_user, Rvmx_user
       if print_log:
-         vmn, vmx = -6., -2.
+         if (  lab == "TP" and (Tvmn_user != False and Tvmx_user != False)):
+            vmn, vmx = np.log10(Tvmn_user), np.log10(Tvmx_user)
+         elif (lab == "PI" and (Pvmn_user != False and Pvmx_user != False)):
+            vmn, vmx = np.log10(Pvmn_user), np.log10(Pvmx_user)
+         elif (lab == "SI" and (Svmn_user != False and Svmx_user != False)): # TODO FIXME Is there a point for logscale being allowed for SI?
+            vmn, vmx = np.log10(Svmn_user), np.log10(Svmx_user)
+         elif (lab == "RM" and (Rvmn_user != False and Rvmx_user != False)):
+            vmn, vmx = np.log10(Rvmn_user), np.log10(Rvmx_user)
+         else:
+            vmn, vmx = -6., -2.
    return vmn, vmx
