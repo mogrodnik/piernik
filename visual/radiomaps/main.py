@@ -28,7 +28,6 @@ lbd_set  = [-1.0]
 lbd2_set = -1.0   # DEPRECATED
 nu_set   = [-1.0]
 nu2_set  = -1.0   #
-si_set   = []
 yt_imres = 0
 yt_depth = "max"
 
@@ -37,7 +36,7 @@ def cli_params(argv):
    try:
 
       opts,args=getopt.getopt(argv,"adhf:i:k:l:m:n:R:cpPrtSuvxyz",["help","file","convolve","log","spectral","yt=","tz=","pz=","iz=","rz=","pr=","vp="])
-      #print opts,"op",args,"arg"
+      #print (opts,"op",args,"arg")
    except getopt.GetoptError:
       print("Error: unknown parameter")
       sys.exit(2)
@@ -79,10 +78,10 @@ def cli_params(argv):
          print(msg)
 
       elif opt == "-i":
-         global handSI, si_set
+         global handSI
          handSI = True
-         si_set = [ (int(item[0]), int(item[1])) for item in arg.split(",")]
-         msg = "(WIP) SI pairs:", si_set
+         stg.SI_set = [ (int(item[0]), int(item[1])) for item in arg.split(",")]
+         msg = "(WIP) SI pairs:", stg.SI_set
          print(msg)
 
       elif opt == "-p":
