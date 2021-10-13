@@ -187,16 +187,17 @@ else:
 nu  = [ 0. for i in range(len(lbd_set)) ]
 lbd = [ 0. for i in range(len(lbd_set)) ]
 
-for i in range(len(lbd_set)):
+stg.N_nulbd = len(lbd_set)
+
+for i in range(stg.N_nulbd):
    nu[i],   lbd[i]   = stg.set_nuandlbd(nu_set[i],  lbd_set[i], i)
 
 print("Wavelengths (m):  ", lbd)
 print("Frequencies (MHz):", [ round(item / 1.e6, 2) for item in nu])
 
 nu_2, lbd_2 = stg.set_nuandlbd(nu2_set, lbd2_set,2)   # DEPRECATED
-#wave_data = [nu, lbd, nu_2, lbd_2]
+#wave_data = [nu, lbd, nu_2, lbd_2] # DEPRECATED
 wave_data = [nu, lbd]
-#sys.exit()
 if (stg.spectral_mode): initialize_crspectrum_tools(ncre, nu)
 
 if not from_file:
@@ -212,59 +213,62 @@ else:
 
 I, Q, U, RM, SI, x, y, figext, time = plot_data_arrays
 
-if convol:
-   # Generation of the Gaussian profile of the radiotelescop beam
-   sigma = stg.sigma
-   nbeam = stg.nbeam
-   beam = gauss_beam(nbeam, sigma)
-   # We convolve the resulting Stokes parameters tables with the beam function
-   if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
-      I  = data_beam_convolve(I,  beam, nbeam)
-   if stg.print_PI or stg.print_SI or stg.print_vec:
-      Q  = data_beam_convolve(Q,  beam, nbeam)
-      U  = data_beam_convolve(U,  beam, nbeam)
-   if stg.print_RM:
-      RM = data_beam_convolve(RM, beam, nbeam)
+for i_nl in range(stg.N_nulbd):
+   if convol:
+      # Generation of the Gaussian profile of the radiotelescop beam
+      sigma = stg.sigma
+      nbeam = stg.nbeam
+      beam = gauss_beam(nbeam, sigma)
+      # We convolve the resulting Stokes parameters tables with the beam function
+      if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
+         I[i_nl]  = data_beam_convolve(I[i_nl],  beam, nbeam)
+      if stg.print_PI or stg.print_SI or stg.print_vec:
+         Q[i_nl]  = data_beam_convolve(Q[i_nl],  beam, nbeam)
+         U[i_nl]  = data_beam_convolve(U[i_nl],  beam, nbeam)
+      if stg.print_RM:
+         RM = data_beam_convolve(RM, beam, nbeam)
 
-if stg.print_PI or stg.print_vec:
-   PI, PI_obs = polarized(I, Q, U)
-if stg.print_vec:
-   wp, wq = vector_direction(PI_obs, Q, U)
-   # Creation of a mesh of points to place vectors
-   X, Y = np.meshgrid(x,y)
-   vecs = stg.dokvec(wp, wq, X, Y, ax_set, from_file)
-else:
-   vecs = []
-
-if from_file and convol:
-   if stg.print_TP:
-      I  = I**stg.normalise_exponent_PI
-   if stg.print_PI:
-      PI = PI**stg.normalise_exponent_PI
-
-print("From_file: ", from_file)
-
-etyfil = stg.etyfil(ax,file_name,nu)
-attr = [time,lbd,lbd_2]
-
-if (stg.use_yt): etyfil = etyfil + "_yt_res"+str(yt_imres)+"depth"+str(round(yt_depth))
-if (stg.spectral_mode): etyfil = etyfil + "_spectral"
-if stg.print_TP:
-   # Drawing Total Power (TP) map
-   draw_map( I.T, vecs, figext, ax_set, attr, etyfil, 'TP', from_file)
-   if (stg.print_prof): plot_profile(I.T, figext, ax_set, etyfil, 'TP', attr)
-if stg.print_PI:
-   # Drawing Polarized Intensity (PI) map
-   draw_map(PI.T, vecs, figext, ax_set, attr, etyfil, 'PI', from_file)
-   if (stg.print_prof): plot_profile(PI.T, figext, ax_set, etyfil, 'PI', attr)
-if stg.print_SI:
-   draw_map(SI.T, vecs, figext, ax_set, attr, etyfil, 'SI', from_file)
-   if (stg.print_prof): plot_profile(SI.T, figext, ax_set, etyfil, 'SI', attr)
-if stg.print_RM:
-   if np.max(RM) != 1.0 or np.min(RM) != 0.0:
-      # We draw the Faraday rotation - Rotation measue (RM) only if RM != 0
-      draw_map(RM.T/stg.norm('RM'), vecs, figext, ax_set, attr, etyfil, 'RM', from_file)
+   if stg.print_PI or stg.print_vec:
+      PI, PI_obs = polarized(I, Q, U)
+   if stg.print_vec:
+      wp, wq = vector_direction(PI_obs, Q, U)
+      # Creation of a mesh of points to place vectors
+      X, Y = np.meshgrid(x,y)
+      vecs = stg.dokvec(wp, wq, X, Y, ax_set, from_file)
    else:
-      print('RM = 0; I do not create the map.')
+      vecs = []
+
+   if from_file and convol:
+      if stg.print_TP:
+         I[i_nl]  = I[i_nl]**stg.normalise_exponent_PI
+      if stg.print_PI:
+         PI[i_nl] = PI[i_nl]**stg.normalise_exponent_PI
+
+   print("From_file: ", from_file)
+
+   etyfil = stg.etyfil(ax,file_name,nu[i_nl])
+   attr = [time,lbd[i_nl], lbd[0]]
+
+   if (stg.use_yt): etyfil = etyfil + "_yt_res"+str(yt_imres)+"depth"+str(round(yt_depth))
+   if (stg.spectral_mode): etyfil = etyfil + "_spectral"
+   if stg.print_TP:
+      # Drawing Total Power (TP) map
+      draw_map( I[i_nl].T, vecs, figext, ax_set, attr, etyfil, 'TP', from_file)
+      if (stg.print_prof): plot_profile(I[i_nl].T, figext, ax_set, etyfil, 'TP', attr)
+   if stg.print_PI:
+      # Drawing Polarized Intensity (PI) map
+      draw_map(PI[i_nl].T, vecs, figext, ax_set, attr, etyfil, 'PI', from_file)
+      if (stg.print_prof): plot_profile(PI[i_nl].T, figext, ax_set, etyfil, 'PI', attr)
+   if stg.print_RM:
+      if np.max(RM) != 1.0 or np.min(RM) != 0.0:
+         # We draw the Faraday rotation - Rotation measue (RM) only if RM != 0
+         draw_map(RM[i_nl].T/stg.norm('RM'), vecs, figext, ax_set, attr, etyfil, 'RM', from_file)
+      else:
+         print('RM = 0; I do not create the map.')
+for i_pair in stg.SI_set:
+   attr = [time,lbd[i_pair[0]],lbd[i_pair[1]]]
+   if stg.print_SI:
+      draw_map(SI[stg.SI_set.index(i_pair)].T, vecs, figext, ax_set, attr, etyfil, 'SI', from_file)
+      if (stg.print_prof): plot_profile(SI[stg.SI_set.index(i_pair)].T, figext, ax_set, etyfil, 'SI', attr)
 
 #py.show()
