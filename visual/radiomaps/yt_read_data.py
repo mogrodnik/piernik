@@ -119,11 +119,9 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
    Q  = np.zeros((N_nl, imres[0], imres[1]))
    U  = np.zeros((N_nl, imres[0], imres[1]))
    RM = np.zeros((N_nl, imres[0], imres[1]))
-   SI = np.zeros((N_nl, imres[0], imres[1]))
+   SI = np.zeros((np.shape(stg.SI_set)[0], imres[0], imres[1]))
    Ecrp = []
 
-   #print(np.shape(I), N_nl)
-   #print( I[0][16,16] )
    # Prepare the limits of plotted area to be returned, NOTICE formally these are the same as provided by settings.plotext
    x = np.linspace(rbeg[i_w] / 1000., rend[i_w] / 1000., imres[0])
    y = np.linspace(rbeg[i_h] / 1000., rend[i_h] / 1000., imres[1])

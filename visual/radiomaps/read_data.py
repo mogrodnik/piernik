@@ -231,7 +231,7 @@ def data_h5(plik,ax_set,wave_data):
    U  = np.zeros((stg.N_nulbd, n1, n2))
    RM = np.zeros((stg.N_nulbd, n1, n2))
    if stg.print_SI:
-      SI = np.zeros((stg.N_nulbd, n1, n2))
+      SI = np.zeros((np.shape(stg.SI_set)[0], n1, n2))
 
    klo, khi = stg.krange(n3,ax_set)
    print('Sendig data to map computation')
@@ -254,7 +254,7 @@ def data_h5(plik,ax_set,wave_data):
             if stg.print_RM:
                RM[:, i, j] = plot_data_arrays[3][:]
             if stg.print_SI:
-               SI[:,i,j] = plot_data_arrays[4][:]
+               SI[:, i, j] = plot_data_arrays[4][:]
       print('B mean, max x = ', np.mean(np.abs(Bn[klo:khi,:,:])), np.amax(np.abs(Bn[klo:khi,:,:])))
 # projection along y-axis
    elif ax_set == 1:

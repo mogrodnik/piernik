@@ -25,7 +25,7 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
    N_nl = stg.N_nulbd
    N_iter = range(N_nl)
 
-   I_sum, Q_sum, U_sum, RM_sum, SI, Q, U = [0.] * N_nl, [0.] * N_nl, [0.] * N_nl, [0.] * N_nl, [0.] * N_nl, [0.] * N_nl, [0.] * N_nl
+   I_sum, Q_sum, U_sum, RM_sum, SI, Q, U = [0.] * N_nl, [0.] * N_nl, [0.] * N_nl, [0.] * N_nl, [0.] * np.shape(stg.SI_set)[0], [0.] * N_nl, [0.] * N_nl
    #nu_s, lambda_s, nu_2, lambda_2 = wave_data   # DEPRECATED
    nu_s, lambda_s = wave_data
 
@@ -109,7 +109,7 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
    if stg.print_SI:
       for i_pairs in stg.SI_set:
          #I2_sum[i_nl] = I2.sum()
-         SI[stg.SI_set.index(i_pairs)] = np.log10(I_sum[i_pairs[1]]/(I_sum[i_pairs[0]]+1.e-240)+1.e-200) / np.log10(nu_s[i_pairs[1]]/nu_s[i_pairs[0]])
+         SI[stg.SI_set.index(i_pairs)] = np.log10(I_sum[i_pairs[1]] / (I_sum[i_pairs[0]] + 1.e-240) + 1.e-200) / np.log10(nu_s[i_pairs[1]] / nu_s[i_pairs[0]])
 
 # The function returns the summed Stokes parameters I, Q and U, and rotation measure RM. The spectral index should be removed from here and computed in the plot_maps routine.
    return I_sum, Q_sum, U_sum, RM_sum, SI
