@@ -47,6 +47,7 @@ normalise_exponent_PI = 0.5     # 0.7
 # vectors scaling for quiver method (stg)
 scale_vec_PI = 0.01
 
+N_nulbd  = 0
 SI_set   = []
 print_vec = False
 print_TP = False
