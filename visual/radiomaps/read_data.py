@@ -226,12 +226,12 @@ def data_h5(plik,ax_set,wave_data):
    rho_ion = np.zeros_like(rho)
    rho_ion=rho*stg.x_ion
    nx, ny, nz = s = Bp.shape
-   I  = np.zeros((n1,n2))
-   Q  = np.zeros((n1,n2))
-   U  = np.zeros((n1,n2))
-   RM = np.zeros((n1,n2))
+   I  = np.zeros((stg.N_nulbd, n1, n2))
+   Q  = np.zeros((stg.N_nulbd, n1, n2))
+   U  = np.zeros((stg.N_nulbd, n1, n2))
+   RM = np.zeros((stg.N_nulbd, n1, n2))
    if stg.print_SI:
-      SI = np.zeros((n1,n2))
+      SI = np.zeros((stg.N_nulbd, n1, n2))
 
    klo, khi = stg.krange(n3,ax_set)
    print('Sendig data to map computation')
@@ -248,13 +248,13 @@ def data_h5(plik,ax_set,wave_data):
                plot_data_arrays = stokes_params(Bp[klo:khi,i,j], Bq[klo:khi,i,j], Bn[klo:khi,i,j], rho_ion[klo:khi,i,j], Ecrp[klo:khi,i,j], wave_data, ds, khi-klo)
 
             if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
-               I[i,j] = plot_data_arrays[0]
+               I[:, i, j] = plot_data_arrays[0][:]
             if stg.print_PI or stg.print_SI or stg.print_vec:
-               Q[i,j], U[i,j] = plot_data_arrays[1:3]
+               Q[:, i, j], U[:, i, j] = plot_data_arrays[1:3][:]
             if stg.print_RM:
-               RM[i,j] = plot_data_arrays[3]
+               RM[:, i, j] = plot_data_arrays[3][:]
             if stg.print_SI:
-               SI[i,j] = plot_data_arrays[4]
+               SI[:,i,j] = plot_data_arrays[4][:]
       print('B mean, max x = ', np.mean(np.abs(Bn[klo:khi,:,:])), np.amax(np.abs(Bn[klo:khi,:,:])))
 # projection along y-axis
    elif ax_set == 1:
@@ -268,13 +268,13 @@ def data_h5(plik,ax_set,wave_data):
                plot_data_arrays = stokes_params(Bp[i,klo:khi,k], Bq[i,klo:khi,k], Bn[i,klo:khi,k], rho_ion[i,klo:khi,k], Ecrp[i,klo:khi,k], wave_data, ds, khi-klo)
 
             if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
-               I[i,k] = plot_data_arrays[0]
+               I[:, i, k] = plot_data_arrays[0][:]
             if stg.print_PI or stg.print_SI or stg.print_vec:
-               Q[i,k], U[i,k] = plot_data_arrays[1:3]
+               Q[:, i, k], U[:, i, k] = plot_data_arrays[1:3][:]
             if stg.print_RM:
-               RM[i,k] = plot_data_arrays[3]
+               RM[:, i, k] = plot_data_arrays[3][:]
             if stg.print_SI:
-               SI[i,k] = plot_data_arrays[4]
+               SI[:, i, k] = plot_data_arrays[4][:]
 # # projection along z-axis
    elif ax_set == 2:
       for i in range (nx):
@@ -287,12 +287,12 @@ def data_h5(plik,ax_set,wave_data):
                plot_data_arrays = stokes_params(Bp[i,j,klo:khi], Bq[i,j,klo:khi], Bn[i,j,klo:khi], rho_ion[i,j,klo:khi], Ecrp[i,j,klo:khi], wave_data, ds, khi-klo)
 
             if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
-               I[i,j] = plot_data_arrays[0]
+               I[:, i, j] = plot_data_arrays[0][:]
             if stg.print_PI or stg.print_SI or stg.print_vec:
-               Q[i,j], U[i,j] = plot_data_arrays[1:3]
+               Q[:, i, j], U[:, i, j] = plot_data_arrays[1:3][:]
             if stg.print_RM:
-               RM[i,j] = plot_data_arrays[3]
+               RM[:, i, j] = plot_data_arrays[3][:]
             if stg.print_SI:
-               SI[i,j] = plot_data_arrays[4]
+               SI[:, i, j] = plot_data_arrays[4][:]
       print('B mean, max z = ', np.mean(np.abs(Bn[:,:,klo:khi])), np.amax(np.abs(Bn[:,:,klo:khi])))
    return I, Q, U, RM, SI, x, y, figext, time
