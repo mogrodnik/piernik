@@ -22,8 +22,13 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
 # cJnu - a constant scaling synchrotron emissivity.
 # cJnu= 2.344*(1.60219)^(p-2)*10^(8-24p)*a(p) (stg)
 
-   I_sum, Q_sum, U_sum, RM_sum, SI, Q, U = [], [], [], [], [], [], []
-   nu_s, lambda_s, nu_2, lambda_2 = wave_data
+   N_nl = stg.N_nulbd
+   N_iter = range(N_nl)
+
+   I_sum, Q_sum, U_sum, RM_sum, SI, Q, U = [0.] * N_nl, [0.] * N_nl, [0.] * N_nl, [0.] * N_nl, [0.] * N_nl, [0.] * N_nl, [0.] * N_nl
+   #nu_s, lambda_s, nu_2, lambda_2 = wave_data   # DEPRECATED
+   nu_s, lambda_s = wave_data
+
    n = len(rho_ion)
 # Vectorize ds to make it universal for either yt analysis or h5py script parts
    if (not stg.use_yt):
@@ -45,63 +50,66 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
       # Total rotation measure along the line of sight
       RM_sum=RM[n-1]
 
-   if stg.print_PI or stg.print_SI or stg.print_vec:
-      # The change of polarization angle across the whole emitting region.
-      delta_phi = RM*lambda_s**2
+   for i_nl in N_iter:
+      if stg.print_PI or stg.print_SI or stg.print_vec:
+         # The change of polarization angle across the whole emitting region.
+         delta_phi = RM*lambda_s[i_nl]**2    # WARNING
 
-      # sin and cos delta_phi will be needed to compute Stokes parameters for the radiation received by an observer.
-      sin_delta_phi = np.sin(delta_phi)
-      cos_delta_phi = np.cos(delta_phi)
-      # intrinsic polarization angle for the readiation emitted in each cell
-      #phi_int is defined by  sin(phi_int) and cos(phi_int)
-      sin_phi_int = np.zeros_like(B_perp)
-      cos_phi_int = np.zeros_like(B_perp)
-      bpn0 = np.where(B_perp != 0.0)
-      sin_phi_int[bpn0] = Bq[bpn0] / B_perp[bpn0]
-      cos_phi_int[bpn0] = Bp[bpn0] / B_perp[bpn0]
-      # polarization angle of the radiation received by the observer is equal the sum of the intrinsic polarization angle and the rotation angle on the way fro the cell to the observer.
-      sin_psi = sin_phi_int * cos_delta_phi + cos_phi_int * sin_delta_phi
-      cos_psi = cos_phi_int * cos_delta_phi - sin_phi_int * sin_delta_phi
-      # We need a double polarization angle to compute Stokes parameters
-      sin_2psi = 2.0*sin_psi*cos_psi
-      cos_2psi = cos_psi**2 - sin_psi**2
+         # sin and cos delta_phi will be needed to compute Stokes parameters for the radiation received by an observer.
+         sin_delta_phi = np.sin(delta_phi)
+         cos_delta_phi = np.cos(delta_phi)
+         # intrinsic polarization angle for the readiation emitted in each cell
+         #phi_int is defined by  sin(phi_int) and cos(phi_int)
+         sin_phi_int = np.zeros_like(B_perp)
+         cos_phi_int = np.zeros_like(B_perp)
+         bpn0 = np.where(B_perp != 0.0)
+         sin_phi_int[bpn0] = Bq[bpn0] / B_perp[bpn0]
+         cos_phi_int[bpn0] = Bp[bpn0] / B_perp[bpn0]
+         # polarization angle of the radiation received by the observer is equal the sum of the intrinsic polarization angle and the rotation angle on the way fro the cell to the observer.
+         sin_psi = sin_phi_int * cos_delta_phi + cos_phi_int * sin_delta_phi
+         cos_psi = cos_phi_int * cos_delta_phi - sin_phi_int * sin_delta_phi
+         # We need a double polarization angle to compute Stokes parameters
+         sin_2psi = 2.0*sin_psi*cos_psi
+         cos_2psi = cos_psi**2 - sin_psi**2
 
-   if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
-      # The total intensity of synchrotron radiation emitted form each cell of lengths ds along the line of sight
-      I = np.zeros_like(B_perp)
-      if not stg.spectral_mode:
-         for i3 in range(n3):
-            I[i3] = stg.cJnu*B_perp[i3]**((stg.p+1.0)/2.0) * (1.0/nu_s)**((stg.p-1.0)/2.0) * Ecrp[i3] * ds[i3]
-
-      else:
-         for i3 in range(n3):
-            #elfq = electrons.crenpp(nu_s, ncre, B_perp[i3], Ecre[:,i3])            # DEPRECATED
-            elfq = electrons.crenppfq(0, ncre, B_perp[i3], Ecre[:,i3], Ncre[:,i3])  # "0" stands for nu index, for optimization
-            I[i3] = np.sqrt(nu_s*B_perp[i3]) * elfq
-
-         if stg.print_SI:
-            I2 = np.zeros_like(B_perp)
+      if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
+         # The total intensity of synchrotron radiation emitted form each cell of lengths ds along the line of sight
+         I = np.zeros_like(B_perp)
+         if not stg.spectral_mode:
             for i3 in range(n3):
-               #elfq2 = electrons.crenpp(nu_2, ncre, B_perp[i3], Ecre[:,i3])        # DEPRECATED
-               elfq2 = electrons.crenppfq(1, ncre, B_perp[i3], Ecre[:][i3], Ncre[:][i3]) # "1" stands for nu_2 index, for optimization
-               I2[i3] = np.sqrt(nu_2*B_perp[i3]) * elfq2
+               I[i3] = stg.cJnu*B_perp[i3]**((stg.p+1.0)/2.0) * (1.0/nu_s[i_nl])**((stg.p-1.0)/2.0) * Ecrp[i3] * ds[i3]
 
-   if stg.print_PI or stg.print_SI or stg.print_vec:
-      # degree of polarization of synchrotron radiation emitted in a single cell
-      PI = (stg.p + 1.0) / (stg.p + 7.0/3.0)   # BEWARE: stg.p should be replkaced by the spectral index of CR energy density derived  from the spectrum
-      # Stokes parameters of each cell, corrected for Faraday rotation on the Way to the observer.
-      Q = PI*I*cos_2psi
-      U = PI*I*sin_2psi
+         else:
+            for i3 in range(n3):
+               #elfq = electrons.crenpp(nu_s, ncre, B_perp[i3], Ecre[:,i3])            # DEPRECATED
+               elfq = electrons.crenppfq(0, ncre, B_perp[i3], Ecre[:,i3], Ncre[:,i3])  # "0" stands for nu index, for optimization
+               I[i3] = np.sqrt(nu_s[i_nl]*B_perp[i3]) * elfq
+
+            #if stg.print_SI:
+               #I2 = np.zeros_like(B_perp)
+               #for i3 in range(n3):
+                  ##elfq2 = electrons.crenpp(nu_2, ncre, B_perp[i3], Ecre[:,i3])        # DEPRECATED
+                  #elfq2 = electrons.crenppfq(1, ncre, B_perp[i3], Ecre[:][i3], Ncre[:][i3]) # "1" stands for nu_2 index, for optimization
+                  #I2[i3] = np.sqrt(nu_2*B_perp[i3]) * elfq2
+
+      if stg.print_PI or stg.print_SI or stg.print_vec:
+         # degree of polarization of synchrotron radiation emitted in a single cell
+         PI = (stg.p + 1.0) / (stg.p + 7.0/3.0)   # BEWARE: stg.p should be replkaced by the spectral index of CR energy density derived  from the spectrum
+         # Stokes parameters of each cell, corrected for Faraday rotation on the Way to the observer.
+         Q = PI*I*cos_2psi
+         U = PI*I*sin_2psi
 
 # Stokes parameters received by the observer are summed up for all cells along the line of sight
-   if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
-      I_sum = I.sum()
-   if stg.print_PI or stg.print_SI or stg.print_vec:
-      Q_sum = Q.sum()
-      U_sum = U.sum()
+      if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
+         I_sum[i_nl] = I.sum()
+      if stg.print_PI or stg.print_SI or stg.print_vec:
+         Q_sum[i_nl] = Q.sum()
+         U_sum[i_nl] = U.sum()
+# Perform SI computations after iterations of I are over for all wavelengths / frequencies
    if stg.print_SI:
-      I2_sum = I2.sum()
-      SI = np.log10(I2_sum/(I_sum+1.e-240)+1.e-200) / np.log10(nu_2/nu_s)
+      for i_pairs in stg.SI_set:
+         #I2_sum[i_nl] = I2.sum()
+         SI[stg.SI_set.index(i_pairs)] = np.log10(I_sum[i_pairs[1]]/(I_sum[i_pairs[0]]+1.e-240)+1.e-200) / np.log10(nu_s[i_pairs[1]]/nu_s[i_pairs[0]])
 
 # The function returns the summed Stokes parameters I, Q and U, and rotation measure RM. The spectral index should be removed from here and computed in the plot_maps routine.
    return I_sum, Q_sum, U_sum, RM_sum, SI
