@@ -138,21 +138,30 @@ def cli_params(argv):
             yt_depth   = "max"
          stg.use_yt = True
          print("Modules data_h5_yt and yt will be imported, depth %10.1f resolution: %i" %(yt_depth, yt_imres))
+
       elif opt in ("--tz"):
-         aux = arg.split(",")
-         stg.Tvmn_user, stg.Tvmx_user = float(aux[0]), float(aux[1])
+         stg.Tvmn_user, stg.Tvmx_user = [], []
+         for auxi in arg.split(":"):
+            stg.Tvmn_user.append(float(auxi.split(",")[0]))
+            stg.Tvmx_user.append(float(auxi.split(",")[1]))
 
       elif opt in ("--pz"):
-         aux = arg.split(",")
-         stg.Pvmn_user, stg.Pvmx_user = float(aux[0]), float(aux[1])
+         stg.Pvmn_user, stg.Pvmx_user = [], []
+         for auxi in arg.split(":"):
+            stg.Pvmn_user.append(float(auxi.split(",")[0]))
+            stg.Pvmx_user.append(float(auxi.split(",")[1]))
 
       elif opt in ("--rz"):
-         aux = arg.split(",")
-         stg.Rvmn_user, stg.Rvmx_user = float(aux[0]), float(aux[1])
+         stg.Rvmn_user, stg.Rvmx_user = [], []
+         for auxi in arg.split(":"):
+            stg.Rvmn_user.append(float(auxi.split(",")[0]))
+            stg.Rvmx_user.append(float(auxi.split(",")[1]))
 
       elif opt in ("--iz"):
-         aux = arg.split(",")
-         stg.Svmn_user, stg.Svmx_user = float(aux[0]), float(aux[1])
+         stg.Svmn_user, stg.Svmx_user = [], []
+         for auxi in arg.split(":"):
+            stg.Svmn_user.append(float(auxi.split(",")[0]))
+            stg.Svmx_user.append(float(auxi.split(",")[1]))
 
       elif opt in ("--pr"):
          aux = arg.split(",")
@@ -188,6 +197,17 @@ nu  = [ 0. for i in range(len(lbd_set)) ]
 lbd = [ 0. for i in range(len(lbd_set)) ]
 
 stg.N_nulbd = len(lbd_set)
+
+#If user-set limits are to applied, make sure not to accept improper number of limits: stop, if sizes do not match
+if ( stg.N_nulbd > 1 ):
+   if (stg.print_TP and (stg.Tvmn_user != False and stg.Tvmx_user != False  )):
+      if (stg.N_nulbd != np.shape(stg.Tvmn_user)[0] or stg.N_nulbd != np.shape(stg.Tvmx_user)[0]): sys.exit("(TP range) when setting ranges, they must be set for all wavelengths (--tz option).")
+   if (stg.print_PI and (stg.Pvmn_user != False and stg.Pvmx_user != False  )):
+      if (stg.N_nulbd != np.shape(stg.Tvmn_user)[0] or stg.N_nulbd != np.shape(stg.Tvmx_user)[0]): sys.exit("(PI range) when setting ranges, they must be set for all wavelengths (--pz option).")
+   if (stg.print_RM and (stg.Rvmn_user != False and stg.Rvmx_user != False  )):
+      if (stg.N_nulbd != np.shape(stg.Rvmn_user)[0] or stg.N_nulbd != np.shape(stg.Rvmx_user)[0]): sys.exit("(RM range) when setting ranges, they must be set for all wavelengths (--rz option).")
+   if (stg.print_SI and (stg.Svmn_user != False and stg.Svmx_user != False  )):
+      if (np.shape(stg.SI_set)[0] != np.shape(stg.Svmn_user)[0] or np.shape(stg.SI_set)[0] != np.shape(stg.Svmx_user)[0]): sys.exit("(SI range) when setting ranges, they must be set for all pairs of wavelengths (--iz option).")
 
 for i in range(stg.N_nulbd):
    nu[i],   lbd[i]   = stg.set_nuandlbd(nu_set[i],  lbd_set[i], i)
@@ -253,22 +273,22 @@ for i_nl in range(stg.N_nulbd):
    if (stg.spectral_mode): etyfil = etyfil + "_spectral"
    if stg.print_TP:
       # Drawing Total Power (TP) map
-      draw_map( I[i_nl].T, vecs, figext, ax_set, attr, etyfil, 'TP', from_file)
+      draw_map( I[i_nl].T, vecs, figext, ax_set, attr, etyfil, 'TP', from_file, i_nl)
       if (stg.print_prof): plot_profile(I[i_nl].T, figext, ax_set, etyfil, 'TP', attr)
    if stg.print_PI:
       # Drawing Polarized Intensity (PI) map
-      draw_map(PI[i_nl].T, vecs, figext, ax_set, attr, etyfil, 'PI', from_file)
+      draw_map(PI[i_nl].T, vecs, figext, ax_set, attr, etyfil, 'PI', from_file, i_nl)
       if (stg.print_prof): plot_profile(PI[i_nl].T, figext, ax_set, etyfil, 'PI', attr)
    if stg.print_RM:
       if np.max(RM) != 1.0 or np.min(RM) != 0.0:
          # We draw the Faraday rotation - Rotation measue (RM) only if RM != 0
-         draw_map(RM[i_nl].T/stg.norm('RM'), vecs, figext, ax_set, attr, etyfil, 'RM', from_file)
+         draw_map(RM[i_nl].T/stg.norm('RM'), vecs, figext, ax_set, attr, etyfil, 'RM', from_file, i_nl)
       else:
          print('RM = 0; I do not create the map.')
 for i_pair in stg.SI_set:
    attr = [time,lbd[i_pair[0]],lbd[i_pair[1]]]
    if stg.print_SI:
-      draw_map(SI[stg.SI_set.index(i_pair)].T, vecs, figext, ax_set, attr, etyfil, 'SI', from_file)
+      draw_map(SI[stg.SI_set.index(i_pair)].T, vecs, figext, ax_set, attr, etyfil, 'SI', from_file, stg.SI_set.index(i_pair))
       if (stg.print_prof): plot_profile(SI[stg.SI_set.index(i_pair)].T, figext, ax_set, etyfil, 'SI', attr)
 
 #py.show()
