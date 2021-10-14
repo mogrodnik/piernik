@@ -82,7 +82,7 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
          else:
             for i3 in range(n3):
                #elfq = electrons.crenpp(nu_s, ncre, B_perp[i3], Ecre[:,i3])            # DEPRECATED
-               elfq = electrons.crenppfq(0, ncre, B_perp[i3], Ecre[:,i3], Ncre[:,i3])  # "0" stands for nu index, for optimization
+               elfq = electrons.crenppfq(i_nl, ncre, B_perp[i3], Ecre[:,i3], Ncre[:,i3])  # "0" stands for nu index, for optimization
                I[i3] = np.sqrt(nu_s[i_nl]*B_perp[i3]) * elfq
 
             #if stg.print_SI:
@@ -108,7 +108,6 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
 # Perform SI computations after iterations of I are over for all wavelengths / frequencies
    if stg.print_SI:
       for i_pairs in stg.SI_set:
-         #I2_sum[i_nl] = I2.sum()
          SI[stg.SI_set.index(i_pairs)] = np.log10(I_sum[i_pairs[1]] / (I_sum[i_pairs[0]] + 1.e-240) + 1.e-200) / np.log10(nu_s[i_pairs[1]] / nu_s[i_pairs[0]])
 
 # The function returns the summed Stokes parameters I, Q and U, and rotation measure RM. The spectral index should be removed from here and computed in the plot_maps routine.
