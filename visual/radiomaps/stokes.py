@@ -42,15 +42,17 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
 # Faraday rotation for a single cell
    dRM = B_paral*rho_ion*ds
 # TODO: The constant 0.808 is missing here
-# RM is measured in rad m^{}−2}, the line-of-sight magnetic field B_{reg,\paral} in \muG, the thermal electron density ne in cm^{−3} and the line of sight l in pc.
-
-# Integral of the rotation measure along the line of sight - in the discrete representation this is cumulative sum starting from the cell on the line of sight, which is closest to the observer. This quantity is needed for computations of the rotation of the polarization plane of the radiation emitted along the line of sight.
-   RM = dRM.cumsum()*stg.RMunit()
-   if stg.print_RM:
-      # Total rotation measure along the line of sight
-      RM_sum=RM[n-1]
 
    for i_nl in N_iter:
+
+      # RM is measured in rad m^{}−2}, the line-of-sight magnetic field B_{reg,\paral} in \muG, the thermal electron density ne in cm^{−3} and the line of sight l in pc.
+
+      # Integral of the rotation measure along the line of sight - in the discrete representation this is cumulative sum starting from the cell on the line of sight, which is closest to the observer. This quantity is needed for computations of the rotation of the polarization plane of the radiation emitted along the line of sight.
+      RM = dRM.cumsum()*stg.RMunit()
+      if stg.print_RM:
+         # Total rotation measure along the line of sight
+         RM_sum[i_nl] = RM[n-1]     # FIXME TODO I am one dimensional! I look the same for all wavelengths! ### Not an error, but multiplies one quantity
+
       if stg.print_PI or stg.print_SI or stg.print_vec:
          # The change of polarization angle across the whole emitting region.
          delta_phi = RM*lambda_s[i_nl]**2    # WARNING
