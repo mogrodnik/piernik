@@ -261,7 +261,7 @@ for i_nl in range(stg.N_nulbd):
    if stg.print_PI:
       # Drawing Polarized Intensity (PI) map
       draw_map(PI.T, vecs, figext, ax_set, attr, etyfil, 'PI', from_file, i_nl)
-      if (stg.print_prof): plot_profile(PI[i_nl].T, figext, ax_set, etyfil, 'PI', attr)
+      if (stg.print_prof): plot_profile(PI.T, figext, ax_set, etyfil, 'PI', attr)
 for i_pair in stg.SI_set:
    attr = [time,lbd[i_pair[0]],lbd[i_pair[1]]]
    if stg.print_SI:
