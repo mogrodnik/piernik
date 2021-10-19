@@ -199,7 +199,9 @@ print("Wavelengths (m):  ", lbd)
 print("Frequencies (MHz):", [ round(item / 1.e6, 2) for item in nu])
 
 wave_data = [nu, lbd]
-if (stg.spectral_mode): initialize_crspectrum_tools(ncre, nu)
+if (stg.spectral_mode):
+   read_CRESP_params(file_name)
+   initialize_crspectrum_tools(stg.ncre, stg.p_min_fix, stg.p_max_fix, nu)
 
 if not from_file:
    # Analytical data might be used,for testing of the maping routines, to generate 3D arrays of CR energy density, gas density and magnetic fild.

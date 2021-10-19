@@ -1,5 +1,5 @@
 from numpy import log, log10, zeros, asfarray, sqrt, sign, pi
-from settings import MHz, p_min_fix, p_max_fix, const_synch, maxcren, arr_dim, q_big, q_eps
+from settings import MHz, const_synch, maxcren, arr_dim, q_big, q_eps # WARNING these are hard-coded in settings
 
 # General constants and arrays here
 # Optimize (minimize duplicated executions)
@@ -15,13 +15,22 @@ _const_1956_x_sqrt_nu_by_16p1MHz      = []
 _smallB             = 1.e-24
 _one                = 1.0
 _zero               = 0.0
+# FIXME / BEWARE for some reason ncre, p_min_fix and p_max_fix retain their default, hard-coded values from settings,
+# even if 'read_CRESP_params' is run at 'main' before 'initialize_crspectrum_tools'.
+# The below three serves as in-module storage for the right values, provided at initialization
+_p_min_fix          = 0.0
+_p_max_fix          = 0.0
+_ncre               = 0
 
-def initialize_crspectrum_tools(ncre, nu):
-   global p_fix, p_fix3, _ncre_m2, _log10_pmax_by_pmin, _const_1956_x_sqrt_nu_by_16p1MHz
+def initialize_crspectrum_tools(ncre, p_min_fix, p_max_fix, nu):
+   global p_fix, p_fix3, _ncre_m2, _log10_pmax_by_pmin, _const_1956_x_sqrt_nu_by_16p1MHz, _p_min_fix, _p_max_fix, _ncre
 # var_names now should be initialized with values from problem.par@hdf file
 # Initialize quantities dependent on read parameters and remaining constant throughout computation
+   _p_min_fix           = p_min_fix
+   _p_max_fix           = p_max_fix
+   _ncre                = ncre
    _ncre_m2             = float(ncre - 2.)
-   _log10_pmax_by_pmin  = log10(p_max_fix / p_min_fix)
+   _log10_pmax_by_pmin  = log10(_p_max_fix / _p_min_fix)
 # Reconstruct momenta
    edges = []
    edges[0:ncre+1] = range(0,ncre+1, 1)
@@ -60,7 +69,7 @@ def nu_all_B_to_p(B_perp, nui): # Based on approximation by Mulcahy et al. (2018
 #=============================================================================================================================
 def nu_to_ind(nu_ind, B_perp, ncre):
    p_nu = nu_all_B_to_p(B_perp, nu_ind)
-   nu_to_ind = int( (log10(p_nu/p_min_fix)/_log10_pmax_by_pmin) * _ncre_m2 + _one)
+   nu_to_ind = int( (log10(p_nu/_p_min_fix)/_log10_pmax_by_pmin) * _ncre_m2 + _one)
 
    if nu_to_ind > ncre: nu_to_ind = ncre
    if nu_to_ind < 0: nu_to_ind = 0
@@ -77,7 +86,7 @@ def crenpp(nu_s, ncre, bperp, ecr):
    if (p_nu < p_fix[p_ind] and p_nu > p_fix[p_ind-1]):
       delta_p = p_i - p_fix[p_ind-1]
    else:
-      delta_p = p_max_fix - p_i  # WARNING temporary fix
+      delta_p = _p_max_fix - p_i  # WARNING temporary fix
    elfq = const_synch * cren_i / delta_p
    return elfq
 

@@ -296,3 +296,22 @@ def data_h5(plik,ax_set,wave_data):
                SI[:, i, j] = plot_data_arrays[4][:]
       print('B mean, max z = ', np.mean(np.abs(Bn[:,:,klo:khi])), np.amax(np.abs(Bn[:,:,klo:khi])))
    return I, Q, U, RM, SI, x, y, figext, time
+
+def read_CRESP_params(fileh5_name):
+
+   h5f = h5.File(fileh5_name, 'r')
+   stg.ncre      = read_1h5_attr(h5f, ['ncre'], stg.ncre)
+   stg.p_min_fix = read_1h5_attr(h5f, ['p_min_fix'], stg.p_min_fix)
+   stg.p_max_fix = read_1h5_attr(h5f, ['p_max_fix'], stg.p_max_fix)
+
+def read_1h5_attr(h5f, parameter_nameL, parameter_default):
+   try:
+      if (len(parameter_nameL) > 1): # expect group member
+         parameter = h5f[parameter_nameL[0]].attrs[parameter_nameL[1]][0]
+      else: # expect main structure member
+         parameter = h5f.attrs[parameter_nameL[0]][0]
+   except:
+      print("[read_data:read_1h5_attr] Problem reading parameter: %s. Assuming default: %s" %(str(parameter_nameL), str(parameter_default)) )
+      parameter = parameter_default
+
+   return parameter
