@@ -148,9 +148,9 @@ def colormap(lab):
 # title - title of the plot
 def title(lab,attr):
    time, l1, l2 = attr
-   lbdcm = ' | '+str(l1/cm)+' cm'
+   lbdcm = ' | '+str(round(l1/cm, 2))+' cm'
    if lab == lab_SI:
-      lbdcm = lbdcm+' & '+str(l2/cm)+' cm'
+      lbdcm = lbdcm+' & '+str(round(l2/cm, 2))+' cm'
    if lab == lab_RM:
       lbdcm = ''
    return lab+lbdcm+' | t = '+str(round(time))+' Myr'
