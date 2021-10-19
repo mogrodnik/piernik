@@ -232,9 +232,9 @@ for i_nl in range(stg.N_nulbd):
          RM = data_beam_convolve(RM, beam, nbeam)
 
    if stg.print_PI or stg.print_vec:
-      PI, PI_obs = polarized(I, Q, U)
+      PI, PI_obs = polarized(I[i_nl], Q[i_nl], U[i_nl])
    if stg.print_vec:
-      wp, wq = vector_direction(PI_obs, Q, U)
+      wp, wq = vector_direction(PI_obs, Q[i_nl], U[i_nl])
       # Creation of a mesh of points to place vectors
       X, Y = np.meshgrid(x,y)
       vecs = stg.dokvec(wp, wq, X, Y, ax_set, from_file)
@@ -245,7 +245,7 @@ for i_nl in range(stg.N_nulbd):
       if stg.print_TP:
          I[i_nl]  = I[i_nl]**stg.normalise_exponent_PI
       if stg.print_PI:
-         PI[i_nl] = PI[i_nl]**stg.normalise_exponent_PI
+         PI = PI**stg.normalise_exponent_PI
 
    print("From_file: ", from_file)
 
@@ -260,7 +260,7 @@ for i_nl in range(stg.N_nulbd):
       if (stg.print_prof): plot_profile(I[i_nl].T, figext, ax_set, etyfil, 'TP', attr)
    if stg.print_PI:
       # Drawing Polarized Intensity (PI) map
-      draw_map(PI[i_nl].T, vecs, figext, ax_set, attr, etyfil, 'PI', from_file, i_nl)
+      draw_map(PI.T, vecs, figext, ax_set, attr, etyfil, 'PI', from_file, i_nl)
       if (stg.print_prof): plot_profile(PI[i_nl].T, figext, ax_set, etyfil, 'PI', attr)
 for i_pair in stg.SI_set:
    attr = [time,lbd[i_pair[0]],lbd[i_pair[1]]]
