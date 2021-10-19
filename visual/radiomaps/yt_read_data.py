@@ -118,7 +118,7 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
    I  = np.zeros((N_nl, imres[0], imres[1]))
    Q  = np.zeros((N_nl, imres[0], imres[1]))
    U  = np.zeros((N_nl, imres[0], imres[1]))
-   RM = np.zeros((N_nl, imres[0], imres[1]))
+   RM = np.zeros((imres[0], imres[1]))
    SI = np.zeros((np.shape(stg.SI_set)[0], imres[0], imres[1]))
    Ecrp = []
 
@@ -180,7 +180,7 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
          if stg.print_PI or stg.print_SI or stg.print_vec:
             Q[:,i,j], U[:,i,j] = plot_data_arrays[1:3][:]
          if stg.print_RM:
-            RM[:,i,j] = plot_data_arrays[3][:]
+            RM[i,j] = plot_data_arrays[3]
          if stg.print_SI:
             SI[:,i,j] = plot_data_arrays[4][:]
 
