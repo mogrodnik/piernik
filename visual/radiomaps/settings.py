@@ -11,10 +11,10 @@ Hz = 1 ; MHz = Hz * 1.0e6 ; GHz = MHz * 1.0e3 ; clight = 3.e8 #m/s
 metr = 1 ; cm = 0.01 * metr
 
 const_synch = 1. #1.e8  # DEPRECATED ??
-p_min_fix = 5.e0     #TODO !> if possible - read the below from h5file, if available
-p_max_fix = 3.e5
+p_min_fix = 1.e0
+p_max_fix = 1.e6
 ncre      = 14
-maxcren   = ncre # 12
+maxcren   = ncre
 q_eps     = 0.001
 q_big     = 30.
 arr_dim   = 1000      #TODO <! if possible - read the above from h5file, if available
