@@ -42,7 +42,7 @@ def cli_params(argv):
       sys.exit(2)
    for opt, arg in opts:
       if opt in ("-h", "--help"):
-         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -k sets the second wavelength for sectral index maps (DEPRECATED). \n -n sets the frequency \n -m sets the second frequency for spectral index maps \n -c convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i pair1,pair2,.. generates the map of Spectral Index (SI), requires additional input: list indexes of of pairs of wavelengths or frequencies provided in -l or -n (e.g., 01,02)  \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -r produces the map of Rotation measue (RM) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -S --spectral to generate synchrotron radiation maps using electron number and energy density data \n -R <integer> reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale\n --yt RESX,DEPTH use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>) with depth -DEPTH:DEPTH. Slower method, but works well with all levels of AMR data\n --{tz|pz|rz|iz} vmin,vmax \t to set plot limits for the given field (TP, PI, SI or RM, respectively)\n --pr width,height to set the absolute limits of plotted physical space \n --vp DVEC to set vector coverage")
+         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -k sets the second wavelength for sectral index maps (DEPRECATED). \n -n sets the frequency \n -m sets the second frequency for spectral index maps \n -c convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i pair1,pair2,.. generates the map of Spectral Index (SI), requires additional input: list indexes of of pairs of wavelengths or frequencies provided in -l or -n (e.g., 01,02)  \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -r produces the map of Rotation measue (RM) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -S --spectral to generate synchrotron radiation maps using electron number and energy density data \n -R <integer> reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale\n --yt RESX,DEPTH use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>) with depth -DEPTH:DEPTH. Slower method, but works well with all levels of AMR data\n --{tz|pz|rz|iz} vmin,vmax \t to set plot limits for the given field (TP, PI, SI or RM, respectively). \n \t \t \t \t For TP and PI it must match the number of wavelengths provided, for SI the number of pairs, for RM one set of limits (wavelength independent quantity) \n --pr width,height to set the absolute limits of plotted physical space \n --vp DVEC to set vector coverage")
          sys.exit()
       elif opt == '-x':
          global ax_set, ax
@@ -151,11 +151,10 @@ def cli_params(argv):
             stg.Pvmn_user.append(float(auxi.split(",")[0]))
             stg.Pvmx_user.append(float(auxi.split(",")[1]))
 
-      elif opt in ("--rz"):
-         stg.Rvmn_user, stg.Rvmx_user = [], []
-         for auxi in arg.split(":"):
-            stg.Rvmn_user.append(float(auxi.split(",")[0]))
-            stg.Rvmx_user.append(float(auxi.split(",")[1]))
+      elif opt in ("--rz"):   # RM is independent on wavelength
+         stg.Rvmn_user, stg.Rvmx_user = -100., 100.
+         stg.Rvmn_user = float(arg.split(",")[0])
+         stg.Rvmx_user = float(arg.split(",")[1])
 
       elif opt in ("--iz"):
          stg.Svmn_user, stg.Svmx_user = [], []
@@ -204,8 +203,6 @@ if ( stg.N_nulbd > 1 ):
       if (stg.N_nulbd != np.shape(stg.Tvmn_user)[0] or stg.N_nulbd != np.shape(stg.Tvmx_user)[0]): sys.exit("(TP range) when setting ranges, they must be set for all wavelengths (--tz option).")
    if (stg.print_PI and (stg.Pvmn_user != False and stg.Pvmx_user != False  )):
       if (stg.N_nulbd != np.shape(stg.Tvmn_user)[0] or stg.N_nulbd != np.shape(stg.Tvmx_user)[0]): sys.exit("(PI range) when setting ranges, they must be set for all wavelengths (--pz option).")
-   if (stg.print_RM and (stg.Rvmn_user != False and stg.Rvmx_user != False  )):
-      if (stg.N_nulbd != np.shape(stg.Rvmn_user)[0] or stg.N_nulbd != np.shape(stg.Rvmx_user)[0]): sys.exit("(RM range) when setting ranges, they must be set for all wavelengths (--rz option).")
    if (stg.print_SI and (stg.Svmn_user != False and stg.Svmx_user != False  )):
       if (np.shape(stg.SI_set)[0] != np.shape(stg.Svmn_user)[0] or np.shape(stg.SI_set)[0] != np.shape(stg.Svmx_user)[0]): sys.exit("(SI range) when setting ranges, they must be set for all pairs of wavelengths (--iz option).")
 
@@ -279,16 +276,15 @@ for i_nl in range(stg.N_nulbd):
       # Drawing Polarized Intensity (PI) map
       draw_map(PI[i_nl].T, vecs, figext, ax_set, attr, etyfil, 'PI', from_file, i_nl)
       if (stg.print_prof): plot_profile(PI[i_nl].T, figext, ax_set, etyfil, 'PI', attr)
-   if stg.print_RM:
-      if np.max(RM) != 1.0 or np.min(RM) != 0.0:
-         # We draw the Faraday rotation - Rotation measue (RM) only if RM != 0
-         draw_map(RM[i_nl].T/stg.norm('RM'), vecs, figext, ax_set, attr, etyfil, 'RM', from_file, i_nl)
-      else:
-         print('RM = 0; I do not create the map.')
 for i_pair in stg.SI_set:
    attr = [time,lbd[i_pair[0]],lbd[i_pair[1]]]
    if stg.print_SI:
       draw_map(SI[stg.SI_set.index(i_pair)].T, vecs, figext, ax_set, attr, etyfil, 'SI', from_file, stg.SI_set.index(i_pair))
       if (stg.print_prof): plot_profile(SI[stg.SI_set.index(i_pair)].T, figext, ax_set, etyfil, 'SI', attr)
-
+if stg.print_RM:
+   if np.max(RM) != 1.0 or np.min(RM) != 0.0:
+      # We draw the Faraday rotation - Rotation measue (RM) only if RM != 0
+      draw_map(RM.T/stg.norm('RM'), vecs, figext, ax_set, attr, etyfil, 'RM', from_file, i_nl)
+   else:
+      print('RM = 0; I do not create the map.')
 #py.show()  # DEPRECATED
