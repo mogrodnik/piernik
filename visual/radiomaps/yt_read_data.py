@@ -32,6 +32,7 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
 # ds         - cell size vector along the line of sight
 # imres      - image resolution; number of rays taken in image axes
 # imdepth    - range of integration along ax_set
+   N_nl = stg.N_nulbd
 
    h5ds = yt.load(filename, unit_system="code")
    I, Q, U, RM, SI = [], [], [], [], []
@@ -114,10 +115,11 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
    dh = ( rend[i_h] - rbeg[i_h] ) / imres[1]
 
    # Prepare arrays of synthetic observable quantities
-   I  = np.zeros((imres[0],imres[1]))
-   Q  = np.zeros((imres[0],imres[1]))
-   U  = np.zeros((imres[0],imres[1]))
-   RM = np.zeros((imres[0],imres[1]))
+   I  = np.zeros((N_nl, imres[0], imres[1]))
+   Q  = np.zeros((N_nl, imres[0], imres[1]))
+   U  = np.zeros((N_nl, imres[0], imres[1]))
+   RM = np.zeros((imres[0], imres[1]))
+   SI = np.zeros((np.shape(stg.SI_set)[0], imres[0], imres[1]))
    Ecrp = []
 
    # Prepare the limits of plotted area to be returned, NOTICE formally these are the same as provided by settings.plotext
@@ -174,13 +176,13 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
             plot_data_arrays = stokes_params(Bp, Bq, Bn, rho_ion, Ecrp, wave_data, ds, lends) # Does not contain khi-klo! - irrelevant for ray (supplying length of ds)
 
          if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
-            I[i,j] = plot_data_arrays[0]
+            I[:,i,j] = plot_data_arrays[0][:]
          if stg.print_PI or stg.print_SI or stg.print_vec:
-            Q[i,j], U[i,j] = plot_data_arrays[1:3]
+            Q[:,i,j], U[:,i,j] = plot_data_arrays[1:3][:]
          if stg.print_RM:
             RM[i,j] = plot_data_arrays[3]
          if stg.print_SI:
-            SI[i,j] = plot_data_arrays[4]
+            SI[:,i,j] = plot_data_arrays[4][:]
 
          if (high_verbosity): print("[%10.2f %10.2f %10.2f] , [%10.2f %10.2f %10.2f] | %3i / %3i | >>> %e" %(rbegv[0], rbegv[1], rbegv[2], rendv[0], rendv[1], rendv[2], i, j, I[i,j]) )
       print('Done: %5.1f%% (%i out of %i rows)' %(100 * float(i+1) / float(imres[0]), i+1, imres[0] ) )

@@ -115,7 +115,7 @@ def draw_vecs(ax,vecs,axis):
    qk = ax.quiverkey(Q1, 0.83, 0.04, 0.6, 'p = 60%',labelpos='E', coordinates='figure', color='black', fontproperties={'weight': 'bold', 'size': '24'})
    return ax
 
-def draw_map(data,vecs,figext,axis,attr,plot_file,lab,ff):
+def draw_map(data,vecs,figext,axis,attr,plot_file,lab,ff,i_nl):
 # data - table containing data to be displayed
 # vmin_, vmax_ -  minimum i maksimum of the color scale
 
@@ -125,7 +125,7 @@ def draw_map(data,vecs,figext,axis,attr,plot_file,lab,ff):
       else:
          data = np.where(data >= 0., np.log10(data), -np.log10(-data))
 
-   vmin_, vmax_ = stg.fvmax(lab,ff,data)
+   vmin_, vmax_ = stg.fvmax(lab,ff,data,i_nl)
 
    img = py.figure(figsize=figsz(axis))
    ax = prepare_draw(lab,attr,axis)
