@@ -188,7 +188,7 @@ if ( stg.N_nulbd > 1 ):
    if (stg.print_TP and (stg.Tvmn_user != False and stg.Tvmx_user != False  )):
       if (stg.N_nulbd != np.shape(stg.Tvmn_user)[0] or stg.N_nulbd != np.shape(stg.Tvmx_user)[0]): sys.exit("(TP range) when setting ranges, they must be set for all wavelengths (--tz option).")
    if (stg.print_PI and (stg.Pvmn_user != False and stg.Pvmx_user != False  )):
-      if (stg.N_nulbd != np.shape(stg.Tvmn_user)[0] or stg.N_nulbd != np.shape(stg.Tvmx_user)[0]): sys.exit("(PI range) when setting ranges, they must be set for all wavelengths (--pz option).")
+      if (stg.N_nulbd != np.shape(stg.Pvmn_user)[0] or stg.N_nulbd != np.shape(stg.Pvmx_user)[0]): sys.exit("(PI range) when setting ranges, they must be set for all wavelengths (--pz option).")
    if (stg.print_SI and (stg.Svmn_user != False and stg.Svmx_user != False  )):
       if (np.shape(stg.SI_set)[0] != np.shape(stg.Svmn_user)[0] or np.shape(stg.SI_set)[0] != np.shape(stg.Svmx_user)[0]): sys.exit("(SI range) when setting ranges, they must be set for all pairs of wavelengths (--iz option).")
 
