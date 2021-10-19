@@ -222,10 +222,10 @@ def fvmax(lab,ff,data,i_nl):
          else:
             vmn, vmx = Svmn_user[i_nl], Svmx_user[i_nl]
       if lab == 'RM':
-         if (Rvmn_user == False and Rvmx_user == False):
+         if (Rvmn_user == False and Rvmx_user == False): # disregard i_nl for RM
             vmn, vmx = -100., 100.
          else:
-            vmn, vmx = Rvmn_user[i_nl], Rvmx_user[i_nl]
+            vmn, vmx = Rvmn_user, Rvmx_user
       if print_log:
          if (  lab == "TP" and (Tvmn_user != False and Tvmx_user != False)):
             vmn, vmx = np.log10(Tvmn_user[i_nl]), np.log10(Tvmx_user[i_nl])
@@ -233,8 +233,8 @@ def fvmax(lab,ff,data,i_nl):
             vmn, vmx = np.log10(Pvmn_user[i_nl]), np.log10(Pvmx_user[i_nl])
          elif (lab == "SI" and (Svmn_user != False and Svmx_user != False)): # TODO FIXME Is there a point for logscale being allowed for SI?
             vmn, vmx = np.log10(Svmn_user[i_nl]), np.log10(Svmx_user[i_nl])
-         elif (lab == "RM" and (Rvmn_user != False and Rvmx_user != False)):
-            vmn, vmx = np.log10(Rvmn_user[i_nl]), np.log10(Rvmx_user[i_nl])
+         elif (lab == "RM" and (Rvmn_user != False and Rvmx_user != False)): # disregard i_nl for RM
+            vmn, vmx = np.sign(Rvmn_user) * np.log10(Rvmn_user), np.sign(Rvmx_user) * np.log10(Rvmx_user)
          else:
             vmn, vmx = -6., -2.
    return vmn, vmx
