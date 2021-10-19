@@ -1,5 +1,5 @@
 from numpy import log, log10, zeros, asfarray, sqrt, sign, pi
-from settings import MHz, const_synch, maxcren, arr_dim, q_big, q_eps # WARNING these are hard-coded in settings
+from settings import MHz, const_synch, maxcren, arr_dim_q, q_big, q_eps # WARNING these are hard-coded in settings
 
 # General constants and arrays here
 # Optimize (minimize duplicated executions)
@@ -116,13 +116,13 @@ def crenppfq(nu_ind, ncre, bperp, ecr, ncr):      # recovers spectral index q fr
 #=============================================================================================================================
 def prepare_q_grid(p_fix_ratio):   # fills grid with values of spectral indices 'q' in range of given e / (n p c), for further q interpolation
    global enpc_tab_q, q_grid, _inittab_dim, _log10_enpc_ratio
-   _inittab_dim = int(arr_dim / 4)
+   _inittab_dim = int(arr_dim_q / 4)
 
-   q_grid    = zeros(arr_dim)    # will contain data for later interpolation
+   q_grid    = zeros(arr_dim_q)    # will contain data for later interpolation
    q_inittab = zeros(_inittab_dim) # contains initial guesses for root finding procedure
 
    q_grid[:]               = q_big
-   q_grid[int(arr_dim/2):] = -q_big
+   q_grid[int(arr_dim_q/2):] = -q_big
 
    for i in range(1, int(0.5 * _inittab_dim)):
       q_inittab[i-1] = ln_eval_array_val(i, q_big, float(0.05), 1, int(0.5 * _inittab_dim -1))
@@ -131,14 +131,14 @@ def prepare_q_grid(p_fix_ratio):   # fills grid with values of spectral indices 
 
    enpc_max       = 1.1 * p_fix_ratio# / clight
    enpc_min       = 1.0 + 5e-8      # WARNING Magic number
-   enpc_tab_q     = zeros(arr_dim)
+   enpc_tab_q     = zeros(arr_dim_q)
    enpc_tab_q[:]  = enpc_min
 
-   j = min(arr_dim - int(arr_dim / (arr_dim / 100.)), arr_dim - 1)
-   while (q_grid[j] <= (-q_big) and (q_grid[arr_dim - 1] <= (-q_big))):
+   j = min(arr_dim_q - int(arr_dim_q / (arr_dim_q / 100.)), arr_dim_q - 1)
+   while (q_grid[j] <= (-q_big) and (q_grid[arr_dim_q - 1] <= (-q_big))):
       enpc_max = enpc_max - enpc_max * 0.005    # WARNING Magic number
-      for i in range(0, arr_dim):
-         enpc_tab_q[i]  = enpc_min * 10.0**((log10(enpc_max / enpc_min)) / float(arr_dim) * float(i))
+      for i in range(0, arr_dim_q):
+         enpc_tab_q[i]  = enpc_min * 10.0**((log10(enpc_max / enpc_min)) / float(arr_dim_q) * float(i))
       fill_q_grid(p_fix_ratio, q_inittab)
 
    _log10_enpc_ratio = log10(enpc_tab_q[-1] / enpc_tab_q[0])
@@ -155,7 +155,7 @@ def fill_q_grid(p_fix_ratio, q_init):
    solving_error     = True
    qx                = previous_solution
 
-   for i in range(1, arr_dim, 1):
+   for i in range(1, arr_dim_q, 1):
       qx, solving_error = ne_to_qNR(previous_solution, enpc_tab_q[i], p_fix_ratio, solving_error)
       if (solving_error):
          for j in range(1, _inittab_dim, 1):
@@ -208,9 +208,9 @@ def alpha_to_q(x, alpha, p_ratio_4_q): # Using this function (Miniati, 2001, eq.
       return alpha_to_q
 #=============================================================================================================================
 def interpolate_q(alpha):  # Finds value of spectral index 'q' by provided 'alpha' = e/npc; faster than running ne_to_qNR
-   index = int((log10(alpha / enpc_tab_q[0]) / _log10_enpc_ratio) * (arr_dim - 1) ) # + 1
-   if (index < 0 or index > arr_dim - 2):
-      index = max(0, min(arr_dim - 2, index) )
+   index = int((log10(alpha / enpc_tab_q[0]) / _log10_enpc_ratio) * (arr_dim_q - 1) ) # + 1
+   if (index < 0 or index > arr_dim_q - 2):
+      index = max(0, min(arr_dim_q - 2, index) )
       q_out = q_grid[index]   # If alpha exceeds enpc_tab_q limits: force the closest limiting q
    else:
       index2 = index + 1      # Prepare and linearly interpolate
