@@ -104,7 +104,7 @@ def crenppfq(nu_ind, ncre, bperp, ecr, ncr):      # recovers spectral index q fr
    npq_nu = _zero
    if (cree_i > _zero and cren_i > _zero):
       enpc_bin = cree_i / (cren_i * _one * p_im1)
-      q_bin     = interpolate_q(alpha = enpc_bin)
+      q_bin     = interpolate_q(enpc_bin, q1)  # WARNING TODO MAGIC NUMER; rather read and use q_init value from 'problem.par'
       # slv_error = False
       # q1, slv_error = ne_to_qNR(q1, enpc_bin, p_fix_ratio, slv_error) # possible, but computationally expensive
       f_binXfourXpi  = nq2fXfourXpi(cren_i, q_bin, p_im1, p_im13, p_i) # zwraca wartosc f(p,q) na lewej scianie wybranego binu
@@ -207,11 +207,10 @@ def alpha_to_q(x, alpha, p_ratio_4_q): # Using this function (Miniati, 2001, eq.
 
       return alpha_to_q
 #=============================================================================================================================
-def interpolate_q(alpha):  # Finds value of spectral index 'q' by provided 'alpha' = e/npc; faster than running ne_to_qNR
+def interpolate_q(alpha, q_error):  # Finds value of spectral index 'q' by provided 'alpha' = e/npc; faster than running ne_to_qNR
    index = int((log10(alpha / enpc_tab_q[0]) / _log10_enpc_ratio) * (arr_dim_q - 1) ) # + 1
    if (index < 0 or index > arr_dim_q - 2):
-      index = max(0, min(arr_dim_q - 2, index) )
-      q_out = q_grid[index]   # If alpha exceeds enpc_tab_q limits: force the closest limiting q
+      q_out = q_error # NOTICE assuming more natural value, instead of catastrophically high / low q_big
    else:
       index2 = index + 1      # Prepare and linearly interpolate
       q_out  = q_grid[index] + (alpha - enpc_tab_q[index]) * ( q_grid[index] - q_grid[index2]) / (enpc_tab_q[index] - enpc_tab_q[index2])
