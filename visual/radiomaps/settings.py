@@ -72,6 +72,14 @@ Svmn_user = False
 Svmx_user = False
 dokv_user = False
 
+#labels:
+lab_TP = 'TP'
+lab_PI = 'PI'
+lab_SI = 'SI'
+lab_RM = 'RM'
+
+apply_linear = [lab_SI] # SI usually encompasses range close to 0 and below 0, and it is impractical to present it in logscale
+
 def RMunit():
    # RM = 0,812 * B_{||} * rho_i * ds * (cm/pc)**3 * (mgs/muG) * (Msun/mH) * (102/136) [rad/m**2]
    mgs_muG = 2.8519
@@ -118,16 +126,10 @@ def set_nuandlbd(ns,ls,ss):
    print(ss, ': nu = ', nu/GHz, ' GHz, lambda = ', lbd/cm, ' cm')
    return nu, lbd
 
-#labels:
-lab_TP = 'TP'
-lab_PI = 'PI'
-lab_SI = 'SI'
-lab_RM = 'RM'
-
 # cbar_label - title of color bar
 def ety(lab):
    etyk = lab
-   if print_log:
+   if (print_log and lab not in apply_linear):
       etyk = r'log$_{10}$('+lab+')'
    if (lab == lab_RM):
       etyk = etyk+r' $[rad / m^2]$'
@@ -227,14 +229,15 @@ def fvmax(lab,ff,data,i_nl):
          else:
             vmn, vmx = Rvmn_user, Rvmx_user
       if print_log:
-         if (  lab == "TP" and (Tvmn_user != False and Tvmx_user != False)):
-            vmn, vmx = np.log10(Tvmn_user[i_nl]), np.log10(Tvmx_user[i_nl])
-         elif (lab == "PI" and (Pvmn_user != False and Pvmx_user != False)):
-            vmn, vmx = np.log10(Pvmn_user[i_nl]), np.log10(Pvmx_user[i_nl])
-         elif (lab == "SI" and (Svmn_user != False and Svmx_user != False)): # TODO FIXME Is there a point for logscale being allowed for SI?
-            vmn, vmx = np.log10(Svmn_user[i_nl]), np.log10(Svmx_user[i_nl])
-         elif (lab == "RM" and (Rvmn_user != False and Rvmx_user != False)): # disregard i_nl for RM
-            vmn, vmx = np.sign(Rvmn_user) * np.log10(Rvmn_user), np.sign(Rvmx_user) * np.log10(Rvmx_user)
-         else:
-            vmn, vmx = -6., -2.
+         if (lab not in apply_linear):
+            if (  lab == "TP" and (Tvmn_user != False and Tvmx_user != False)):
+               vmn, vmx = np.log10(Tvmn_user[i_nl]), np.log10(Tvmx_user[i_nl])
+            elif (lab == "PI" and (Pvmn_user != False and Pvmx_user != False)):
+               vmn, vmx = np.log10(Pvmn_user[i_nl]), np.log10(Pvmx_user[i_nl])
+            elif (lab == "SI" and (Svmn_user != False and Svmx_user != False)): # NOTICE logscale is not applied to SI by default
+               vmn, vmx = np.log10(Svmn_user[i_nl]), np.log10(Svmx_user[i_nl])
+            elif (lab == "RM" and (Rvmn_user != False and Rvmx_user != False)): # disregard i_nl for RM
+               vmn, vmx = np.sign(Rvmn_user) * np.log10(Rvmn_user), np.sign(Rvmx_user) * np.log10(Rvmx_user)
+            else:
+               vmn, vmx = -6., -2.
    return vmn, vmx
