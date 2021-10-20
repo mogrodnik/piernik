@@ -96,8 +96,9 @@ def draw_cb(lab,axis,cax):
    cb.set_label(stg.ety(lab),fontsize=fsize)
 
    if lab == 'RM':
-      cb.set_ticks([-100, -80, -60, -40, -20, 0, 20, 40, 60, 80, 100])
-      cb.set_ticklabels(["-100", "-80", "-60", "-40", "-20", "0", "20", "40", "60", "80", "100"])
+      if (not stg.print_log or lab in stg.apply_linear):
+         cb.set_ticks([-100, -80, -60, -40, -20, 0, 20, 40, 60, 80, 100])
+         cb.set_ticklabels(["-100", "-80", "-60", "-40", "-20", "0", "20", "40", "60", "80", "100"])
 
    for t in cb.ax.get_yticklabels():
       t.set_fontsize(fsize)
@@ -120,10 +121,11 @@ def draw_map(data,vecs,figext,axis,attr,plot_file,lab,ff,i_nl):
 # vmin_, vmax_ -  minimum i maksimum of the color scale
 
    if stg.print_log:
-      if (lab == "TP" or lab == "PI"):
-         data = np.log10(data)
-      else:
-         data = np.where(data >= 0., np.log10(data), -np.log10(-data))
+      if (lab not in stg.apply_linear):
+         if (lab == "TP" or lab == "PI"):
+            data = np.log10(data)
+         else:
+            data = np.where(data >= 0., np.log10(data), -np.log10(-data))
 
    vmin_, vmax_ = stg.fvmax(lab,ff,data,i_nl)
 
