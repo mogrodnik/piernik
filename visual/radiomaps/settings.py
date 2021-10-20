@@ -46,6 +46,7 @@ klo, khi = -1, -1
 normalise_exponent_PI = 0.5     # 0.7
 # vectors scaling for quiver method (stg)
 scale_vec_PI = 0.01
+lin_threshold = 1.0
 
 N_nulbd  = 0
 SI_set   = []
@@ -237,7 +238,7 @@ def fvmax(lab,ff,data,i_nl):
             elif (lab == "SI" and (Svmn_user != False and Svmx_user != False)): # NOTICE logscale is not applied to SI by default
                vmn, vmx = np.log10(Svmn_user[i_nl]), np.log10(Svmx_user[i_nl])
             elif (lab == "RM" and (Rvmn_user != False and Rvmx_user != False)): # disregard i_nl for RM
-               vmn, vmx = np.sign(Rvmn_user) * np.log10(Rvmn_user), np.sign(Rvmx_user) * np.log10(Rvmx_user)
+               vmn, vmx = np.sign(Rvmn_user) * np.log10(abs(Rvmn_user)), np.sign(Rvmx_user) * np.log10(Rvmx_user)
             else:
                vmn, vmx = -6., -2.
    return vmn, vmx
