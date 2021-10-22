@@ -4,6 +4,7 @@ from mpl_toolkits.axes_grid1 import AxesGrid
 import matplotlib.gridspec as gridspec
 import settings as stg
 import os
+from math import ceil
 
 fsize = 24
 
@@ -96,8 +97,21 @@ def draw_cb(lab,axis,cax):
    cb.set_label(stg.ety(lab),fontsize=fsize)
 
    if lab == 'RM':
-      cb.set_ticks([-100, -80, -60, -40, -20, 0, 20, 40, 60, 80, 100])
-      cb.set_ticklabels(["-100", "-80", "-60", "-40", "-20", "0", "20", "40", "60", "80", "100"])
+      caxmin, caxmax = cax.get_clim()
+      if (not stg.print_log or lab in stg.apply_linear):
+         ticks = [ item for item in np.linspace(caxmin, caxmax, min(abs(caxmax - caxmin), 10)) ]
+         tickl = [str(round(item,2)) for item in ticks]
+         cb.set_ticks(ticks)
+         cb.set_ticklabels(tickl)
+      else: # Forces symlog-like scale. Not great, not terrible, but works. TODO improve ticks coverage of cbar, arbitrary parameters applied here.
+         powers = [item for item in np.linspace(np.log10(stg.lin_threshold), caxmax, min(abs(ceil(caxmax) - ceil(caxmin)), 10))]
+         ticks  = [item for item in powers]
+         powers = [item for item in np.linspace(np.sign(caxmin) * np.log10(stg.lin_threshold), caxmin, min(ceil(caxmax) - ceil(caxmin), 10))]
+         for item in powers: ticks.append(item)
+         tickl  = [str(round(np.sign(item) * 10**abs(item),1)) for item in ticks]
+         ticks.append(0);  tickl.append('0.')
+         cb.set_ticks(ticks)
+         cb.set_ticklabels(tickl)
 
    for t in cb.ax.get_yticklabels():
       t.set_fontsize(fsize)
@@ -120,10 +134,12 @@ def draw_map(data,vecs,figext,axis,attr,plot_file,lab,ff,i_nl):
 # vmin_, vmax_ -  minimum i maksimum of the color scale
 
    if stg.print_log:
-      if (lab == "TP" or lab == "PI"):
-         data = np.log10(data)
-      else:
-         data = np.where(data >= 0., np.log10(data), -np.log10(-data))
+      if (lab not in stg.apply_linear):
+         if (lab == "TP" or lab == "PI"):
+            data = np.log10(data)
+         else:
+            data = np.where(data >  stg.lin_threshold,  np.log10(data),  data)
+            data = np.where(data < -stg.lin_threshold, -np.log10(-data), data)
 
    vmin_, vmax_ = stg.fvmax(lab,ff,data,i_nl)
 
