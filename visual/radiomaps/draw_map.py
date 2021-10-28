@@ -123,9 +123,13 @@ def draw_vecs(ax,vecs,axis):
 
    wp, wq, X, Y = vecs
 
+   cellsize = (X[-1][-1] - X[0][0]) / (max(np.shape(X)) + 1) # Assumes square-like cell, serves to scale vectors to cell-diagonal * dokvec
+   scale_u = 2. * np.sqrt(2) / ( ax.figure.dpi * cellsize ) if stg.use_vec_scaling else scalevec(ax) # TODO add switch for user to additionally scale vectors via parameter/option
+
    r = 1 #np.sqrt(wq**2 + wp**2)
-   Q1 = ax.quiver(X, Y, +0.5*wq/r, +0.5*wp/r, headwidth=0, minlength=0, color='black', width=0.003, scale_units='xy', scale=scalevec(axis))
-   Q2 = ax.quiver(X, Y, -0.5*wq/r, -0.5*wp/r, headwidth=0, minlength=0, color='black', width=0.003, scale_units='xy', scale=scalevec(axis))
+   Q1 = ax.quiver(X, Y, +0.5*wq/r, +0.5*wp/r, headwidth=0, minlength=0, color='black', width=0.002, scale_units = "dots" if stg.use_vec_scaling else "xy", scale = scale_u)
+   Q2 = ax.quiver(X, Y, -0.5*wq/r, -0.5*wp/r, headwidth=0, minlength=0, color='black', width=0.002, scale_units = "dots" if stg.use_vec_scaling else "xy", scale = scale_u)
+
    qk = ax.quiverkey(Q1, 0.83, 0.04, 0.6, 'p = 60%',labelpos='E', coordinates='figure', color='black', fontproperties={'weight': 'bold', 'size': '24'})
    return ax
 
