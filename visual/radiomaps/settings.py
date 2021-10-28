@@ -45,7 +45,7 @@ klo, khi = -1, -1
 # normalization paramer for vectors on the map (stg)
 normalise_exponent_PI = 0.5     # 0.7
 # vectors scaling for quiver method (stg)
-scale_vec_PI = 0.01
+scale_vec_maxPD = 0.7
 use_vec_scaling = True
 
 lin_threshold = 1.0
