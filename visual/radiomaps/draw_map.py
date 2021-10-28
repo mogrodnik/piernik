@@ -127,8 +127,10 @@ def draw_vecs(ax,vecs,axis):
    scale_u = 2. * np.sqrt(2) * stg.scale_vec_maxPD / ( ax.figure.dpi * cellsize ) if stg.use_vec_scaling else scalevec(ax)
 
    r = 1 #np.sqrt(wq**2 + wp**2)
-   Q1 = ax.quiver(X, Y, +0.5*wq/r, +0.5*wp/r, headwidth=0, minlength=0, color='black', width=0.002, scale_units = "dots" if stg.use_vec_scaling else "xy", scale = scale_u)
-   Q2 = ax.quiver(X, Y, -0.5*wq/r, -0.5*wp/r, headwidth=0, minlength=0, color='black', width=0.002, scale_units = "dots" if stg.use_vec_scaling else "xy", scale = scale_u)
+   W1 = ax.quiver(X, Y, +0.50*wq/r, +0.50*wp/r, headwidth=1., headlength=0., minlength=0, color='white', width=0.003, scale_units = "dots" if stg.use_vec_scaling else "xy", scale = scale_u)
+   Q1 = ax.quiver(X, Y, +0.49*wq/r, +0.49*wp/r, headwidth=1., headlength=0., minlength=0, color='black', width=0.002, scale_units = "dots" if stg.use_vec_scaling else "xy", scale = scale_u)
+   W2 = ax.quiver(X, Y, -0.50*wq/r, -0.50*wp/r, headwidth=1., headlength=0., minlength=0, color='white', width=0.003, scale_units = "dots" if stg.use_vec_scaling else "xy", scale = scale_u)
+   Q2 = ax.quiver(X, Y, -0.49*wq/r, -0.49*wp/r, headwidth=1., headlength=0., minlength=0, color='black', width=0.002, scale_units = "dots" if stg.use_vec_scaling else "xy", scale = scale_u)
 
    qk = ax.quiverkey(Q1, 0.83, 0.04, 0.6, 'p = 60%',labelpos='E', coordinates='figure', color='black', fontproperties={'weight': 'bold', 'size': '24'})
    return ax
