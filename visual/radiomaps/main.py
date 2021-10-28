@@ -42,7 +42,7 @@ def cli_params(argv):
       sys.exit(2)
    for opt, arg in opts:
       if opt in ("-h", "--help"):
-         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -n sets the frequency \n -c convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i pair1,pair2,.. generates the map of Spectral Index (SI), requires additional input: list indexes of of pairs of wavelengths or frequencies provided in -l or -n (e.g., 01,02)  \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -r produces the map of Rotation measue (RM) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -S --spectral to generate synchrotron radiation maps using electron number and energy density data \n -R <integer> reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale \n --lin {SI,TP,PI,RM} to override logarythmic scaling for chosen components \n --yt RESX,DEPTH use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>) with depth -DEPTH:DEPTH. Slower method, but works well with all levels of AMR data\n --{tz|pz|rz|iz} vmin,vmax \t to set plot limits for the given field (TP, PI, SI or RM, respectively). \n \t \t \t \t For TP and PI it must match the number of wavelengths provided, for SI the number of pairs, for RM one set of limits (wavelength independent quantity) \n --pr width,height to set the absolute limits of plotted physical space \n --vp DVEC to set vector coverage")
+         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -n sets the frequency \n -c convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i pair1,pair2,.. generates the map of Spectral Index (SI), requires additional input: list indexes of of pairs of wavelengths or frequencies provided in -l or -n (e.g., 01,02)  \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -r produces the map of Rotation measue (RM) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -S --spectral to generate synchrotron radiation maps using electron number and energy density data \n -R <integer> reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale \n --lin {SI,TP,PI,RM} to override logarythmic scaling for chosen components \n --yt RESX,DEPTH \t use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>); type 'max' for max. practical resolution, with depth -DEPTH:DEPTH. \n \t \t \t Slower method, but works well with all levels of AMR data\n --{tz|pz|rz|iz} vmin,vmax \t to set plot limits for the given field (TP, PI, SI or RM, respectively). \n \t \t \t \t For TP and PI it must match the number of wavelengths provided, for SI the number of pairs, for RM one set of limits (wavelength independent quantity) \n --pr width,height to set the absolute limits of plotted physical space \n --vp DVEC to set vector coverage")
          sys.exit()
       elif opt == '-x':
          global ax_set, ax
@@ -121,13 +121,13 @@ def cli_params(argv):
          global yt_imres, yt_depth
          aux        = arg.split(",")
          if (len(aux) < 2): sys.exit("Problem in reading parameters RESX,DEPTH from --yt arguments; got: %s" %str(aux))
-         yt_imres   = int(aux[0])
+         yt_imres = aux[0] if aux[0] == "max" else int(aux[0])
          try:
             yt_depth   = float(aux[1])
          except:
             yt_depth   = "max"
          stg.use_yt = True
-         print("Modules data_h5_yt and yt will be imported, depth %10.1f resolution: %i" %(yt_depth, yt_imres))
+         print("Modules data_h5_yt and yt will be imported, depth %10.1f resolution: %s" %(yt_depth, str(yt_imres)))
 
       elif opt in ("--tz"):
          stg.Tvmn_user, stg.Tvmx_user = [], []
