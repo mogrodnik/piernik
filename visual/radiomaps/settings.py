@@ -46,6 +46,8 @@ klo, khi = -1, -1
 normalise_exponent_PI = 0.5     # 0.7
 # vectors scaling for quiver method (stg)
 scale_vec_PI = 0.01
+use_vec_scaling = True
+
 lin_threshold = 1.0
 
 N_nulbd  = 0
@@ -178,7 +180,6 @@ def dokv(ff,ax_set):
 def dokvec(wp,wq,X,Y,axis,ff):
    dok = dokv(ff,axis)
    wp, wq, X, Y = np.array(wp), np.array(wq), np.array(X), np.array(Y)
-   print(np.shape(wp))
    wp = wp[::dok,::dok]
    wq = wq[::dok,::dok]
    X  = X[::dok,::dok]
