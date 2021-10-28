@@ -123,8 +123,8 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
    Ecrp = []
 
    # Prepare the limits of plotted area to be returned, NOTICE formally these are the same as provided by settings.plotext
-   x = np.linspace(rbeg[i_w] / 1000., rend[i_w] / 1000., imres[0])
-   y = np.linspace(rbeg[i_h] / 1000., rend[i_h] / 1000., imres[1])
+   x = np.linspace((rbeg[i_w] + 0.5 * dw) / 1000., (rend[i_w] - 0.5 * dw) / 1000., imres[0])
+   y = np.linspace((rbeg[i_h] + 0.5 * dh) / 1000., (rend[i_h] - 0.5 * dh) / 1000., imres[1])
    figext = [(rbeg[i_w])/ 1000., (rend[i_w])/ 1000., (rbeg[i_h])/ 1000., (rend[i_h])/ 1000.]
 
    # Prepare variable coordinates for iteration in domain

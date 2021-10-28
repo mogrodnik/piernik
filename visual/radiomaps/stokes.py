@@ -110,8 +110,9 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
 def polarized(I,Q,U):
 # I - total intensity of the synchrotron radiation (Total Power - TP).
 # Q,U - Stokes parameters.
+   eps_I = max(I.min() * 1.e-6, 1.e-30)    # scales component used to avoid division by 0 by using minimum of I
    PI = np.sqrt(Q**2 + U**2)
-   PI_obs = (PI / (I+1e-6))
+   PI_obs = (PI / (I + eps_I))
    print('Mean PI/I:             ', np.mean(PI_obs))
    return PI, PI_obs
 
