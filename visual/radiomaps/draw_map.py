@@ -166,3 +166,18 @@ def draw_map(data,vecs,figext,axis,attr,plot_file,lab,ff,i_nl):
    for ss in stg.suffix:
       py.savefig('./radiomaps/'+lab+plot_file+'.'+ss)
       print("Image storred in file: ",'./radiomaps/'+lab+plot_file+'.'+ss)
+
+def dump_data(data, lbd, nu, figext, plot_file, lab):
+
+   fname = lab + plot_file + ".dat"
+   data_shape = np.shape(data)
+   with open('./radiomaps/' + fname, "w+") as f: # radiomaps directory should have been already created
+      f.write("#HEADER: label = " + str(lab) + "; frequency = " + str(nu).strip("[").strip("]") + "; wavelength = " + str(lbd).strip("[").strip("]")
+              + "; size = " + str(figext).strip("[").strip("]") + "; data_shape = " + str(data_shape).strip("(").strip(")") + " \n" )
+
+      for i in range(data_shape[0]):
+         for j in range(data_shape[1]):
+            f.write("%16.10e\t" %(data[i, j]))
+         f.write("\n")
+
+   f.close()
