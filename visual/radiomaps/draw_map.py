@@ -4,6 +4,7 @@ from mpl_toolkits.axes_grid1 import AxesGrid
 import matplotlib.gridspec as gridspec
 import settings as stg
 import os
+from math import ceil
 
 fsize = 24
 
@@ -96,8 +97,21 @@ def draw_cb(lab,axis,cax):
    cb.set_label(stg.ety(lab),fontsize=fsize)
 
    if lab == 'RM':
-      cb.set_ticks([-100, -80, -60, -40, -20, 0, 20, 40, 60, 80, 100])
-      cb.set_ticklabels(["-100", "-80", "-60", "-40", "-20", "0", "20", "40", "60", "80", "100"])
+      caxmin, caxmax = cax.get_clim()
+      if (not stg.print_log or lab in stg.apply_linear):
+         ticks = [ item for item in np.linspace(caxmin, caxmax, min(abs(caxmax - caxmin), 10)) ]
+         tickl = [str(round(item,2)) for item in ticks]
+         cb.set_ticks(ticks)
+         cb.set_ticklabels(tickl)
+      else: # Forces symlog-like scale. Not great, not terrible, but works. TODO improve ticks coverage of cbar, arbitrary parameters applied here.
+         powers = [item for item in np.linspace(np.log10(stg.lin_threshold), caxmax, min(abs(ceil(caxmax) - ceil(caxmin)), 10))]
+         ticks  = [item for item in powers]
+         powers = [item for item in np.linspace(np.sign(caxmin) * np.log10(stg.lin_threshold), caxmin, min(ceil(caxmax) - ceil(caxmin), 10))]
+         for item in powers: ticks.append(item)
+         tickl  = [str(round(np.sign(item) * 10**abs(item),1)) for item in ticks]
+         ticks.append(0);  tickl.append('0.')
+         cb.set_ticks(ticks)
+         cb.set_ticklabels(tickl)
 
    for t in cb.ax.get_yticklabels():
       t.set_fontsize(fsize)
@@ -109,9 +123,15 @@ def draw_vecs(ax,vecs,axis):
 
    wp, wq, X, Y = vecs
 
+   cellsize = (X[-1][-1] - X[0][0]) / (max(np.shape(X)) + 1) # Assumes square-like cell, serves to scale vectors to cell-diagonal * dokvec
+   scale_u = 2. * np.sqrt(2) * stg.scale_vec_maxPD / ( ax.figure.dpi * cellsize ) if stg.use_vec_scaling else scalevec(ax)
+
    r = 1 #np.sqrt(wq**2 + wp**2)
-   Q1 = ax.quiver(X, Y, +0.5*wq/r, +0.5*wp/r, headwidth=0, minlength=0, color='black', width=0.003, scale_units='xy', scale=scalevec(axis))
-   Q2 = ax.quiver(X, Y, -0.5*wq/r, -0.5*wp/r, headwidth=0, minlength=0, color='black', width=0.003, scale_units='xy', scale=scalevec(axis))
+   W1 = ax.quiver(X, Y, +0.50*wq/r, +0.50*wp/r, headwidth=1., headlength=0., minlength=0, color='white', width=0.003, scale_units = "dots" if stg.use_vec_scaling else "xy", scale = scale_u)
+   Q1 = ax.quiver(X, Y, +0.49*wq/r, +0.49*wp/r, headwidth=1., headlength=0., minlength=0, color='black', width=0.002, scale_units = "dots" if stg.use_vec_scaling else "xy", scale = scale_u)
+   W2 = ax.quiver(X, Y, -0.50*wq/r, -0.50*wp/r, headwidth=1., headlength=0., minlength=0, color='white', width=0.003, scale_units = "dots" if stg.use_vec_scaling else "xy", scale = scale_u)
+   Q2 = ax.quiver(X, Y, -0.49*wq/r, -0.49*wp/r, headwidth=1., headlength=0., minlength=0, color='black', width=0.002, scale_units = "dots" if stg.use_vec_scaling else "xy", scale = scale_u)
+
    qk = ax.quiverkey(Q1, 0.83, 0.04, 0.6, 'p = 60%',labelpos='E', coordinates='figure', color='black', fontproperties={'weight': 'bold', 'size': '24'})
    return ax
 
@@ -120,10 +140,12 @@ def draw_map(data,vecs,figext,axis,attr,plot_file,lab,ff,i_nl):
 # vmin_, vmax_ -  minimum i maksimum of the color scale
 
    if stg.print_log:
-      if (lab == "TP" or lab == "PI"):
-         data = np.log10(data)
-      else:
-         data = np.where(data >= 0., np.log10(data), -np.log10(-data))
+      if (lab not in stg.apply_linear):
+         if (lab == "TP" or lab == "PI"):
+            data = np.log10(data)
+         else:
+            data = np.where(data >  stg.lin_threshold,  np.log10(data),  data)
+            data = np.where(data < -stg.lin_threshold, -np.log10(-data), data)
 
    vmin_, vmax_ = stg.fvmax(lab,ff,data,i_nl)
 
@@ -144,3 +166,18 @@ def draw_map(data,vecs,figext,axis,attr,plot_file,lab,ff,i_nl):
    for ss in stg.suffix:
       py.savefig('./radiomaps/'+lab+plot_file+'.'+ss)
       print("Image storred in file: ",'./radiomaps/'+lab+plot_file+'.'+ss)
+
+def dump_data(data, lbd, nu, figext, plot_file, lab):
+
+   fname = lab + plot_file + ".dat"
+   data_shape = np.shape(data)
+   with open('./radiomaps/' + fname, "w+") as f: # radiomaps directory should have been already created
+      f.write("#HEADER: label = " + str(lab) + "; frequency = " + str(nu).strip("[").strip("]") + "; wavelength = " + str(lbd).strip("[").strip("]")
+              + "; size = " + str(figext).strip("[").strip("]") + "; data_shape = " + str(data_shape).strip("(").strip(")") + " \n" )
+
+      for i in range(data_shape[0]):
+         for j in range(data_shape[1]):
+            f.write("%16.10e\t" %(data[i, j]))
+         f.write("\n")
+
+   f.close()

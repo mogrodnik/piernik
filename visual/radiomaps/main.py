@@ -13,11 +13,12 @@ from stokes import vector_direction, polarized
 from read_data import *
 from convolution import data_beam_convolve
 from gauss_beam import gauss_beam
-from draw_map import draw_map
+from draw_map import draw_map, dump_data
 from electrons import initialize_crspectrum_tools
 from profiles  import plot_profile
 
 
+save_data = False
 file_name = ""
 from_file = False
 ax = 'x'
@@ -35,14 +36,14 @@ def cli_params(argv):
    # The function serves for reading and interpretation of the comand line input parameters
    try:
 
-      opts,args=getopt.getopt(argv,"adhf:i:k:l:m:n:R:cpPrtSuvxyz",["help","file","convolve","log","spectral","yt=","tz=","pz=","iz=","rz=","pr=","vp="])
+      opts,args=getopt.getopt(argv,"adhf:i:k:l:m:n:R:cpPrtSuvxyz",["dump","help","file","convolve","lin=","log","spectral","yt=","tz=","pz=","iz=","rz=","pr=","vp="])
       #print (opts,"op",args,"arg")
    except getopt.GetoptError:
       print("Error: unknown parameter")
       sys.exit(2)
    for opt, arg in opts:
       if opt in ("-h", "--help"):
-         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -n sets the frequency \n -c convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i pair1,pair2,.. generates the map of Spectral Index (SI), requires additional input: list indexes of of pairs of wavelengths or frequencies provided in -l or -n (e.g., 01,02)  \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -r produces the map of Rotation measue (RM) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -S --spectral to generate synchrotron radiation maps using electron number and energy density data \n -R <integer> reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale\n --yt RESX,DEPTH use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>) with depth -DEPTH:DEPTH. Slower method, but works well with all levels of AMR data\n --{tz|pz|rz|iz} vmin,vmax \t to set plot limits for the given field (TP, PI, SI or RM, respectively). \n \t \t \t \t For TP and PI it must match the number of wavelengths provided, for SI the number of pairs, for RM one set of limits (wavelength independent quantity) \n --pr width,height to set the absolute limits of plotted physical space \n --vp DVEC to set vector coverage")
+         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -n sets the frequency \n -c convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i pair1,pair2,.. generates the map of Spectral Index (SI), requires additional input: list indexes of of pairs of wavelengths or frequencies provided in -l or -n (e.g., 01,02)  \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -r produces the map of Rotation measue (RM) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -S --spectral to generate synchrotron radiation maps using electron number and energy density data \n -R <integer> reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale \n --lin {SI,TP,PI,RM} to override logarythmic scaling for chosen components \n --yt RESX,DEPTH \t use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>); type 'max' for max. practical resolution, with depth -DEPTH:DEPTH. \n \t \t \t Slower method, but works well with all levels of AMR data\n --{tz|pz|rz|iz} vmin,vmax \t to set plot limits for the given field (TP, PI, SI or RM, respectively). \n \t \t \t \t For TP and PI it must match the number of wavelengths provided, for SI the number of pairs, for RM one set of limits (wavelength independent quantity) \n --pr width,height to set the absolute limits of plotted physical space \n --vp DVEC to set vector coverage \n --dump saves data to ASCII file (e.g., to plot it using other script)")
          sys.exit()
       elif opt == '-x':
          global ax_set, ax
@@ -97,6 +98,10 @@ def cli_params(argv):
       elif opt in ("--log"):
          stg.print_log = True
 
+      elif opt in ("--lin"):
+         aux = arg.split(",")
+         for item in aux: stg.apply_linear.append(item.upper())
+
       elif opt == "-P":
          stg.print_prof = True
 
@@ -117,13 +122,13 @@ def cli_params(argv):
          global yt_imres, yt_depth
          aux        = arg.split(",")
          if (len(aux) < 2): sys.exit("Problem in reading parameters RESX,DEPTH from --yt arguments; got: %s" %str(aux))
-         yt_imres   = int(aux[0])
+         yt_imres = aux[0] if aux[0] == "max" else int(aux[0])
          try:
             yt_depth   = float(aux[1])
          except:
             yt_depth   = "max"
          stg.use_yt = True
-         print("Modules data_h5_yt and yt will be imported, depth %10.1f resolution: %i" %(yt_depth, yt_imres))
+         print("Modules data_h5_yt and yt will be imported, depth %10.1f resolution: %s" %(yt_depth, str(yt_imres)))
 
       elif opt in ("--tz"):
          stg.Tvmn_user, stg.Tvmx_user = [], []
@@ -154,6 +159,10 @@ def cli_params(argv):
 
       elif opt in ("--vp"):
          stg.dokv_user = int(arg)
+
+      elif opt in ("--dump"):
+         global save_data
+         save_data = True
 
       elif opt in ("-f", "--file"):
          global file_name
@@ -188,7 +197,7 @@ if ( stg.N_nulbd > 1 ):
    if (stg.print_TP and (stg.Tvmn_user != False and stg.Tvmx_user != False  )):
       if (stg.N_nulbd != np.shape(stg.Tvmn_user)[0] or stg.N_nulbd != np.shape(stg.Tvmx_user)[0]): sys.exit("(TP range) when setting ranges, they must be set for all wavelengths (--tz option).")
    if (stg.print_PI and (stg.Pvmn_user != False and stg.Pvmx_user != False  )):
-      if (stg.N_nulbd != np.shape(stg.Tvmn_user)[0] or stg.N_nulbd != np.shape(stg.Tvmx_user)[0]): sys.exit("(PI range) when setting ranges, they must be set for all wavelengths (--pz option).")
+      if (stg.N_nulbd != np.shape(stg.Pvmn_user)[0] or stg.N_nulbd != np.shape(stg.Pvmx_user)[0]): sys.exit("(PI range) when setting ranges, they must be set for all wavelengths (--pz option).")
    if (stg.print_SI and (stg.Svmn_user != False and stg.Svmx_user != False  )):
       if (np.shape(stg.SI_set)[0] != np.shape(stg.Svmn_user)[0] or np.shape(stg.SI_set)[0] != np.shape(stg.Svmx_user)[0]): sys.exit("(SI range) when setting ranges, they must be set for all pairs of wavelengths (--iz option).")
 
@@ -199,7 +208,9 @@ print("Wavelengths (m):  ", lbd)
 print("Frequencies (MHz):", [ round(item / 1.e6, 2) for item in nu])
 
 wave_data = [nu, lbd]
-if (stg.spectral_mode): initialize_crspectrum_tools(ncre, nu)
+if (stg.spectral_mode):
+   read_CRESP_params(file_name)
+   initialize_crspectrum_tools(stg.ncre, stg.p_min_fix, stg.p_max_fix, nu)
 
 if not from_file:
    # Analytical data might be used,for testing of the maping routines, to generate 3D arrays of CR energy density, gas density and magnetic fild.
@@ -230,9 +241,9 @@ for i_nl in range(stg.N_nulbd):
          RM = data_beam_convolve(RM, beam, nbeam)
 
    if stg.print_PI or stg.print_vec:
-      PI, PI_obs = polarized(I, Q, U)
+      PI, PI_obs = polarized(I[i_nl], Q[i_nl], U[i_nl])
    if stg.print_vec:
-      wp, wq = vector_direction(PI_obs, Q, U)
+      wp, wq = vector_direction(PI_obs, Q[i_nl], U[i_nl])
       # Creation of a mesh of points to place vectors
       X, Y = np.meshgrid(x,y)
       vecs = stg.dokvec(wp, wq, X, Y, ax_set, from_file)
@@ -243,7 +254,7 @@ for i_nl in range(stg.N_nulbd):
       if stg.print_TP:
          I[i_nl]  = I[i_nl]**stg.normalise_exponent_PI
       if stg.print_PI:
-         PI[i_nl] = PI[i_nl]**stg.normalise_exponent_PI
+         PI = PI**stg.normalise_exponent_PI
 
    print("From_file: ", from_file)
 
@@ -256,18 +267,26 @@ for i_nl in range(stg.N_nulbd):
       # Drawing Total Power (TP) map
       draw_map( I[i_nl].T, vecs, figext, ax_set, attr, etyfil, 'TP', from_file, i_nl)
       if (stg.print_prof): plot_profile(I[i_nl].T, figext, ax_set, etyfil, 'TP', attr)
+      if (save_data): dump_data(I[i_nl].T, lbd[i_nl], nu[i_nl], figext, etyfil, 'TP')
    if stg.print_PI:
       # Drawing Polarized Intensity (PI) map
-      draw_map(PI[i_nl].T, vecs, figext, ax_set, attr, etyfil, 'PI', from_file, i_nl)
-      if (stg.print_prof): plot_profile(PI[i_nl].T, figext, ax_set, etyfil, 'PI', attr)
+      draw_map(PI.T, vecs, figext, ax_set, attr, etyfil, 'PI', from_file, i_nl)
+      if (stg.print_prof): plot_profile(PI.T, figext, ax_set, etyfil, 'PI', attr)
+      if (save_data):
+         dump_data(PI.T, lbd[i_nl], nu[i_nl], figext, etyfil, 'PI')
+         dump_data(Q[i_nl].T, lbd[i_nl], nu[i_nl], figext, etyfil, 'Q')
+         dump_data(U[i_nl].T, lbd[i_nl], nu[i_nl], figext, etyfil, 'U')
 for i_pair in stg.SI_set:
    attr = [time,lbd[i_pair[0]],lbd[i_pair[1]]]
    if stg.print_SI:
       draw_map(SI[stg.SI_set.index(i_pair)].T, vecs, figext, ax_set, attr, etyfil, 'SI', from_file, stg.SI_set.index(i_pair))
       if (stg.print_prof): plot_profile(SI[stg.SI_set.index(i_pair)].T, figext, ax_set, etyfil, 'SI', attr)
+      if (save_data): dump_data(SI[stg.SI_set.index(i_pair)].T, [lbd[i_pair[0]], lbd[i_pair[1]]], [nu[i_pair[0]], nu[i_pair[1]]], figext, etyfil, 'SI')
+
 if stg.print_RM:
    if np.max(RM) != 1.0 or np.min(RM) != 0.0:
       # We draw the Faraday rotation - Rotation measue (RM) only if RM != 0
       draw_map(RM.T/stg.norm('RM'), vecs, figext, ax_set, attr, etyfil, 'RM', from_file, i_nl)
+      if (save_data): dump_data(RM.T/stg.norm('RM'), lbd[i_nl], nu[i_nl], figext, etyfil, 'RM')
    else:
       print('RM = 0; I do not create the map.')

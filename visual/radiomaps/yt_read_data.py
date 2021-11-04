@@ -100,15 +100,19 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
    i_h = ax_map["z"] if (ax_set == ax_map["x"] or ax_set == ax_map["y"]) else ax_map["y"]
 
    # Check & prepare resolution of the image
+   imres = [0, 0]
    if (imresw == 0):
-      imres = [0, 0]
       imres[0] = 64
-      imres[1] = ceil( (rend[i_h] - rbeg[i_h] ) / (rend[i_w] - rbeg[i_w]) * imres[0])
-      print("(WARNING) Parameter 'imres' (image resolution in width) was not provided, assuming default: %ix%i" %(imres[0], imres[1]) )
+   elif (imresw == "max"): # applies resolution based on returned shape of data in provided spatial limits.
+      rbegv = [0, 0, 0] ; rbegv[i_w] = rbeg[i_w]
+      rendv = [0, 0, 0] ; rendv[i_w] = rend[i_w]
+      R  = h5ds.ray(rbegv, rendv)    # YTRay object must be loaded as for some reason
+      imres[0] = np.shape(R["t"])[0] # YTRay.shape & YTRay.size methods do not work here.
    else: # scale height-resolution to aspect ratio determined in settings.plotext
-      imres = [0, 0]
       imres[0] = imresw
-      imres[1] = ceil( (rend[i_h] - rbeg[i_h] ) / (rend[i_w] - rbeg[i_w]) * imresw)
+   imres[1] = ceil( (rend[i_h] - rbeg[i_h] ) / (rend[i_w] - rbeg[i_w]) * imres[0])  # Properly scales resolution number of cells in height to provided spatial limits
+
+   if (imresw == 0): print("(WARNING) Parameter 'imres' (image resolution in width) was not provided, assuming default: %ix%i" %(imres[0], imres[1]) )
 
    # Calculate pixel distances
    dw = ( rend[i_w] - rbeg[i_w] ) / imres[0]
@@ -123,9 +127,9 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
    Ecrp = []
 
    # Prepare the limits of plotted area to be returned, NOTICE formally these are the same as provided by settings.plotext
-   x = np.linspace(rbeg[i_w] / 1000., rend[i_w] / 1000., imres[0])
-   y = np.linspace(rbeg[i_h] / 1000., rend[i_h] / 1000., imres[1])
-   figext = [(rbeg[i_w])/ 1000., (rend[i_w])/ 1000., (rbeg[i_h] - 0.5 * dw)/ 1000., (rend[i_h] - 0.5 * dw)/ 1000.]
+   x = np.linspace((rbeg[i_w] + 0.5 * dw) / 1000., (rend[i_w] - 0.5 * dw) / 1000., imres[0])
+   y = np.linspace((rbeg[i_h] + 0.5 * dh) / 1000., (rend[i_h] - 0.5 * dh) / 1000., imres[1])
+   figext = [(rbeg[i_w])/ 1000., (rend[i_w])/ 1000., (rbeg[i_h])/ 1000., (rend[i_h])/ 1000.]
 
    # Prepare variable coordinates for iteration in domain
    rbegv = [0, 0, 0]
@@ -134,8 +138,11 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
    rendv[:] = rbeg[:]            # NOTICE only coordinate at ax_set is supposed to vary here between rbegv and rendv
    rendv[ax_set] = rend[ax_set]  # NOTICE remaining coordinates will start to vary during iteration
 
+   rbeg[i_w] = rbeg[i_w] + 0.5 * dw
+   rbeg[i_h] = rbeg[i_h] + 0.5 * dh
    rbegv[i_w] = rbegv[i_w] + 0.5 * dw
    rbegv[i_h] = rbegv[i_h] + 0.5 * dh
+
    print('Sendig data to map computation \n')
    # This part should works regardless of chosen ax_set
    for i in range(imres[0]):

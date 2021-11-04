@@ -11,13 +11,13 @@ Hz = 1 ; MHz = Hz * 1.0e6 ; GHz = MHz * 1.0e3 ; clight = 3.e8 #m/s
 metr = 1 ; cm = 0.01 * metr
 
 const_synch = 1. #1.e8  # DEPRECATED ??
-p_min_fix = 5.e0     #TODO !> if possible - read the below from h5file, if available
-p_max_fix = 3.e5
+p_min_fix = 1.e0
+p_max_fix = 1.e6
 ncre      = 14
-maxcren   = ncre # 12
-q_eps     = 0.01
+maxcren   = ncre
+q_eps     = 0.001
 q_big     = 30.
-arr_dim   = 200      #TODO <! if possible - read the above from h5file, if available
+arr_dim_q = 1000      #TODO <! if possible - read the above from h5file, if available
 allow_amr_upscaling = False
 use_yt    = False
 
@@ -45,7 +45,10 @@ klo, khi = -1, -1
 # normalization paramer for vectors on the map (stg)
 normalise_exponent_PI = 0.5     # 0.7
 # vectors scaling for quiver method (stg)
-scale_vec_PI = 0.01
+scale_vec_maxPD = 0.7
+use_vec_scaling = True
+
+lin_threshold = 1.0
 
 N_nulbd  = 0
 SI_set   = []
@@ -71,6 +74,14 @@ Rvmx_user = False
 Svmn_user = False
 Svmx_user = False
 dokv_user = False
+
+#labels:
+lab_TP = 'TP'
+lab_PI = 'PI'
+lab_SI = 'SI'
+lab_RM = 'RM'
+
+apply_linear = [lab_SI] # SI usually encompasses range close to 0 and below 0, and it is impractical to present it in logscale
 
 def RMunit():
    # RM = 0,812 * B_{||} * rho_i * ds * (cm/pc)**3 * (mgs/muG) * (Msun/mH) * (102/136) [rad/m**2]
@@ -118,16 +129,10 @@ def set_nuandlbd(ns,ls,ss):
    print(ss, ': nu = ', nu/GHz, ' GHz, lambda = ', lbd/cm, ' cm')
    return nu, lbd
 
-#labels:
-lab_TP = 'TP'
-lab_PI = 'PI'
-lab_SI = 'SI'
-lab_RM = 'RM'
-
 # cbar_label - title of color bar
 def ety(lab):
    etyk = lab
-   if print_log:
+   if (print_log and lab not in apply_linear):
       etyk = r'log$_{10}$('+lab+')'
    if (lab == lab_RM):
       etyk = etyk+r' $[rad / m^2]$'
@@ -148,9 +153,9 @@ def colormap(lab):
 # title - title of the plot
 def title(lab,attr):
    time, l1, l2 = attr
-   lbdcm = ' | '+str(l1/cm)+' cm'
+   lbdcm = ' | '+str(round(l1/cm, 2))+' cm'
    if lab == lab_SI:
-      lbdcm = lbdcm+' & '+str(l2/cm)+' cm'
+      lbdcm = lbdcm+' & '+str(round(l2/cm, 2))+' cm'
    if lab == lab_RM:
       lbdcm = ''
    return lab+lbdcm+' | t = '+str(round(time))+' Myr'
@@ -175,7 +180,6 @@ def dokv(ff,ax_set):
 def dokvec(wp,wq,X,Y,axis,ff):
    dok = dokv(ff,axis)
    wp, wq, X, Y = np.array(wp), np.array(wq), np.array(X), np.array(Y)
-   print(np.shape(wp))
    wp = wp[::dok,::dok]
    wq = wq[::dok,::dok]
    X  = X[::dok,::dok]
@@ -227,14 +231,15 @@ def fvmax(lab,ff,data,i_nl):
          else:
             vmn, vmx = Rvmn_user, Rvmx_user
       if print_log:
-         if (  lab == "TP" and (Tvmn_user != False and Tvmx_user != False)):
-            vmn, vmx = np.log10(Tvmn_user[i_nl]), np.log10(Tvmx_user[i_nl])
-         elif (lab == "PI" and (Pvmn_user != False and Pvmx_user != False)):
-            vmn, vmx = np.log10(Pvmn_user[i_nl]), np.log10(Pvmx_user[i_nl])
-         elif (lab == "SI" and (Svmn_user != False and Svmx_user != False)): # TODO FIXME Is there a point for logscale being allowed for SI?
-            vmn, vmx = np.log10(Svmn_user[i_nl]), np.log10(Svmx_user[i_nl])
-         elif (lab == "RM" and (Rvmn_user != False and Rvmx_user != False)): # disregard i_nl for RM
-            vmn, vmx = np.sign(Rvmn_user) * np.log10(Rvmn_user), np.sign(Rvmx_user) * np.log10(Rvmx_user)
-         else:
-            vmn, vmx = -6., -2.
+         if (lab not in apply_linear):
+            if (  lab == "TP" and (Tvmn_user != False and Tvmx_user != False)):
+               vmn, vmx = np.log10(Tvmn_user[i_nl]), np.log10(Tvmx_user[i_nl])
+            elif (lab == "PI" and (Pvmn_user != False and Pvmx_user != False)):
+               vmn, vmx = np.log10(Pvmn_user[i_nl]), np.log10(Pvmx_user[i_nl])
+            elif (lab == "SI" and (Svmn_user != False and Svmx_user != False)): # NOTICE logscale is not applied to SI by default
+               vmn, vmx = np.log10(Svmn_user[i_nl]), np.log10(Svmx_user[i_nl])
+            elif (lab == "RM" and (Rvmn_user != False and Rvmx_user != False)): # disregard i_nl for RM
+               vmn, vmx = np.sign(Rvmn_user) * np.log10(abs(Rvmn_user)), np.sign(Rvmx_user) * np.log10(Rvmx_user)
+            else:
+               vmn, vmx = -6., -2.
    return vmn, vmx
