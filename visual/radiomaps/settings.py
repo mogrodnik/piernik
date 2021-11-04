@@ -34,8 +34,8 @@ x_ion = 0.01 #1.0 #0.173
 # In the simple approach it is set as a cosntant
 p = 2.8
 # Settings for the radiotelescope beam parameters
-nbeam = 30
-sigma = 1.0
+nbeam = [30]
+sigma = [1.0]
 
 xlo, xhi = 67, 317
 zlo, zhi = 21, 171
