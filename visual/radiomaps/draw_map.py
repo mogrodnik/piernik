@@ -151,7 +151,7 @@ def draw_map(data,vecs,figext,axis,attr,plot_file,lab,ff,i_nl):
 
    img = py.figure(figsize=figsz(axis))
    ax = prepare_draw(lab,attr,axis)
-
+   ccx = ax.contour(np.linspace(figext[0],figext[1], np.shape(data)[1]), np.linspace(figext[2],figext[3], np.shape(data)[0]), data, levels=10, colors="white", alpha=0.75, linewidths=1.)
    cax = ax.imshow(data, origin='lower',vmin=vmin_,vmax=vmax_,extent=figext,cmap=stg.colormap(lab))
    ax.axis(plotext(axis))
 

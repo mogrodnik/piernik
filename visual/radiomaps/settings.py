@@ -60,6 +60,7 @@ print_RM = False
 print_df = False
 print_log = False
 print_prof = False
+print_cnt = False
 
 suffix = 'png', #'pdf',
 
