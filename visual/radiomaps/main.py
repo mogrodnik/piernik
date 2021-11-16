@@ -24,6 +24,7 @@ from_file = False
 ax = 'x'
 ax_set= 0
 convol= False
+new_cp= False
 handSI, handPI, handRM, handTP, handVC, pretVC = False, False, False, False, False, False
 lbd_set  = [-1.0]
 lbd2_set = -1.0   # DEPRECATED
@@ -161,7 +162,9 @@ def cli_params(argv):
          stg.dokv_user = int(arg)
 
       elif opt in ("--cp"):
+         global new_cp
          stg.nbeam = [] ; stg.sigma = []
+         new_cp = True
          for auxi in arg.split(":"):
             stg.nbeam.append(int(auxi.split(",")[0]))
             stg.sigma.append(float(auxi.split(",")[1]))
@@ -209,8 +212,7 @@ if ( stg.N_nulbd > 1 ):
       if (stg.N_nulbd != np.shape(stg.Pvmn_user)[0] or stg.N_nulbd != np.shape(stg.Pvmx_user)[0]): sys.exit("(PI range) when setting ranges, they must be set for all wavelengths (--pz option).")
    if (stg.print_SI and (stg.Svmn_user != False and stg.Svmx_user != False  )):
       if (np.shape(stg.SI_set)[0] != np.shape(stg.Svmn_user)[0] or np.shape(stg.SI_set)[0] != np.shape(stg.Svmx_user)[0]): sys.exit("(SI range) when setting ranges, they must be set for all pairs of wavelengths (--iz option).")
-   if (isinstance(stg.nbeam, list) and isinstance(stg.sigma, list)):
-      if (len(stg.nbeam) != stg.N_nulbd or  len(stg.sigma) != stg.N_nulbd): sys.exit("(convolution parameters) when altering nbeam and sigma, they must be set for all wavelengths (got %i, should be %i, check --cp option)." %(len(stg.nbeam), stg.N_nulbd ))
+   if (new_cp == True and (len(stg.nbeam) != stg.N_nulbd or  len(stg.sigma) != stg.N_nulbd)): sys.exit("(convolution parameters) when altering nbeam and sigma, they must be set for all wavelengths (got %i, should be %i, check --cp option)." %(len(stg.nbeam), stg.N_nulbd ))
 
 for i in range(stg.N_nulbd):
    nu[i],   lbd[i]   = stg.set_nuandlbd(nu_set[i],  lbd_set[i], i)
@@ -239,8 +241,8 @@ I, Q, U, RM, SI, x, y, figext, time = plot_data_arrays
 for i_nl in range(stg.N_nulbd):
    if convol:
       # Generation of the Gaussian profile of the radiotelescop beam
-      sigma = stg.sigma[i_nl]
-      nbeam = stg.nbeam[i_nl]
+      sigma = stg.sigma[i_nl] if new_cp else stg.sigma[0]
+      nbeam = stg.nbeam[i_nl] if new_cp else stg.nbeam[0]
       beam = gauss_beam(nbeam, sigma)
       # We convolve the resulting Stokes parameters tables with the beam function
       if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
