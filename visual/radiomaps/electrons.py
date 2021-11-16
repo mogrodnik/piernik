@@ -54,7 +54,7 @@ def initialize_crspectrum_tools(ncre, p_min_fix, p_max_fix, nu):
 def initialize_freqs(nu):
    global _const_1956_x_sqrt_nu_by_16p1MHz
    for i in range(len(nu)):
-      _const_1956_x_sqrt_nu_by_16p1MHz.append( 1956. * sqrt( nu[i] / _16p1_MHz) )
+      _const_1956_x_sqrt_nu_by_16p1MHz.append( 1956.8521 * sqrt( nu[i] / _16p1_MHz) )
 
 #=============================================================================================================================
 def nu_B_to_p(nu, B_perp): # Based on approximation by Mulcahy et al. (2018) (eqn. 2), https://arxiv.org/abs/1804.00752
