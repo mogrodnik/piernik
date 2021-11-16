@@ -280,26 +280,26 @@ for i_nl in range(stg.N_nulbd):
       # Drawing Total Power (TP) map
       draw_map( I[i_nl].T, vecs, figext, ax_set, attr, etyfil, 'TP', from_file, i_nl)
       if (stg.print_prof): plot_profile(I[i_nl].T, figext, ax_set, etyfil, 'TP', attr)
-      if (save_data): dump_data(I[i_nl].T, lbd[i_nl], nu[i_nl], figext, etyfil, 'TP')
+      if (save_data): dump_data(I[i_nl].T, lbd[i_nl], nu[i_nl], figext, time, etyfil, 'TP')
    if stg.print_PI:
       # Drawing Polarized Intensity (PI) map
       draw_map(PI.T, vecs, figext, ax_set, attr, etyfil, 'PI', from_file, i_nl)
       if (stg.print_prof): plot_profile(PI.T, figext, ax_set, etyfil, 'PI', attr)
       if (save_data):
-         dump_data(PI.T, lbd[i_nl], nu[i_nl], figext, etyfil, 'PI')
-         dump_data(Q[i_nl].T, lbd[i_nl], nu[i_nl], figext, etyfil, 'Q')
-         dump_data(U[i_nl].T, lbd[i_nl], nu[i_nl], figext, etyfil, 'U')
+         dump_data(PI.T, lbd[i_nl], nu[i_nl], figext, time, etyfil, 'PI')
+         dump_data(Q[i_nl].T, lbd[i_nl], nu[i_nl], figext, time, etyfil, 'Q')
+         dump_data(U[i_nl].T, lbd[i_nl], nu[i_nl], figext, time, etyfil, 'U')
 for i_pair in stg.SI_set:
    attr = [time,lbd[i_pair[0]],lbd[i_pair[1]]]
    if stg.print_SI:
       draw_map(SI[stg.SI_set.index(i_pair)].T, vecs, figext, ax_set, attr, etyfil, 'SI', from_file, stg.SI_set.index(i_pair))
       if (stg.print_prof): plot_profile(SI[stg.SI_set.index(i_pair)].T, figext, ax_set, etyfil, 'SI', attr)
-      if (save_data): dump_data(SI[stg.SI_set.index(i_pair)].T, [lbd[i_pair[0]], lbd[i_pair[1]]], [nu[i_pair[0]], nu[i_pair[1]]], figext, etyfil, 'SI')
+      if (save_data): dump_data(SI[stg.SI_set.index(i_pair)].T, [lbd[i_pair[0]], lbd[i_pair[1]]], [nu[i_pair[0]], nu[i_pair[1]]], figext, time, etyfil, 'SI')
 
 if stg.print_RM:
    if np.max(RM) != 1.0 or np.min(RM) != 0.0:
       # We draw the Faraday rotation - Rotation measue (RM) only if RM != 0
       draw_map(RM.T/stg.norm('RM'), vecs, figext, ax_set, attr, etyfil, 'RM', from_file, i_nl)
-      if (save_data): dump_data(RM.T/stg.norm('RM'), lbd[i_nl], nu[i_nl], figext, etyfil, 'RM')
+      if (save_data): dump_data(RM.T/stg.norm('RM'), lbd[i_nl], nu[i_nl], figext, time, etyfil, 'RM')
    else:
       print('RM = 0; I do not create the map.')
