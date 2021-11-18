@@ -163,9 +163,9 @@ def draw_map(data,vecs,figext,axis,attr,plot_file,lab,ff,i_nl):
    py.draw()
    if not os.path.exists('./radiomaps/'):
       os.makedirs('./radiomaps/')
-   for ss in stg.suffix:
-      py.savefig('./radiomaps/'+lab+plot_file+'.'+ss)
-      print("Image storred in file: ",'./radiomaps/'+lab+plot_file+'.'+ss)
+   for ext in stg.extension:
+      py.savefig('./radiomaps/'+lab+plot_file+'.'+ext)
+      print("Image storred in file: ",'./radiomaps/'+lab+plot_file+'.'+ext)
 
 def dump_data(data, lbd, nu, figext, t, plot_file, lab):
 

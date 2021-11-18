@@ -62,7 +62,8 @@ print_log = False
 print_prof = False
 print_cnt = False
 
-suffix = 'png', #'pdf',
+extension = 'png', #'pdf',
+suffix = ''
 
 px_user   = False
 pz_user   = False
