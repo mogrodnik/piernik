@@ -242,6 +242,9 @@ def fvmax(lab,ff,data,i_nl):
                vmn, vmx = np.log10(Svmn_user[i_nl]), np.log10(Svmx_user[i_nl])
             elif (lab == "RM" and (Rvmn_user != False and Rvmx_user != False)): # disregard i_nl for RM
                vmn, vmx = np.sign(Rvmn_user) * np.log10(abs(Rvmn_user)), np.sign(Rvmx_user) * np.log10(Rvmx_user)
-            else:
-               vmn, vmx = -6., -2.
+            else:    # DEFAULTS
+               if (lab == "RM"):
+                  vmn, vmx = -2., 2. # NOTICE for RM 'symlog' scale is applied and whole range is needed
+               else:
+                  vmn, vmx = -6., -2
    return vmn, vmx
