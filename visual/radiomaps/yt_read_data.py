@@ -73,19 +73,19 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
    if ax_set==0:
       bset = [by_lbl, bz_lbl, bx_lbl]
       if (imdepth) != "max":
-         xmin, xmax = -imdepth, imdepth # else: already defined
+         xmin, xmax = imdepth[:] # else: already defined
       ymin, ymax = wlo, whi
       zmin, zmax = hlo, hhi
    if ax_set==1:
       bset = [bx_lbl, bz_lbl, by_lbl]
       if (imdepth) != "max":
-         ymin, ymax = -imdepth, imdepth # else: already defined
+         ymin, ymax = imdepth[:] # else: already defined
       xmin, xmax = wlo, whi
       zmin, zmax = hlo, hhi
    if ax_set==2:
       bset = [bx_lbl, by_lbl, bz_lbl]
       if (imdepth) != "max":
-         zmin, zmax = -imdepth, imdepth # else: already defined
+         zmin, zmax = imdepth[:] # else: already defined
       xmin, xmax = wlo, whi
       ymin, ymax = hlo, hhi
 
@@ -93,7 +93,7 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
    rbeg = [xmin, ymin, zmin]
    rend = [xmax, ymax, zmax]
    if (imdepth == "max"):
-      print("(WARNING) Parameter 'yt_depth' (depth of integration along 'ax_set') was not provided, assuming default maximal range: -%10.2f:%10.2f" %(rbeg[ax_set], rend[ax_set]))
+      print("(WARNING) Parameter 'yt_depth' is 'max'; assuming maximal domain range: -%10.1f:%10.1f" %(rbeg[ax_set], rend[ax_set]))
 
    # Prepare indices pointing width-ax and height-ax of the demanded image
    i_w = ax_map["x"] if (ax_set == ax_map["y"] or ax_set == ax_map["z"]) else ax_map["y"]

@@ -44,7 +44,7 @@ def cli_params(argv):
       sys.exit(2)
    for opt, arg in opts:
       if opt in ("-h", "--help"):
-         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -n sets the frequency \n -c convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i pair1,pair2,.. generates the map of Spectral Index (SI), requires additional input: list indexes of of pairs of wavelengths or frequencies provided in -l or -n (e.g., 01,02)  \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -r produces the map of Rotation measue (RM) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -S --spectral to generate synchrotron radiation maps using electron number and energy density data \n -R <integer> reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale \n --lin {SI,TP,PI,RM} to override logarythmic scaling for chosen components \n --yt RESX,DEPTH \t use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>); type 'max' for max. practical resolution, with depth -DEPTH:DEPTH. \n \t \t \t Slower method, but works well with all levels of AMR data\n --{tz|pz|rz|iz} vmin,vmax \t to set plot limits for the given field (TP, PI, SI or RM, respectively). \n \t \t \t \t For TP and PI it must match the number of wavelengths provided, for SI the number of pairs, for RM one set of limits (wavelength independent quantity) \n --pr width,height to set the absolute limits of plotted physical space \n --vp DVEC to set vector coverage \n --cp nbeam1,sigma1:nbeam2,sigma2:... alter convolution parameters \n \n --contours draw map contours (Default: 10 levels)\n --suffix <text> to have output files with given suffix before extension\n --dump saves data to ASCII file (e.g., to plot it using other script)")
+         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -n sets the frequency \n -c convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i pair1,pair2,.. generates the map of Spectral Index (SI), requires additional input: list indexes of of pairs of wavelengths or frequencies provided in -l or -n (e.g., 01,02)  \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -r produces the map of Rotation measue (RM) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -S --spectral to generate synchrotron radiation maps using electron number and energy density data \n -R <integer> reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale \n --lin {SI,TP,PI,RM} to override logarythmic scaling for chosen components \n --yt RESX,DEPTH or RESX,DEPTHL,DEPTHH \t use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>); type 'max' for maximal practical resolution, with depth working as -DEPTH:DEPTH with one DEPTH argument ('max' for maximal depth) or DEPTHL:DEPTHH for layer with 2 DEPTH arguments. Slower method, but works well with all levels of AMR data\n --{tz|pz|rz|iz} vmin,vmax \t to set plot limits for the given field (TP, PI, SI or RM, respectively). \n \t \t \t \t For TP and PI it must match the number of wavelengths provided, for SI the number of pairs, for RM one set of limits (wavelength independent quantity) \n --pr width,height to set the absolute limits of plotted physical space \n --vp DVEC to set vector coverage \n --cp nbeam1,sigma1:nbeam2,sigma2:... alter convolution parameters \n \n --contours draw map contours (Default: 10 levels)\n --suffix <text> to have output files with given suffix before extension\n --dump saves data to ASCII file (e.g., to plot it using other script)")
          sys.exit()
       elif opt == '-x':
          global ax_set, ax
@@ -125,11 +125,14 @@ def cli_params(argv):
          if (len(aux) < 2): sys.exit("Problem in reading parameters RESX,DEPTH from --yt arguments; got: %s" %str(aux))
          yt_imres = aux[0] if aux[0] == "max" else int(aux[0])
          try:
-            yt_depth   = float(aux[1])
+            if len(aux[0:-1]) == 2:
+               yt_depth = [ float(aux[1]), float(aux[2])]
+            else:
+               yt_depth = [-float(aux[1]), float(aux[1])]
+            print("Modules data_h5_yt and yt will be imported, range %10.1f:%10.1f, resolution: %s" %(yt_depth[0], yt_depth[1], str(yt_imres)))
          except:
             yt_depth   = "max"
          stg.use_yt = True
-         print("Modules data_h5_yt and yt will be imported, depth %10.1f resolution: %s" %(yt_depth, str(yt_imres)))
 
       elif opt in ("--tz"):
          stg.Tvmn_user, stg.Tvmx_user = [], []
@@ -277,7 +280,11 @@ for i_nl in range(stg.N_nulbd):
    etyfil = stg.etyfil(ax,file_name,nu[i_nl])
    attr = [time,lbd[i_nl], lbd[0]]
 
-   if (stg.use_yt): etyfil = etyfil + "_yt_res"+str(yt_imres)+"depth"+str(round(yt_depth))
+   if (stg.use_yt):
+      if (yt_depth != "max"):
+         etyfil = etyfil + "_yt_res"+str(yt_imres)+"range"+str(round(yt_depth[0]))+":"+str(round(yt_depth[1]))
+      else:
+         etyfil = etyfil + "_yt_res"+str(yt_imres)+"range"+yt_depth.upper()
    if (stg.spectral_mode): etyfil = etyfil + "_spectral"
 
    etyfil = etyfil + stg.suffix  # Add optional suffix
