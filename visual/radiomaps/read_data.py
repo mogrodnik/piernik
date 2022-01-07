@@ -212,9 +212,9 @@ def data_h5(plik,ax_set,wave_data):
       ce  = n_b+off
       if (lvl in levels):
          rho[off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['density'][:,:,:].swapaxes(0,2)
-         Bp[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g[bset[0]][:,:,:].swapaxes(0,2)
-         Bq[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g[bset[1]][:,:,:].swapaxes(0,2)
-         Bn[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] = -h5g[bset[2]][:,:,:].swapaxes(0,2)
+         Bp[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g[bset[0]][:,:,:].swapaxes(0,2) * stg.B_code_factor
+         Bq[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g[bset[1]][:,:,:].swapaxes(0,2) * stg.B_code_factor
+         Bn[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] = -h5g[bset[2]][:,:,:].swapaxes(0,2) * stg.B_code_factor
          if (stg.mode == 'spectral'):
             for ic in range(ncre):
                Ecre[ic,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cree'+str(ic+1).zfill(2)][:,:,:].swapaxes(0,2)

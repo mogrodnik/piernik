@@ -24,6 +24,7 @@ use_yt    = False
 # Read only one refinement level
 lvl_only = -1
 one_level = False
+B_code_factor = 2.85258412 # 1.0 # Convert B to uGs
 
 # cJnu - a constant scaling synchrotron emissivity.
 cJnu = 1.0

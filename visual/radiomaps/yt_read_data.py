@@ -170,9 +170,9 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
          # WARNING yt.ray object is unsorted by default, sorting adds ~20% to total execution time
          ds       =  R.fwidth[iRsort].v[:, ax_set]
          rho_ion  =  R[rho_lbl][iRsort].v * stg.x_ion
-         Bp       =  R[bset[0]][iRsort].v
-         Bq       =  R[bset[1]][iRsort].v
-         Bn       =  R[bset[2]][iRsort].v
+         Bp       =  R[bset[0]][iRsort].v * stg.B_code_factor
+         Bq       =  R[bset[1]][iRsort].v * stg.B_code_factor
+         Bn       =  R[bset[2]][iRsort].v * stg.B_code_factor
 
          if (stg.spectral_mode):
             Ecre = np.array([R[ecre_lbl[l]][iRsort].v for l in cre_iter])
