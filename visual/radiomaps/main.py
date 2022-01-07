@@ -279,15 +279,16 @@ for i_nl in range(stg.N_nulbd):
 
    etyfil = stg.etyfil(ax,file_name,nu[i_nl])
    attr = [time,lbd[i_nl], lbd[0]]
+   etyyt = etyspec = ""
 
    if (stg.use_yt):
       if (yt_depth != "max"):
-         etyfil = etyfil + "_yt_res"+str(yt_imres)+"range"+str(round(yt_depth[0]))+":"+str(round(yt_depth[1]))
+         etyyt = "_yt_res"+str(yt_imres)+"range"+str(round(yt_depth[0]))+":"+str(round(yt_depth[1]))
       else:
-         etyfil = etyfil + "_yt_res"+str(yt_imres)+"range"+yt_depth.upper()
-   if (stg.spectral_mode): etyfil = etyfil + "_spectral"
+         etyyt = "_yt_res"+str(yt_imres)+"range"+yt_depth.upper()
+   if (stg.spectral_mode): etyspec = "_spectral"
 
-   etyfil = etyfil + stg.suffix  # Add optional suffix
+   etyfil = etyfil + etyyt + etyspec + stg.suffix  # Full name + optional suffix
 
    if stg.print_TP:
       # Drawing Total Power (TP) map
@@ -305,6 +306,9 @@ for i_nl in range(stg.N_nulbd):
 for i_pair in stg.SI_set:
    attr = [time,lbd[i_pair[0]],lbd[i_pair[1]]]
    if stg.print_SI:
+      etyfil = stg.etyfil(ax,file_name,nu[i_pair[0]]) + "vs"+str(int(nu[i_pair[1]]/stg.MHz)).zfill(3)+'MHz' # Provides proper wavelengths / frequencies to filename
+      etyfil = etyfil + etyyt + etyspec + stg.suffix # Full name + optional suffix
+
       draw_map(SI[stg.SI_set.index(i_pair)].T, vecs, figext, ax_set, attr, etyfil, 'SI', from_file, stg.SI_set.index(i_pair))
       if (stg.print_prof): plot_profile(SI[stg.SI_set.index(i_pair)].T, figext, ax_set, etyfil, 'SI', attr)
       if (save_data): dump_data(SI[stg.SI_set.index(i_pair)].T, [lbd[i_pair[0]], lbd[i_pair[1]]], [nu[i_pair[0]], nu[i_pair[1]]], figext, time, etyfil, 'SI')
