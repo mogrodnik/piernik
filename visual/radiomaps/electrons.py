@@ -6,12 +6,14 @@ from settings import MHz, const_synch, maxcren, arr_dim_q, q_big, q_eps # WARNIN
 p_fix               = []           # initialized below (in initialize_crspectrum_tools)
 p_fix3              = []           # initialized below (in initialize_crspectrum_tools), p_fix in 3rd power
 _16p1_MHz           = 16.1 * MHz   # needed by nu_B_to_p
+_const_HEA          = (1. / 2.799249)**0.5   #
 _fourXpi            = 4. * pi      # needed by nq2f and crenppfq
 _inittab_dim        = 0            # initialized below (in prepare_q_grid)
 _log10_pmax_by_pmin = 1.0          # initialized below (in initialize_crspectrum_tools)
 _log10_enpc_ratio   = 1.0          # initialized below (in prepare_q_grid)
 _ncre_m2            = 0.           # initialized below (in initialize_crspectrum_tools)
 _const_1956_x_sqrt_nu_by_16p1MHz      = []
+_const_nu_HEA       = []
 _smallB             = 1.e-24
 _one                = 1.0
 _zero               = 0.0
@@ -55,11 +57,20 @@ def initialize_freqs(nu):
    global _const_1956_x_sqrt_nu_by_16p1MHz
    for i in range(len(nu)):
       _const_1956_x_sqrt_nu_by_16p1MHz.append( 1956.8521 * sqrt( nu[i] / _16p1_MHz) )
+      _const_nu_HEA.append( _const_HEA * (nu[i] )**0.5 )
 
 #=============================================================================================================================
 def nu_B_to_p(nu, B_perp): # Based on approximation by Mulcahy et al. (2018) (eqn. 2), https://arxiv.org/abs/1804.00752
    # WARNING !!! cutoff momenta are not precisely described here !!! WARNING
    p = _const_1956 * sqrt( (nu / _16p1_MHz ) / ( B_perp + _smallB ) ) # [B_perp] = mGs - assumed at input, [nu] = 16.1 MHz, but already present
+   return p
+#=============================================================================================================================
+def nu_B_to_p_HEA(nu, B_perp):   # Based on Longairs' High Energy Astrophysics (3rd edition, eqn 8.77); assumes nu ~ nu_critical
+   p = _const_HEA * (nu / (B_perp + _smallB))**0.5
+   return p
+#=============================================================================================================================
+def nu_all_B_to_p_HEA(B_perp, nui):
+   p = _const_nu_HEA[nui] / (B_perp + _smallB)**0.5
    return p
 #=============================================================================================================================
 def nu_all_B_to_p(B_perp, nui): # Based on approximation by Mulcahy et al. (2018) (eqn. 2), https://arxiv.org/abs/1804.00752
@@ -68,7 +79,8 @@ def nu_all_B_to_p(B_perp, nui): # Based on approximation by Mulcahy et al. (2018
    return p
 #=============================================================================================================================
 def nu_to_ind(nu_ind, B_perp, ncre):
-   p_nu = nu_all_B_to_p(B_perp, nu_ind)
+   #p_nu = nu_all_B_to_p(B_perp, nu_ind)
+   p_nu = nu_all_B_to_p_HEA(B_perp, nu_ind)
    nu_to_ind = int( (log10(p_nu/_p_min_fix)/_log10_pmax_by_pmin) * _ncre_m2 + _one)
 
    if nu_to_ind > ncre: nu_to_ind = ncre
