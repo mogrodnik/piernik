@@ -1,7 +1,6 @@
 from math import *
 import numpy as np
 from scipy import signal
-from gauss_beam import gauss_beam
 
 def data_beam_convolve(data,beam,nbeam):
 # function convolving the synchrotron image of simulation data with the radiotelescope beam.
