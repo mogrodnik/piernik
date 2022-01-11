@@ -117,7 +117,7 @@ def draw_cb(lab,axis,cax):
       t.set_fontsize(fsize)
    return cb
 
-def draw_vecs(ax,vecs,axis):
+def draw_vecs(ax,vecs,axis, fsize=24, posl=[0.83, 0.03]):
 # wp, wq - components of vectors to be displayed
 # X, Y - a mesh of points to locate vectors
 
@@ -132,7 +132,7 @@ def draw_vecs(ax,vecs,axis):
    W2 = ax.quiver(X, Y, -0.50*wq/r, -0.50*wp/r, headwidth=1., headlength=0., minlength=0, color='white', width=0.003, scale_units = "dots" if stg.use_vec_scaling else "xy", scale = scale_u)
    Q2 = ax.quiver(X, Y, -0.49*wq/r, -0.49*wp/r, headwidth=1., headlength=0., minlength=0, color='black', width=0.002, scale_units = "dots" if stg.use_vec_scaling else "xy", scale = scale_u)
 
-   qk = ax.quiverkey(Q1, 0.83, 0.04, 0.6, 'p = 60%',labelpos='E', coordinates='figure', color='black', fontproperties={'weight': 'bold', 'size': '24'})
+   qk = ax.quiverkey(Q1, posl[0], posl[1], 0.6, 'p = 60%',labelpos='E', coordinates='figure', color='black', fontproperties={'weight': 'normal', 'size': fsize})
    return ax
 
 def draw_map(data,vecs,figext,axis,attr,plot_file,lab,ff,i_nl):
@@ -177,7 +177,7 @@ def dump_data(data, lbd, nu, figext, t, plot_file, lab):
 
       for i in range(data_shape[0]):
          for j in range(data_shape[1]):
-            f.write("%16.10e\t" %(data[i, j]))
+            f.write("%10.4e\t" %(data[i, j]))   # TODO how 'bout saving me to an hdf file?
          f.write("\n")
 
    f.close()
