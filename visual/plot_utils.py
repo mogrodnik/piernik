@@ -78,7 +78,7 @@ def check_minimum_data(refis, extended):
         for bl in blks:
             binb, bxyz = bl[0:2]
             for ncut in range(3):
-                if binb[ncut]:
+                if np.any(binb[ncut]):
                     cmdmin = min(cmdmin, np.min(bxyz[ncut], initial=np.inf, where=(bxyz[ncut] > 0.0)))
                     if extended:
                         cmdmax = max(cmdmax, np.max(bxyz[ncut], initial=-np.inf, where=(bxyz[ncut] < 0.0)))
