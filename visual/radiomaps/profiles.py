@@ -28,8 +28,10 @@ plot_errorbars = True
 use_def_ylims  = True
 plot_one_fig = True
 save_data    = True  # in case the profiles are to be plotted in a different way
+return_axes  = False # return all plotted objects as list of axes
 inches_ax = 2.
 aspect_ax = 6.
+dpi_plot  = 150.
 
 # main plotting function: processess data and produces plot files
 def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs):
@@ -118,8 +120,9 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
          fig_one, ax = plt.subplots(figsize=(7,5), dpi=150)
          ax = plot_one_profile(ax, hdata, means, stds, xlab, ylab, title, label, scaletype, plot_labels=[True, True], plot_title=False)
 
-         plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".png")
-         plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".pdf")
+         if (not return_axes):
+            plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".png")
+            plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".pdf")
 
          ax.clear()
          plt.close(fig_one)
@@ -134,9 +137,11 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
    mfig.supylabel("%s (averaged over %s) at $\lambda=$ %8.2f m" %(labelnam[label], ax_w, lbd1), fontsize = fsize*1.5)
    #plt.tight_layout()
    plt.tight_layout(rect=[0., 0., 1., 0.99]) # tight_layout may clip suptitle
-   plt.savefig(label + "_profiles" + ety_file + ".png")
-   plt.savefig(label + "_profiles" + ety_file + ".pdf")
-   plt.close(mfig)
+
+   if (not return_axes):
+      plt.savefig(label + "_profiles" + ety_file + ".png")
+      plt.savefig(label + "_profiles" + ety_file + ".pdf")
+      plt.close(mfig)
 
    if (save_data):
       fP = open(label+ety_file+"_profile_data.dat", "w+")
@@ -150,6 +155,8 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
             fP.write(" %14.8e\t  %14.8e\t " %(means_save[wi][i], stds_save[wi][i]))
          fP.write("\n") # should add new line
       fP.close()
+
+   if (return_axes): return mfig
 
 def avg_vec_in_range(vec_data, sec_dim, sec_lims, sec_where):
    twidth = (sec_lims[1] - sec_lims[0])
