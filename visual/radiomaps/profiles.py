@@ -40,9 +40,9 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
    if (ax_set == 2):
       print("\033[93m Axis set is 'z', omitting profile plotting. \033[0m")
       return # do nothing - no profiles to plot, if disk is shown face-on
-   elif (ax_set == 1):
-      ax_w = "x"
    elif (ax_set == 0):
+      ax_w = "x"
+   elif (ax_set == 1):
       ax_w = "y"
 # Unpack time and wavelength info
    time = attributes[0]
