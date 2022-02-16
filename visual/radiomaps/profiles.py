@@ -111,16 +111,20 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
          scaletype = "linear"
 
       hdata = np.linspace(hrange[0], hrange[1], ihe-ihb)
+      plot_labelsxy = [ not return_axes, not plot_one_fig ]
 
       xlab = "Distance from the disk plane (kpc)"
       ylab = "Averaged %s at %5.1f kpc" %(labelnam[label], mid_coord)
       title = "Time = %10.2f Myr" %time   # WARNING assuming units
+      if (return_axes): all_axes = []
 
       if (not plot_one_fig):
          fig_one, ax = plt.subplots(figsize=(7,5), dpi=150)
-         ax = plot_one_profile(ax, hdata, means, stds, xlab, ylab, title, label, scaletype, plot_labels=[True, True], plot_title=False)
+         ax = plot_one_profile(ax, hdata, means, stds, xlab, ylab, title, label, scaletype, ylims, text_overplot, plot_labelsxy, plot_title=False, ticks_visiblexy = [ (return_axes or iprof != nwboxes -1), False ])
 
-         if (not return_axes):
+         if (return_axes):
+            all_axes.append(ax)
+         else:
             plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".png")
             plt.savefig(label + "_profile_" + str(iprof+1) + ety_file + ".pdf")
 
@@ -129,7 +133,7 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
 
       axm = axs[iprof]
       xlab = "z (kpc) at %s = %5.1f kpc" %(ax_w, mid_coord)
-      axm = plot_one_profile(axm, hdata, means, stds, xlab, ylab, title, label, scaletype, plot_labels=[True, False], plot_title=False)
+      axm = plot_one_profile(axm, hdata, means, stds, xlab, ylab, title, label, scaletype, ylims, text_overplot, plot_labelsxy, plot_title=False, ticks_visiblexy = [ iprof != nwboxes -1, False ])
       means_save.append(means)
       stds_save.append(stds)
 
@@ -156,7 +160,7 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
          fP.write("\n") # should add new line
       fP.close()
 
-   if (return_axes): return mfig
+   if (return_axes): return mfig, all_axes
 
 def avg_vec_in_range(vec_data, sec_dim, sec_lims, sec_where):
    twidth = (sec_lims[1] - sec_lims[0])
@@ -206,17 +210,21 @@ def update_average(avg_val, avg_num, avg_update, incr):
    avg_val_new = avg_val + (avg_update - avg_val) / (avg_num + incr) # This allows to update cell-average by factor of cell
    return avg_val_new
 
-def plot_one_profile(ax, xdata, ydata, yerrdata, xlabel, ylabel, title, label, scaletype, plot_labels, plot_title):
-
+def plot_one_profile(ax, xdata, ydata, yerrdata, xlabel, ylabel, title, label, scaletype, ylims, coords_text, plot_labels, plot_title, ticks_visiblexy):
    if plot_title:
       ax.set_title(title, fontsize=fsize)
 
    ax.set_yscale(scaletype)
    if use_def_ylims: # if true, using global 'ylimsdef' via passed 'label' variable
       ax.set_ylim(ylimsdef[label][0], ylimsdef[label][1])
+   else:
+      ax.set_ylim(ylims)
 
    ax.grid(plt_grds[0], 'major', 'x', ls='--', lw=.5, c='k', alpha=.3)
    ax.grid(plt_grds[1], 'major', 'y', ls='--', lw=.5, c='k', alpha=.3)
+
+   if (ticks_visiblexy[0]): ax.xaxis.set_ticklabels([])
+   if (ticks_visiblexy[1]): ax.yaxis.set_ticklabels([])
 
    if (plot_errorbars):
       ax.errorbar(xdata, ydata, yerr=yerrdata, color="xkcd:red",  marker = "+")
