@@ -32,6 +32,7 @@ return_axes  = False # return all plotted objects as list of axes
 inches_ax = 2.
 aspect_ax = 6.
 dpi_plot  = 150.
+coords_text = False
 
 # main plotting function: processess data and produces plot files
 def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs):
@@ -66,6 +67,7 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
    irange = kwargs.get("z", iranged)
    nwboxes= kwargs.get("n", nwboxesd)
    kpcasec= kwargs.get("s", kpcasecd)
+   ylims  = kwargs.get("ylims", ylimsdef[label])
 
 # Get physical size of the data
    figw_tot = figext_tot[1] - figext_tot[0]
@@ -115,6 +117,8 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
 
       xlab = "Distance from the disk plane (kpc)"
       ylab = "Averaged %s at %5.1f kpc" %(labelnam[label], mid_coord)
+      if (coords_text):
+         text_overplot = [ True, "%s = %5.2f kpc" %(ax_w, mid_coord)]
       title = "Time = %10.2f Myr" %time   # WARNING assuming units
       if (return_axes): all_axes = []
 
@@ -213,6 +217,9 @@ def update_average(avg_val, avg_num, avg_update, incr):
 def plot_one_profile(ax, xdata, ydata, yerrdata, xlabel, ylabel, title, label, scaletype, ylims, coords_text, plot_labels, plot_title, ticks_visiblexy):
    if plot_title:
       ax.set_title(title, fontsize=fsize)
+
+   if (coords_text[0]):
+      ax.text(min(xdata), (min(ydata) + 0.25*max(ydata)), coords_text[1], size = fsize)
 
    ax.set_yscale(scaletype)
    if use_def_ylims: # if true, using global 'ylimsdef' via passed 'label' variable
