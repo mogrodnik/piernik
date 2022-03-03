@@ -68,6 +68,7 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
    nwboxes= kwargs.get("n", nwboxesd)
    kpcasec= kwargs.get("s", kpcasecd)
    ylims  = kwargs.get("ylims", ylimsdef[label])
+   outpath= kwargs.get("o", "./")
 
 # Get physical size of the data
    figw_tot = figext_tot[1] - figext_tot[0]
@@ -107,7 +108,6 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
          stds.append(std)
 
       if (stg.print_log and (label == "TP" or label == "PI")):
-         means = np.power(10., means)
          scaletype = "log"
       else:
          scaletype = "linear"
@@ -144,7 +144,7 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
    mfig.suptitle(title, fontsize = fsize*1.35)
    mfig.supylabel("%s (averaged over %s) at $\lambda=$ %8.2f m" %(labelnam[label], ax_w, lbd1), fontsize = fsize*1.5)
    #plt.tight_layout()
-   plt.tight_layout(rect=[0., 0., 1., 0.99]) # tight_layout may clip suptitle
+   mfig.set_tight_layout(True) # plt.tight_layout(rect=[0., 0., 1., 0.99]) # tight_layout may clip suptitle
 
    if (not return_axes):
       plt.savefig(label + "_profiles" + ety_file + ".png")
@@ -152,7 +152,8 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
       plt.close(mfig)
 
    if (save_data):
-      fP = open(label+ety_file+"_profile_data.dat", "w+")
+      fP = open(outpath+"/"+label+ety_file+"_profile_data.dat", "w+")
+      print(fP.name)
       fP.write("#     dist\t")
       for wi in range(nwboxes):
          fP.write(" %8s(p %2i)\t  %8s(p %2i)\t" %("mean",wi,"std",wi))
@@ -189,8 +190,8 @@ def avg_std_section(vec_data, sec_dim, sec_lims, sec_where):
    indices_in.insert(0, max(indices_in[0],  0))
    indices_in.insert(0, min(indices_in[-1], sec_dim))
 
-   avg_vec = np.mean(vec_data[indices_in])
-   std_vec = np.std( vec_data[indices_in])
+   avg_vec = np.mean(vec_data[indices_in]) if (not stg.print_log) else np.mean(np.power(10., vec_data[indices_in]))
+   std_vec = np.std( vec_data[indices_in]) if (not stg.print_log) else np.std( np.power(10., vec_data[indices_in]))
 
    return avg_vec, std_vec
 
@@ -234,9 +235,9 @@ def plot_one_profile(ax, xdata, ydata, yerrdata, xlabel, ylabel, title, label, s
    if (ticks_visiblexy[1]): ax.yaxis.set_ticklabels([])
 
    if (plot_errorbars):
-      ax.errorbar(xdata, ydata, yerr=yerrdata, color="xkcd:red",  marker = "+")
+      ax.errorbar(xdata, ydata, yerr=yerrdata, color="xkcd:red",  marker = "o", markersize=1., linewidth=1.)
    else:
-      ax.scatter(xdata, ydata, color="xkcd:red",  marker = "+")
+      ax.scatter(xdata, ydata, color="xkcd:red",  marker = "o")
 
    ax.plot(   xdata, ydata, color="xkcd:blue", linewidth=0.75)
 
