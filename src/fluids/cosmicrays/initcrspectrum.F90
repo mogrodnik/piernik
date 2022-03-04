@@ -144,6 +144,7 @@ module initcrspectrum
    type spec_mod_trms
       real :: ub
       real :: ud
+      real :: umag
       real :: ucmb
    end type spec_mod_trms
 
