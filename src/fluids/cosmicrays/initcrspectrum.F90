@@ -38,7 +38,7 @@ module initcrspectrum
 
    private
    public :: use_cresp, use_cresp_evol, p_init, initial_spectrum, p_br_init, f_init, q_init, q_br_init, q_big, cfl_cre, cre_eff, expan_order, e_small, e_small_approx_p, e_small_approx_init_cond,  &
-           & smallcren, smallcree, max_p_ratio, NR_iter_limit, force_init_NR, NR_run_refine_pf, NR_refine_solution_q, NR_refine_pf, nullify_empty_bins, synch_active, adiab_active, &
+           & smallcren, smallcree, max_p_ratio, NR_iter_limit, force_init_NR, NR_run_refine_pf, NR_refine_solution_q, NR_refine_pf, synch_active, adiab_active, &
            & allow_source_spectrum_break, cre_active, tol_f, tol_x, tol_f_1D, tol_x_1D, arr_dim, arr_dim_q, eps, eps_det, w, p_fix, p_mid_fix, total_init_cree, p_fix_ratio,        &
            & spec_mod_trms, cresp_all_edges, cresp_all_bins, norm_init_spectrum, cresp, crel, dfpq, fsynchr, init_cresp, cleanup_cresp_sp, check_if_dump_fpq, cleanup_cresp_work_arrays, q_eps,       &
            & u_b_max, def_dtsynch, def_dtadiab, write_cresp_to_restart, NR_smap_file, NR_allow_old_smaps, cresp_substep, n_substeps_max, allow_unnatural_transfer, cresp_disallow_negatives
@@ -87,7 +87,6 @@ module initcrspectrum
    logical, dimension(2) :: NR_refine_pf          !< vector to store NR_refine_pf_lo and NR_refine_pf_up
    character(len=fnamelen):: NR_smap_file         !< provides name for NR solution maps to be read from / saved to
 
-   logical         :: nullify_empty_bins          !< nullifies empty bins when entering CRESP module / exiting empty cell.
    logical         :: allow_source_spectrum_break !< allow extension of spectrum to adjacent bins if momenta found exceed set p_fix
    logical         :: allow_unnatural_transfer    !< allows unnatural transfer of n & e with 'manually_deactivate_bins_via_transfer'
    logical         :: cresp_disallow_negatives    !< disallows (by default) negative n,e in cresp_update_cell
@@ -185,7 +184,7 @@ contains
       &                         cre_eff, K_cre_paral_1, K_cre_perp_1, cre_active, K_cre_pow, expan_order, e_small, use_cresp, use_cresp_evol, &
       &                         e_small_approx_init_cond, p_br_init_lo, e_small_approx_p_lo, e_small_approx_p_up, force_init_NR,   &
       &                         NR_iter_limit, max_p_ratio, synch_active, adiab_active, arr_dim, arr_dim_q, q_br_init,             &
-      &                         Gamma_min_fix, Gamma_max_fix, nullify_empty_bins, approx_cutoffs, NR_run_refine_pf, b_max_db,      &
+      &                         Gamma_min_fix, Gamma_max_fix, approx_cutoffs, NR_run_refine_pf, b_max_db,      &
       &                         NR_refine_solution_q, NR_refine_pf_lo, NR_refine_pf_up, smallcree, smallcren, p_br_init_up, p_diff,&
       &                         q_eps, NR_smap_file, cresp_substep, n_substeps_max, allow_unnatural_transfer, cresp_disallow_negatives
 
@@ -229,7 +228,6 @@ contains
       NR_refine_pf_up      = .false.
       NR_smap_file         = "CRESP_smaps.h5"
       NR_allow_old_smaps   = .false.
-      nullify_empty_bins   = .false.
       smallcren            = 0.0
       smallcree            = 0.0
       allow_source_spectrum_break  = .false.
@@ -294,13 +292,12 @@ contains
          lbuff(8)  =  NR_refine_solution_q
          lbuff(9)  =  NR_refine_pf_lo
          lbuff(10) =  NR_refine_pf_up
-         lbuff(11) =  nullify_empty_bins
-         lbuff(12) =  approx_cutoffs
-         lbuff(13) =  NR_allow_old_smaps
+         lbuff(11) =  approx_cutoffs
+         lbuff(12) =  NR_allow_old_smaps
 
-         lbuff(14) =  cresp_substep
-         lbuff(15) =  allow_unnatural_transfer
-         lbuff(16) =  cresp_disallow_negatives
+         lbuff(13) =  cresp_substep
+         lbuff(14) =  allow_unnatural_transfer
+         lbuff(15) =  cresp_disallow_negatives
 
          rbuff(1)  = cfl_cre
          rbuff(2)  = cre_eff
@@ -368,13 +365,12 @@ contains
          NR_refine_solution_q        = lbuff(8)
          NR_refine_pf_lo             = lbuff(9)
          NR_refine_pf_up             = lbuff(10)
-         nullify_empty_bins          = lbuff(11)
-         approx_cutoffs              = lbuff(12)
-         NR_allow_old_smaps          = lbuff(13)
+         approx_cutoffs              = lbuff(11)
+         NR_allow_old_smaps          = lbuff(12)
 
-         cresp_substep               = lbuff(14)
-         allow_unnatural_transfer    = lbuff(15)
-         cresp_disallow_negatives    = lbuff(16)
+         cresp_substep               = lbuff(13)
+         allow_unnatural_transfer    = lbuff(14)
+         cresp_disallow_negatives    = lbuff(15)
 
          cfl_cre                     = rbuff(1)
          cre_eff                     = rbuff(2)
