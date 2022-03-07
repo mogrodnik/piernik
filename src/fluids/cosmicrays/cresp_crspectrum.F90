@@ -38,7 +38,7 @@ module cresp_crspectrum
 
    private ! most of it
    public :: cresp_update_cell, cresp_init_state, cresp_get_scaled_init_spectrum, cleanup_cresp, cresp_allocate_all, &
-      &      src_gpcresp, p_rch_init, detect_clean_spectrum, cresp_find_prepare_spectrum, cresp_detect_negative_content
+      &      src_gpcresp, p_rch_init, cresp_find_prepare_spectrum, cresp_detect_negative_content
 
    integer, dimension(1:2)            :: fail_count_NR_2dim, fail_count_interpol
    integer(kind=4), allocatable, dimension(:) :: fail_count_comp_q
@@ -110,7 +110,7 @@ contains
 #endif /* CRESP_VERBOSED */
       use diagnostics,    only: decr_vec
       use initcosmicrays, only: ncre
-      use initcrspectrum, only: allow_unnatural_transfer, crel, dfpq, e_small_approx_p, nullify_empty_bins, p_mid_fix, p_fix, spec_mod_trms, cresp_disallow_negatives
+      use initcrspectrum, only: allow_unnatural_transfer, crel, dfpq, e_small_approx_p, p_mid_fix, p_fix, spec_mod_trms, cresp_disallow_negatives
 
       implicit none
 
@@ -164,9 +164,6 @@ contains
 
       if (empty_cell) then
          approx_p = e_small_approx_p         !< restore approximation before leaving
-         if (nullify_empty_bins) then
-            call nullify_all_bins(n_inout, e_inout)
-         endif
 #ifdef CRESP_VERBOSED
          write (msg, "(A)") "[cresp_crspectrum:cresp_update_cell] EMPTY CELL, returning"  ;  call printinfo(msg)
 #endif /* CRESP_VERBOSED */
@@ -354,8 +351,6 @@ contains
          endif
       endif
 
-      if (nullify_empty_bins) call nullify_inactive_bins(ndt, edt)
-
       n = ndt
       e = edt
 ! --- for testing
@@ -401,95 +396,6 @@ contains
 
    end subroutine manually_deactivate_bin_via_transfer
 
-!----------------------------------------------------------------------------------------------------
-   subroutine detect_clean_spectrum ! DEPRECATED
-
-      use initcrspectrum, only: cresp
-
-      implicit none
-
-      logical :: empty_cell
-
-      call find_i_bound(empty_cell)
-
-      if (empty_cell) then
-         call nullify_all_bins(cresp%n, cresp%e)
-      else
-         call nullify_inactive_bins(cresp%n, cresp%e)
-      endif
-
-   end subroutine detect_clean_spectrum
-
-!----------------------------------------------------------------------------------------------------
-
-   subroutine nullify_inactive_bins(ext_n, ext_e)
-
-      use constants,      only: zero
-      use initcosmicrays, only: ncre
-
-      implicit none
-
-      real, dimension(ncre), intent(inout) :: ext_n, ext_e
-
-      ext_e(:i_cut(LO))   = zero
-      ext_n(:i_cut(LO))   = zero
-      ext_e(i_cut(HI)+1:) = zero
-      ext_n(i_cut(HI)+1:) = zero
-
-   end subroutine nullify_inactive_bins
-!----------------------------------------------------------------------------------------------------
-   subroutine nullify_all_bins(ext_n, ext_e)
-
-      use constants,      only: zero
-      use initcosmicrays, only: ncre
-
-      implicit none
-
-      real, dimension(ncre), intent(inout) :: ext_n, ext_e
-
-      ext_e(:) = zero
-      ext_n(:) = zero
-
-   end subroutine nullify_all_bins
-
-!-------------------------------------------------------------------------------------------------
-! all the procedures below are called by cresp_update_cell subroutine or the driver
-!-------------------------------------------------------------------------------------------------
-   subroutine find_i_bound(empty_cell) ! DEPRECATED
-
-      use constants,      only: zero, I_ONE
-      use initcosmicrays, only: ncre
-      use initcrspectrum, only: cresp
-
-      implicit none
-
-      logical, intent(out) :: empty_cell
-      integer(kind=4)      :: i
-
-      empty_cell = .true.
-
-      i_cut(LO) = 0
-      do i = 1, ncre                        ! if energy density is nonzero, so should be the number density
-         i_cut(LO) = i - I_ONE
-         if (cresp%e(i) > e_threshold(LO)) then
-            if (cresp%n(i) > zero) then
-               empty_cell = .false.
-               exit
-            endif
-         endif
-      enddo
-
-      if (empty_cell) return   ! empty cell - nothing to do here!
-
-      i_cut(HI) = ncre
-      do i = ncre, 1,-1
-         i_cut(HI) = i
-         if (cresp%e(i) > e_threshold(HI)) then   ! if energy density is nonzero, so should be the number density
-            if (cresp%n(i) > zero) exit
-         endif
-      enddo
-
-   end subroutine find_i_bound
 !-------------------------------------------------------------------------------------------------
    subroutine cresp_find_prepare_spectrum(n, e, empty_cell, i_up_out) ! EXPERIMENTAL
 

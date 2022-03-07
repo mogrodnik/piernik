@@ -36,7 +36,7 @@ module cresp_grid
    implicit none
 
    private
-   public :: cresp_update_grid, cresp_init_grid, cfl_cresp_violation, cresp_clean_grid
+   public :: cresp_update_grid, cresp_init_grid, cfl_cresp_violation
 
    logical :: cfl_cresp_violation
 
@@ -229,56 +229,5 @@ contains
       dt_substep = dt_simulation / n_substeps
 
    end subroutine prepare_substep
-
-!----------------------------------------------------------------------------------------------------
-
-   subroutine cresp_clean_grid
-
-      use cg_cost_data,     only: I_MHD
-      use cg_leaves,        only: leaves
-      use cg_list,          only: cg_list_element
-      use cresp_crspectrum, only: detect_clean_spectrum
-      use grid_cont,        only: grid_container
-      use initcosmicrays,   only: iarr_cre_e, iarr_cre_n
-      use initcrspectrum,   only: cresp, nullify_empty_bins
-      use ppp,              only: ppp_main
-
-      implicit none
-
-      integer                        :: i, j, k
-      type(cg_list_element), pointer :: cgl
-      type(grid_container),  pointer :: cg
-      character(len=*), parameter    :: crcg_label = "CRESP_clean_grid"
-
-      if (.not.nullify_empty_bins) return
-
-      call ppp_main%start(crcg_label)
-
-      cgl => leaves%first
-      do while (associated(cgl))
-         cg => cgl%cg
-         call cg%costs%start
-
-         do k = cg%ks, cg%ke
-            do j = cg%js, cg%je
-               do i = cg%is, cg%ie
-                  cresp%n = cg%u(iarr_cre_n, i, j, k)
-                  cresp%e = cg%U(iarr_cre_e, i, j, k)
-
-                  call detect_clean_spectrum
-
-                  cg%u(iarr_cre_n, i, j, k) = cresp%n
-                  cg%u(iarr_cre_e, i, j, k) = cresp%e
-               enddo
-            enddo
-         enddo
-
-         call cg%costs%stop(I_MHD)
-         cgl=>cgl%nxt
-      enddo
-
-      call ppp_main%stop(crcg_label)
-
-   end subroutine cresp_clean_grid
 
 end module cresp_grid
