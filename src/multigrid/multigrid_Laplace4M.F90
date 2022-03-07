@@ -35,7 +35,7 @@
 !<
 
 module multigrid_Laplace4M
-! pulled by MULTIGRID && GRAV
+! pulled by MULTIGRID && SELF_GRAV
 
    implicit none
 
@@ -76,10 +76,11 @@ contains
 
    subroutine residual_Mehrstellen(cg_llst, src, soln, def)
 
-      use cg_leaves,          only: cg_leaves_T
-      use cg_level_connected, only: cg_level_connected_T
+      use cg_cost_data,       only: I_MULTIGRID
+      use cg_leaves,          only: cg_leaves_t
+      use cg_level_connected, only: cg_level_connected_t
       use cg_list,            only: cg_list_element
-      use cg_list_bnd,        only: cg_list_bnd_T
+      use cg_list_bnd,        only: cg_list_bnd_t
       use constants,          only: ndims, xdim, ydim, zdim, BND_NEGREF, LO, HI, GEO_XYZ, zero
       use dataio_pub,         only: die
       use domain,             only: dom
@@ -90,7 +91,7 @@ contains
 
       implicit none
 
-      class(cg_list_bnd_T), intent(inout) :: cg_llst !< pointer to a level for which we approximate the solution
+      class(cg_list_bnd_t), intent(inout) :: cg_llst !< pointer to a level for which we approximate the solution
       integer(kind=4),      intent(in) :: src     !< index of source in cg%q(:)
       integer(kind=4),      intent(in) :: soln    !< index of solution in cg%q(:)
       integer(kind=4),      intent(in) :: def     !< index of defect in cg%q(:)
@@ -110,14 +111,14 @@ contains
       ! the contribution of outer potential is simulated by a single layer of cells with image of density and we don't want to operate on this structure with the Laplacian.
       ! This image density is supposed to be infinitesimally thin, which we obviously can't reproduce, so we modify the operator instead
       select type(cg_llst)
-         type is (cg_leaves_T)
+         type is (cg_leaves_t)
             call cg_llst%leaf_arr3d_boundaries(soln, bnd_type=BND_NEGREF)
             if (src_lapl.notequals.zero) call cg_llst%leaf_arr3d_boundaries(src, bnd_type=BND_NEGREF, nocorners=.true.)
-         type is (cg_level_connected_T)
+         type is (cg_level_connected_t)
             call cg_llst%arr3d_boundaries(soln, bnd_type=BND_NEGREF)
             if (src_lapl.notequals.zero) call cg_llst%arr3d_boundaries(src, bnd_type=BND_NEGREF, nocorners=.true.)
          class default
-             call die("[multigrid_Laplace4M:residual_Mehrstellen] Unknown type")
+            call die("[multigrid_Laplace4M:residual_Mehrstellen] Unknown type")
       end select
 
       idm = 0
@@ -128,6 +129,7 @@ contains
       cgl => cg_llst%first
       do while (associated(cgl))
          cg => cgl%cg
+         call cg%costs%start
 
          Lxy = 0. ; if (dom%has_dir(xdim) .and. dom%has_dir(ydim)) Lxy = (cg%idx2 + cg%idy2) / 12.
          Lxz = 0. ; if (dom%has_dir(xdim) .and. dom%has_dir(zdim)) Lxz = (cg%idx2 + cg%idz2) / 12.
@@ -142,8 +144,7 @@ contains
          if (dom%eff_dim == ndims .and. .not. multidim_code_3D) then
             ! There's small speed up vs multidim_code_3D
             fac = (1.0 - src_lapl * 2.0 * dom%eff_dim)
-            cg%q(def)%arr(cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = &
-               fac * cg%q(src)%arr(cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) + L0 * cg%q(soln)%arr(cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) + &
+            cg%q(def)%arr(RNG) = fac * cg%q(src)%arr(RNG) + L0 * cg%q(soln)%arr(RNG) + &
                     (cg%q(src)%arr(cg%is-1:cg%ie-1, cg%js:cg%je,     cg%ks:cg%ke    ) +  cg%q(src)%arr(cg%is+1:cg%ie+1, cg%js:cg%je,     cg%ks:cg%ke    )) * src_lapl  &
                  + (cg%q(soln)%arr(cg%is-1:cg%ie-1, cg%js:cg%je,     cg%ks:cg%ke    ) + cg%q(soln)%arr(cg%is+1:cg%ie+1, cg%js:cg%je,     cg%ks:cg%ke    )) * Lx        &
                  +  (cg%q(src)%arr(cg%is:cg%ie,     cg%js-1:cg%je-1, cg%ks:cg%ke    ) +  cg%q(src)%arr(cg%is:cg%ie,     cg%js+1:cg%je+1, cg%ks:cg%ke    )) * src_lapl  &
@@ -176,6 +177,8 @@ contains
                  + Lyz * (cg%q(soln)%span(cg%ijkse-idm(zdim,:,:)-idm(ydim,:,:)) + cg%q(soln)%span(cg%ijkse-idm(zdim,:,:)+idm(ydim,:,:)) + &
                  &        cg%q(soln)%span(cg%ijkse+idm(zdim,:,:)-idm(ydim,:,:)) + cg%q(soln)%span(cg%ijkse+idm(zdim,:,:)+idm(ydim,:,:)) )
          endif
+
+         call cg%costs%stop(I_MULTIGRID)
          cgl => cgl%nxt
       enddo
 
@@ -185,10 +188,10 @@ contains
 
    subroutine approximate_solution_relax4M(curl, src, soln, nsmoo)
 
+      use cg_cost_data,       only: I_MULTIGRID
       use cg_level_coarsest,  only: coarsest
-      use cg_level_connected, only: cg_level_connected_T
+      use cg_level_connected, only: cg_level_connected_t
       use cg_list,            only: cg_list_element
-      use cg_list_dataop,     only: dirty_label
       use constants,          only: xdim, ydim, zdim, ndims, GEO_XYZ, BND_NEGREF, pMAX, zero
       use dataio_pub,         only: die, warn
       use domain,             only: dom
@@ -197,12 +200,12 @@ contains
       use func,               only: operator(.notequals.)
       use mpisetup,           only: piernik_MPI_Allreduce, master
       use multigrid_helpers,  only: set_relax_boundaries, copy_and_max
-      use multigridvars,      only: multidim_code_3D, coarsest_tol, nc_growth
+      use multigridvars,      only: multidim_code_3D, coarsest_tol, nc_growth, dirty_label
       use named_array_list,   only: qna
 
       implicit none
 
-      type(cg_level_connected_T), pointer, intent(inout) :: curl  !< pointer to a level for which we approximate the solution
+      type(cg_level_connected_t), pointer, intent(inout) :: curl  !< pointer to a level for which we approximate the solution
       integer(kind=4),                     intent(in)    :: src   !< index of source in cg%q(:)
       integer(kind=4),                     intent(in)    :: soln  !< index of solution in cg%q(:)
       integer(kind=4),                     intent(in) :: nsmoo !< number of smoothing repetitions
@@ -245,6 +248,7 @@ contains
          cgl => curl%first
          do while (associated(cgl))
             cg => cgl%cg
+            call cg%costs%start
 
             Lxy = 0. ; if (dom%has_dir(xdim) .and. dom%has_dir(ydim)) Lxy = (cg%idx2 + cg%idy2) / 12.
             Lxz = 0. ; if (dom%has_dir(xdim) .and. dom%has_dir(zdim)) Lxz = (cg%idx2 + cg%idz2) / 12.
@@ -315,8 +319,9 @@ contains
             endif
 
             if (associated(curl, coarsest%level) .and. n == ncheck) &
-                 max_out = max(max_out, maxval(abs(cg%prolong_xyz( cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) - cg%wa(cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke))))
+                 max_out = max(max_out, maxval(abs(cg%prolong_xyz(RNG) - cg%wa(RNG))))
 
+            call cg%costs%stop(I_MULTIGRID)
             cgl => cgl%nxt
          enddo
          call curl%q_copy(qna%wai, soln)

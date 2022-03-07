@@ -68,8 +68,7 @@ contains
    subroutine init_shear
 
       use constants,      only: PIERNIK_INIT_GRID
-      use dataio_pub,     only: nh  ! QA_WARN required for diff_nml
-      use dataio_pub,     only: printinfo, die, code_progress
+      use dataio_pub,     only: printinfo, die, code_progress, nh
       use fluidindex,     only: flind
       use mpisetup,       only: master, slave, rbuff, piernik_MPI_Bcast
 
@@ -161,8 +160,8 @@ contains
       integer(kind=4),      intent(in)        :: sweep
 
       real, dimension(2)                      :: df                 !< \deprecated  additional acceleration term used in streaming problem
-      real, dimension(flind%fluids,size(u,2)) :: vy0
-      real, dimension(flind%fluids,size(u,2)) :: rotacc
+      real, dimension(size(u,1),size(u,2)) :: vy0
+      real, dimension(size(u,1),size(u,2)) :: rotacc
       integer :: ind
 
       df = 0.0
@@ -183,11 +182,11 @@ contains
 !           rotacc(ind,:) = 0.0
 !        endif
          if (sweep == xdim) then
-            rotacc(ind,:) =  2.0*omega*vy0(ind,:) + df(ind)  ! global_gradient
+            rotacc(:,ind) =  2.0*omega*vy0(:,ind) + df(ind)  ! global_gradient
          else if (sweep == ydim)  then
-            rotacc(ind,:) = (qshear - 2.0)*omega*vy0(ind,:)  ! with respect to global shear (2.5D)
+            rotacc(:,ind) = (qshear - 2.0)*omega*vy0(:,ind)  ! with respect to global shear (2.5D)
          else
-            rotacc(ind,:) = 0.0
+            rotacc(:,ind) = 0.0
          endif
       enddo
 
@@ -214,7 +213,7 @@ contains
 #endif /* FFTW */
 
       cg => leaves%first%cg
-      if (is_multicg) call die("[shear:yshift] multiple grid pieces per procesor not implemented yet") !nontrivial
+      if (is_multicg) call die("[shear:yshift] multiple grid pieces per processor not implemented yet") !nontrivial
 
       ddly  = dts * qshear*omega*dom%L_(xdim)
       dely  = ts  * qshear*omega*dom%L_(xdim)
@@ -259,7 +258,7 @@ contains
       type(grid_container), pointer              :: cg
 
       cg => leaves%first%cg
-      if (is_multicg) call die("[shear:unshear_fft] multiple grid pieces per procesor not implemented yet") !nontrivial
+      if (is_multicg) call die("[shear:unshear_fft] multiple grid pieces per processor not implemented yet") !nontrivial
 
       St = - ddy * cg%idy / dom%L_(xdim)
       if (.not.present(inv)) St = -St
@@ -327,7 +326,7 @@ contains
       nz = size(qty,3)
 
       cg => leaves%first%cg
-      if (is_multicg) call die("[shear:unshear] multiple grid pieces per procesor not implemented yet") !nontrivial
+      if (is_multicg) call die("[shear:unshear] multiple grid pieces per processor not implemented yet") !nontrivial
 
       my = 3*cg%nyb+2*dom%nb
 

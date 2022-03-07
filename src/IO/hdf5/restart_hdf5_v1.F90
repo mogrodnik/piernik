@@ -138,8 +138,7 @@ contains
 
       use constants,        only: cwdlen
       use hdf5,             only: HID_T, H5P_FILE_ACCESS_F, H5F_ACC_RDWR_F, h5open_f, h5close_f, h5fopen_f, h5fclose_f, h5pcreate_f, h5pclose_f, h5pset_fapl_mpio_f
-      use mpi,              only: MPI_INFO_NULL
-      use mpisetup,         only: comm
+      use MPIF,             only: MPI_INFO_NULL, MPI_COMM_WORLD
       use named_array_list, only: qna, wna
 
       implicit none
@@ -148,12 +147,16 @@ contains
       integer(kind=4)                   :: i
       integer(HID_T)                    :: file_id       !< File identifier
       integer(HID_T)                    :: plist_id      !< Property list identifier
-      integer(kind=4)                   :: error
+      integer(kind=4)                   :: error         !< error perhaps should be of type integer(HID_T)
 
       ! Set up a new HDF5 file for parallel write
       call h5open_f(error)
       call h5pcreate_f(H5P_FILE_ACCESS_F, plist_id, error)
-      call h5pset_fapl_mpio_f(plist_id, comm, MPI_INFO_NULL, error)
+#ifdef MPIF08
+      call h5pset_fapl_mpio_f(plist_id, MPI_COMM_WORLD%mpi_val, MPI_INFO_NULL%mpi_val, error)
+#else /* !MPIF08 */
+      call h5pset_fapl_mpio_f(plist_id, MPI_COMM_WORLD, MPI_INFO_NULL, error)
+#endif /* !MPIF08 */
       call h5fopen_f(filename, H5F_ACC_RDWR_F, file_id, error, access_prp = plist_id)
 
       ! Write scalar fields that were declared to be required on restart
@@ -215,7 +218,7 @@ contains
       integer(kind=4), dimension(ndims)  :: lleft, lright
       integer(kind=8), dimension(ndims)  :: loffs
       integer(HSIZE_T), dimension(rank4) :: cnt, offset, stride
-      integer(kind=4)                    :: rank, error, area_type
+      integer(kind=4)                    :: rank, error, area_type    !< error perhaps should be of type integer(HID_T)
       integer                            :: ir, dim1
       type(cg_list_element), pointer     :: cgl
       type(grid_container),  pointer     :: cg
@@ -236,7 +239,7 @@ contains
       endif
       ir = rank4 - rank + 1 ! 1 for 4-D arrays, 2 for 3-D arrays (to simplify use of count(:), offset(:), stride(:), block(:), dimsf(:) and chunk_dims(:)
 
-      if (area_type == AT_IGNORE) return !> \todo write a list of unsaved arrays?
+      if (area_type <= AT_IGNORE) return
       call set_area_for_restart(area_type, area)
 
       dimsf      = [dim1, area(:)] ! Dataset dimensions
@@ -355,7 +358,7 @@ contains
       integer, dimension(ndims)              :: area, chnk
       integer(kind=4), dimension(ndims)      :: lleft, lright
       integer(kind=8),  dimension(ndims)     :: loffs
-      integer(kind=4)                        :: rank, rankf, error, area_type
+      integer(kind=4)                        :: rank, rankf, error, area_type !< error perhaps should be of type integer(HID_T)
       integer                                :: ir, dim1
       type(cg_list_element), pointer         :: cgl
       type(grid_container),  pointer         :: cg
@@ -379,7 +382,7 @@ contains
       ir = rank4 - rank + 1 ! 1 for 4-D arrays, 2 for 3-D arrays (to simplify use of count(:), offset(:), stride(:), block(:), dimsf(:) and chunk_dims(:)
 
       if (present(alt_area_type)) area_type = alt_area_type
-      if (area_type == AT_IGNORE) return !! \todo write a list of unsaved arrays?
+      if (area_type <= AT_IGNORE) return
       call set_area_for_restart(area_type, area)
 
       dimsf = [dim1, area(:)]      ! Dataset dimensions
@@ -476,9 +479,20 @@ contains
            &                      h5open_f, h5pcreate_f, h5pset_fapl_mpio_f, h5fopen_f, h5pclose_f, h5fclose_f, h5close_f
       use h5lt,             only: h5ltget_attribute_double_f, h5ltget_attribute_int_f, h5ltget_attribute_string_f
       use mass_defect,      only: magic_mass
-      use mpi,              only: MPI_INFO_NULL
-      use mpisetup,         only: comm, master, piernik_MPI_Bcast, ibuff, rbuff, cbuff, slave
+      use MPIF,             only: MPI_INFO_NULL, MPI_COMM_WORLD
+      use mpisetup,         only: master, piernik_MPI_Bcast, ibuff, rbuff, cbuff, slave
       use named_array_list, only: qna, wna
+      use timestep_pub,     only: c_all_old, cfl_c, stepcfl
+#ifdef RANDOMIZE
+      use randomization,    only: initseed, seed_size
+#endif /* RANDOMIZE */
+#ifdef SN_SRC
+      use snsources,        only: nsn
+#endif /* SN_SRC */
+#ifdef COSM_RAY_ELECTRONS
+      use initcrspectrum,  only: use_cresp
+      use cresp_NR_method, only: cresp_read_smaps_from_hdf
+#endif /* COSM_RAY_ELECTRONS */
 
       implicit none
 
@@ -489,12 +503,15 @@ contains
       integer(HID_T)                           :: file_id       !< File identifier
       integer(HID_T)                           :: plist_id      !< Property list identifier
 
-      integer(kind=4)                          :: error
+      integer(kind=4)                          :: error         !< error perhaps should be of type integer(HID_T)
       logical                                  :: file_exist
 
       real,            dimension(1)            :: rbuf
       real,            dimension(flind%fluids) :: rbufm
       integer(kind=4), dimension(1)            :: ibuf
+#ifdef RANDOMIZE
+      integer,         dimension(seed_size)    :: ibufs
+#endif /* RANDOMIZE */
 
       real                                     :: restart_hdf5_version
 
@@ -561,10 +578,18 @@ contains
       endif
 
       call h5pcreate_f(H5P_FILE_ACCESS_F, plist_id, error)
-      call h5pset_fapl_mpio_f(plist_id, comm, MPI_INFO_NULL, error)
+#ifdef MPIF08
+      call h5pset_fapl_mpio_f(plist_id, MPI_COMM_WORLD%mpi_val, MPI_INFO_NULL%mpi_val, error)
+#else /* !MPIF08 */
+      call h5pset_fapl_mpio_f(plist_id, MPI_COMM_WORLD, MPI_INFO_NULL, error)
+#endif /* !MPIF08 */
 
       call h5fopen_f(trim(filename), H5F_ACC_RDONLY_F, file_id, error, access_prp = plist_id)
       call h5pclose_f(plist_id, error)
+
+#ifdef COSM_RAY_ELECTRONS
+      if (use_cresp) call cresp_read_smaps_from_hdf(file_id)
+#endif /* COSM_RAY_ELECTRONS */
 
       ! set up things such as register user rank-3 and rank-4 arrays to be read by read_arr_from_restart. Read also anything that is not read by all read_arr_from_restart calls
       if (associated(user_attrs_rd)) call user_attrs_rd(file_id)
@@ -595,9 +620,18 @@ contains
          call h5ltget_attribute_double_f(file_id,"/","last_tsl_time", rbuf, error) ; last_tsl_time = rbuf(1)
          call h5ltget_attribute_double_f(file_id,"/","last_hdf_time", rbuf, error) ; last_hdf_time = rbuf(1)
          call h5ltget_attribute_double_f(file_id,"/","last_res_time", rbuf, error) ; last_res_time = rbuf(1)
+         call h5ltget_attribute_double_f(file_id,"/","c_all_old",     rbuf, error) ; c_all_old = rbuf(1)
+         call h5ltget_attribute_double_f(file_id,"/","stepcfl",       rbuf, error) ; stepcfl = rbuf(1)
+         call h5ltget_attribute_double_f(file_id,"/","cfl_c",         rbuf, error) ; cfl_c = rbuf(1)
          call h5ltget_attribute_int_f(file_id,"/","nstep", ibuf, error) ; nstep = ibuf(1)
          call h5ltget_attribute_int_f(file_id,"/","nres",  ibuf, error) ; nres  = ibuf(1)
          call h5ltget_attribute_int_f(file_id,"/","nhdf",  ibuf, error) ; nhdf  = ibuf(1)
+#ifdef RANDOMIZE
+         call h5ltget_attribute_int_f(file_id,"/","current_seed", ibufs, error) ; initseed = ibufs(:)
+#endif /* RANDOMIZE */
+#ifdef SN_SRC
+         call h5ltget_attribute_int_f(file_id,"/","nsn", ibuf, error) ; nsn = ibuf(1)
+#endif /* SN_SRC */
 
          call h5ltget_attribute_string_f(file_id,"/","problem_name", problem_name, error)
          call h5ltget_attribute_string_f(file_id,"/","domain",       domain_dump,  error)
@@ -626,6 +660,12 @@ contains
          ibuff(2) = nres
          ibuff(3) = nhdf
          if (restart_hdf5_version > 1.11) ibuff(5) = require_problem_IC
+#ifdef SN_SRC
+         ibuff(6) = nsn
+#endif /* SN_SRC */
+#ifdef RANDOMIZE
+         ibuff(7:seed_size+6) = initseed
+#endif /* RANDOMIZE */
 
          rbuff(1) = last_log_time
          rbuff(2) = last_tsl_time
@@ -645,22 +685,31 @@ contains
 
       if (slave) then
          nstep = ibuff(1)
-         nres = ibuff(2)
-         nhdf = ibuff(3)
+         nres  = ibuff(2)
+         nhdf  = ibuff(3)
          if (restart_hdf5_version > 1.11) require_problem_IC = ibuff(5)
+#ifdef SN_SRC
+         nsn   = ibuff(6)
+#endif /* SN_SRC */
+#ifdef RANDOMIZE
+         initseed = ibuff(7:seed_size+6)
+#endif /* RANDOMIZE */
 
          last_log_time = rbuff(1)
          last_tsl_time = rbuff(2)
          last_hdf_time = rbuff(3)
          last_res_time = rbuff(4)
-         t = rbuff(6)
-         dt = rbuff(7)
+         t             = rbuff(6)
+         dt            = rbuff(7)
 
          problem_name = cbuff(1)
-         domain_dump = cbuff(2)(1:domlen)
-         res_id = cbuff(3)(1:idlen)
+         domain_dump  = cbuff(2)(1:domlen)
+         res_id       = cbuff(3)(1:idlen)
 
       endif
+#ifdef RANDOMIZE
+      call random_seed(put=initseed)
+#endif /* RANDOMIZE */
 
    end subroutine read_restart_hdf5_v1
 

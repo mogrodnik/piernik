@@ -29,23 +29,22 @@
 !>
 !! \brief Module containing all main routines  responsible for data output
 !!
-!!
 !! In this module following namelists of parameters are specified:
 !! \copydetails dataio::init_dataio
 !<
 
 module dataio
 
-   use dataio_pub, only: domain_dump, fmin, fmax, vizit, nend, tend, wend, res_id, nrestart, problem_name, run_id, multiple_h5files, use_v2_io, nproc_io, enable_compression, gzip_level, gdf_strict, h5_64bit
+   use dataio_pub, only: domain_dump, fmin, fmax, vizit, nend, tend, wend, res_id, &
+        &                nrestart, problem_name, run_id, multiple_h5files, use_v2_io, &
+        &                nproc_io, enable_compression, gzip_level, gdf_strict, h5_64bit
    use constants,  only: cwdlen, fmt_len, cbuff_len, dsetnamelen, RES, TSL
    use timer,      only: wallclock
 
    implicit none
 
    private
-   public :: check_log, check_tsl, dump, write_data, write_crashed, cleanup_dataio, init_dataio, init_dataio_parameters, user_msg_handler
-
-!   integer                  :: istep                 !< current number of substep (related to integration order)
+   public :: check_log, check_tsl, dump, write_data, write_crashed, cleanup_dataio, init_dataio, init_dataio_parameters, user_msg_handler, vars
 
    integer, parameter       :: nvarsmx = 20          !< maximum number of variables to dump in hdf files
    character(len=cbuff_len) :: restart               !< choice of restart %file: if restart = 'last': automatic choice of the last restart file regardless of "nrestart" value; if something else is set: "nrestart" value is fixing
@@ -60,18 +59,22 @@ module dataio
    character(len=cwdlen)    :: system_message_file   !< path to possible system (UPS) message file containing orders to dump/stop/end simulation
    integer                  :: iv                    !< work index to count successive variables to dump in hdf files
    character(len=dsetnamelen), dimension(nvarsmx) :: vars !< array of 4-character strings standing for variables to dump in hdf files
-
+#ifdef NBODY
+   character(len=dsetnamelen), dimension(12) :: pvars !< array of 4-character strings standing for variables to dump in particle hdf files
+#endif /* NBODY */
+#ifdef HDF5
    integer                  :: nhdf_start            !< number of hdf file for the first hdf dump in simulation run
    integer                  :: nres_start            !< number of restart file for the first restart dump in simulation run
    real                     :: t_start               !< time in simulation of start simulation run
+#endif /* HDF5 */
    logical                  :: tsl_firstcall         !< logical value to start a new timeslice file
    logical                  :: tsl_with_mom          !< place momentum integrals in timeslice file
    logical                  :: tsl_with_ptc          !< place pressure, temperature and sound speed extrema in timeslice file (even if ISO while they are constant or only density dependent)
-   logical                  :: initial_hdf_dump      !< force initial hdf dump
+   logical                  :: init_hdf_dump, init_res_dump      !< force initial hdf/res dump
    logical, dimension(RES:TSL) :: dump = .false.     !< logical values for all dump types to restrict to only one dump of each type a step
 
 !   integer                  :: nchar                 !< number of characters in a user/system message
-   integer, parameter       :: umsg_len = 16
+   integer(kind=4), parameter :: umsg_len = 16
    character(len=umsg_len)  :: umsg                  !< string of characters - content of a user/system message
    real                     :: umsg_param            !< parameter changed by a user/system message
 
@@ -85,6 +88,11 @@ module dataio
       logical :: dummy
 #ifdef COSM_RAYS
       real :: encr_min, encr_max
+#ifdef COSM_RAY_ELECTRONS
+      real :: cren_min, cren_max                     !< values of cre number density
+      real :: cree_min, cree_max                     !< values of cre energy density
+      real :: divv_min, divv_max                     !< vel. divergence values
+#endif /* COSM_RAY_ELECTRONS */
 #endif /* COSM_RAYS */
 #ifdef RESISTIVE
       real :: etamax
@@ -95,19 +103,13 @@ module dataio
 #ifdef VARIABLE_GP
       real :: gpxmax, gpymax, gpzmax
 #endif /* VARIABLE_GP */
-#ifdef COSM_RAY_ELECTRONS
-      real :: cren_min, cren_max                     !< values of cre number density
-      real :: cree_min, cree_max                     !< values of cre energy density
-      real :: divv_min, divv_max                     !< vel. divergence values
-#endif /* COSM_RAY_ELECTRONS */
    end type tsl_container
 
    namelist /END_CONTROL/     nend, tend, wend
    namelist /RESTART_CONTROL/ restart, res_id, nrestart, resdel
-   namelist /OUTPUT_CONTROL/  problem_name, run_id, dt_hdf, dt_res, dt_tsl, dt_log, tsl_with_mom, tsl_with_ptc, &
-                              domain_dump, vars, mag_center, vizit, fmin, fmax, user_message_file, system_message_file, &
-                              multiple_h5files, use_v2_io, nproc_io, enable_compression, gzip_level, initial_hdf_dump, &
-                              colormode, wdt_res, gdf_strict, h5_64bit
+   namelist /OUTPUT_CONTROL/  problem_name, run_id, dt_hdf, dt_res, dt_tsl, dt_log, tsl_with_mom, tsl_with_ptc, init_hdf_dump, init_res_dump, &
+                              domain_dump, vars, mag_center, vizit, fmin, fmax, user_message_file, system_message_file, multiple_h5files,     &
+                              use_v2_io, nproc_io, enable_compression, gzip_level, colormode, wdt_res, gdf_strict, h5_64bit
 
 contains
 
@@ -146,10 +148,11 @@ contains
 !! <tr><td>wdt_res            </td><td>0.0                </td><td>real      </td><td>\copydoc dataio::wdt_res          </td></tr>
 !! <tr><td>dt_tsl             </td><td>0.0                </td><td>real      </td><td>\copydoc dataio::dt_tsl           </td></tr>
 !! <tr><td>dt_log             </td><td>0.0                </td><td>real      </td><td>\copydoc dataio::dt_log           </td></tr>
-!! <tr><td>tsl_with_mom       </td><td>.true.             </td><td>logical   </td><td>\copydoc dataio::plt_with_mom     </td></tr>
-!! <tr><td>tsl_with_ptc       </td><td>if ISO .false. else .true.</td><td>logical   </td><td>\copydoc dataio::plt_with_ptc      </td></tr>
+!! <tr><td>tsl_with_mom       </td><td>.true.             </td><td>logical   </td><td>\copydoc dataio::tsl_with_mom     </td></tr>
+!! <tr><td>tsl_with_ptc       </td><td>if ISO .false. else .true.</td><td>logical   </td><td>\copydoc dataio::tsl_with_ptc      </td></tr>
 !! <tr><td>domain_dump        </td><td>'phys_domain'      </td><td>'phys_domain' or 'full_domain'                       </td><td>\copydoc dataio_pub::domain_dump</td></tr>
 !! <tr><td>vars               </td><td>''                 </td><td>'dens', 'velx', 'vely', 'velz', 'ener' and some more </td><td>\copydoc dataio::vars  </td></tr>
+!! <tr><td>pvars              </td><td>''                 </td><td>'ppos', 'pvel', 'pacc', 'mass', 'ener' and some more </td><td>\copydoc dataio::pvars </td></tr>
 !! <tr><td>mag_center         </td><td>.false.            </td><td>logical   </td><td>\copydoc dataio::mag_center       </td></tr>
 !! <tr><td>vizit              </td><td>.false.            </td><td>logical   </td><td>\copydoc dataio_pub::vizit        </td></tr>
 !! <tr><td>fmin               </td><td>                   </td><td>real      </td><td>\copydoc dataio_pub::fmin         </td></tr>
@@ -171,8 +174,8 @@ contains
 
       use constants,  only: cwdlen, PIERNIK_INIT_MPI, INVALID
       use dataio_pub, only: nrestart, last_hdf_time, last_res_time, last_tsl_time, last_log_time, log_file_initialized, &
-           &                tmp_log_file, printinfo, printio, warn, msg, die, code_progress, log_wr, &
-           &                move_file, parfile, parfilelines, log_file, maxparfilelines, can_i_write, ierrh, par_file
+           &                tmp_log_file, printinfo, printio, warn, msg, die, code_progress, log_wr, restarted_sim, &
+           &                move_file, parfile, parfilelines, log_file, maxparlen, maxparfilelines, can_i_write, ierrh, par_file
       use mpisetup,   only: master, nproc, proc, piernik_MPI_Bcast, piernik_MPI_Barrier, FIRST, LAST
 
       implicit none
@@ -205,6 +208,7 @@ contains
          enddo
          close(par_lun)
          if (parfilelines == maxparfilelines) call warn("[dataio:init_dataio_parameters] problem.par has too many lines. The copy in the logfile and HDF dumps can be truncated.")
+         maxparlen = int(maxval(len_trim(parfile(:parfilelines))), kind=4)
       endif
 
       ! For 1 /= nproc_io /= nproc there should be choice between two strategies : nproc < nproc_io and the current one
@@ -239,6 +243,7 @@ contains
 #endif /* HDF5 */
       call piernik_MPI_Barrier
       call piernik_MPI_Bcast(nrestart)
+      call piernik_MPI_Bcast(restarted_sim)
 
       if (master) then
          write(log_file,'(6a,i3.3,a)') trim(log_wr),'/',trim(problem_name),'_',trim(run_id),'_',nrestart,'.log'
@@ -260,39 +265,40 @@ contains
    subroutine dataio_par_io
 
       use constants,  only: idlen, cbuff_len, INT4
-      use dataio_pub, only: nres, nrestart, warn, nhdf, wd_rd, multiple_h5files, warn, msg, h5_64bit
-      use dataio_pub, only: nh, set_colors  ! QA_WARN required for diff_nml
+      use dataio_pub, only: nres, nrestart, warn, nhdf, wd_rd, multiple_h5files, warn, h5_64bit, nh, set_colors
       use mpisetup,   only: lbuff, ibuff, rbuff, cbuff, master, slave, nproc, piernik_MPI_Bcast
 
       implicit none
 
-      integer :: i, j
-
-      problem_name = "nameless"
-      run_id       = "___"
-      restart      = 'last'   ! 'last': automatic choice of the last restart file regardless of "nrestart" value;
+      problem_name  = "nameless"
+      run_id        = "___"
+      restart       = 'last'   ! 'last': automatic choice of the last restart file regardless of "nrestart" value;
                               ! if something else is set: "nrestart" value is fixing
-      res_id       = ''
-      nrestart     = 3
-      resdel       = 0
+      res_id        = ''
+      nrestart      = 3
+      resdel        = 0
 
-      dt_hdf       = 0.0
-      dt_res       = 0.0
-      dt_tsl       = 0.0
-      dt_log       = 0.0
-      wdt_res      = 0.0
+      dt_hdf        = 0.0
+      dt_res        = 0.0
+      dt_tsl        = 0.0
+      dt_log        = 0.0
+      wdt_res       = 0.0
 
-      tsl_with_mom     = .true.
+      tsl_with_mom  = .true.
 #ifdef ISO
-      tsl_with_ptc     = .false.
+      tsl_with_ptc  = .false.
 #else /* !ISO */
-      tsl_with_ptc     = .true.
+      tsl_with_ptc  = .true.
 #endif /* !ISO */
-      initial_hdf_dump = .false.
+      init_hdf_dump = .false.
+      init_res_dump = .false.
 
-      domain_dump       = 'phys_domain'
-      vars(:)           = ''
-      mag_center        = .false.
+      domain_dump   = 'phys_domain'
+      vars(:)       = ''
+#ifdef NBODY
+      pvars(:)      = (/ 'ppid', 'mass', 'ener', 'posx', 'posy', 'posz', 'velx', 'vely', 'velz', 'accx', 'accy', 'accz' /)
+#endif /* NBODY */
+      mag_center    = .false.
       write(user_message_file,'(a,"/msg")') trim(wd_rd)
       system_message_file = "/tmp/piernik_msg"
 
@@ -311,7 +317,7 @@ contains
       wend = huge(1.0)
 
       colormode = .true.
-      h5_64bit = .false.
+      h5_64bit  = .false.
 
       if (master) then
 
@@ -366,22 +372,10 @@ contains
 
             if (nproc_io /= 1 .and. nproc_io /= nproc) then
                nproc_io = nproc
-               call warn("[dataio:init_dataio_parameters] nproc_io /= nproc not implemented yed. Defaulting to fully parrallel write.")
+               call warn("[dataio:init_dataio_parameters] nproc_io /= nproc not implemented yed. Defaulting to fully parallel write.")
             endif
 
          endif
-
-         do i = 1, nvarsmx - 1
-            if (len_trim(vars(i)) > 0) then
-               do j = i+1, nvarsmx
-                  if (trim(vars(i)) == trim(vars(j))) then
-                     write(msg, '(3a,2i3,a)')"[dataio:init_dataio_parameters] duplicate vars: ", trim(vars(i)), " at positions ", i, j, ". Fixing."
-                     call warn(msg)
-                     vars(j)=""
-                  endif
-               enddo
-            endif
-         enddo
 
          if (gzip_level < 1 .or. gzip_level > 9) then
             call warn("[dataio:init_dataio_parameters] invalid compression level")
@@ -402,10 +396,9 @@ contains
          ibuff(20) = nrestart
          ibuff(21) = resdel
 
-!   namelist /OUTPUT_CONTROL/  problem_name, run_id, dt_hdf, dt_res, dt_tsl, dt_log, tsl_with_mom, tsl_with_ptc, &
-!                              domain_dump, vars, mag_center, vizit, fmin, fmax, user_message_file, system_message_file, &
-!                              multiple_h5files, use_v2_io, nproc_io, enable_compression, gzip_level, initial_hdf_dump, &
-!                              colormode, wdt_res, gdf_strict, h5_64bit
+!   namelist /OUTPUT_CONTROL/  problem_name, run_id, dt_hdf, dt_res, dt_tsl, dt_log, tsl_with_mom, tsl_with_ptc, init_hdf_dump, init_res_dump, &
+!                              domain_dump, vars, mag_center, vizit, fmin, fmax, user_message_file, system_message_file, multiple_h5files,     &
+!                              use_v2_io, nproc_io, enable_compression, gzip_level, colormode, wdt_res, gdf_strict, h5_64bit
          ibuff(43) = nproc_io
          ibuff(44) = gzip_level
 
@@ -421,12 +414,13 @@ contains
          lbuff(2)  = multiple_h5files
          lbuff(3)  = use_v2_io
          lbuff(4)  = mag_center
-         lbuff(5)  = initial_hdf_dump
-         lbuff(6)  = tsl_with_mom
-         lbuff(7)  = tsl_with_ptc
-         lbuff(8)  = colormode
-         lbuff(9)  = gdf_strict
-         lbuff(10) = h5_64bit
+         lbuff(5)  = init_hdf_dump
+         lbuff(6)  = init_res_dump
+         lbuff(7)  = tsl_with_mom
+         lbuff(8)  = tsl_with_ptc
+         lbuff(9)  = colormode
+         lbuff(10) = gdf_strict
+         lbuff(11) = h5_64bit
 
          cbuff(31) = problem_name
          cbuff(32) = run_id
@@ -461,10 +455,9 @@ contains
          nrestart            = int(ibuff(20), kind=4)
          resdel              = ibuff(21)
 
-!   namelist /OUTPUT_CONTROL/  problem_name, run_id, dt_hdf, dt_res, dt_tsl, dt_log, tsl_with_mom, tsl_with_ptc, &
-!                              domain_dump, vars, mag_center, vizit, fmin, fmax, user_message_file, system_message_file, &
-!                              multiple_h5files, use_v2_io, nproc_io, enable_compression, gzip_level, initial_hdf_dump, &
-!                              colormode, wdt_res, gdf_strict
+!   namelist /OUTPUT_CONTROL/  problem_name, run_id, dt_hdf, dt_res, dt_tsl, dt_log, tsl_with_mom, tsl_with_ptc, init_hdf_dump, init_res_dump, &
+!                              domain_dump, vars, mag_center, vizit, fmin, fmax, user_message_file, system_message_file, multiple_h5files,     &
+!                              use_v2_io, nproc_io, enable_compression, gzip_level, colormode, wdt_res, gdf_strict
 
          nproc_io            = int(ibuff(43), kind=4)
          gzip_level          = int(ibuff(44), kind=4)
@@ -481,17 +474,18 @@ contains
          multiple_h5files    = lbuff(2)
          use_v2_io           = lbuff(3)
          mag_center          = lbuff(4)
-         initial_hdf_dump    = lbuff(5)
-         tsl_with_mom        = lbuff(6)
-         tsl_with_ptc        = lbuff(7)
-         colormode           = lbuff(8)
-         gdf_strict          = lbuff(9)
-         h5_64bit            = lbuff(10)
+         init_hdf_dump       = lbuff(5)
+         init_res_dump       = lbuff(6)
+         tsl_with_mom        = lbuff(7)
+         tsl_with_ptc        = lbuff(8)
+         colormode           = lbuff(9)
+         gdf_strict          = lbuff(10)
+         h5_64bit            = lbuff(11)
 
          problem_name        = cbuff(31)
          run_id              = cbuff(32)(1:idlen)
          domain_dump         = trim(cbuff(40))
-         do iv=1, nvarsmx
+         do iv = 1, nvarsmx
             vars(iv)         = trim(cbuff(40+iv))
          enddo
 
@@ -509,18 +503,22 @@ contains
    subroutine init_dataio
 
       use constants,    only: PIERNIK_INIT_IO_IC
-      use dataio_pub,   only: nres, nrestart, printinfo, nhdf, nstep_start, die, code_progress, gdf_strict, warn, msg
+      use dataio_pub,   only: code_progress, die, maxenvlen, nres, nrestart, printinfo, restarted_sim, warn
       use domain,       only: dom
-      use fluidindex,   only: flind
-      use global,       only: t, nstep
       use mpisetup,     only: master
       use timer,        only: walltime_end
       use user_hooks,   only: user_vars_arr_in_restart
-      use version,      only: nenv,env, init_version
+      use version,      only: nenv, env, init_version
 #ifdef HDF5
       use common_hdf5,  only: init_hdf5
-      use restart_hdf5, only: read_restart_hdf5
       use data_hdf5,    only: init_data
+      use dataio_pub,   only: gdf_strict, msg, nhdf, nstep_start
+      use fluidindex,   only: flind
+      use global,       only: t, nstep
+      use restart_hdf5, only: read_restart_hdf5
+#ifdef NBODY
+      use cg_particles_io, only: init_nbody_hdf5
+#endif /* NBODY */
 #endif /* HDF5 */
 
       implicit none
@@ -545,22 +543,26 @@ contains
          gdf_strict = .false.
       endif
       call init_hdf5(vars)
+#ifdef NBODY
+      call init_nbody_hdf5(pvars)
+#endif /* NBODY */
       call init_data
 #endif /* HDF5 */
 
       call init_version
       if (master) then
          call printinfo("###############     Source configuration     ###############", .false.)
-         do i=1,nenv
+         do i = 1, nenv
             call printinfo(env(i), .false.)
          enddo
       endif
+      maxenvlen = int(maxval(len_trim(env(:nenv))), kind=4)
 
       if (associated(user_vars_arr_in_restart)) call user_vars_arr_in_restart
 
       nres = nrestart
 
-      if (nrestart /= 0) then
+      if (restarted_sim) then
 #ifdef HDF5
          if (master) call printinfo("###############     Reading restart     ###############", .false.)
          call read_restart_hdf5
@@ -582,12 +584,21 @@ contains
 
    end subroutine init_dataio
 
+!>
+!! \brief Deallocate dataio data
+!!
+!! No MPI calls are allowed here!
+!<
+
    subroutine cleanup_dataio
+
+      use dataio_pub, only: cleanup_text_buffers
 #ifdef HDF5
-      use common_hdf5,     only: cleanup_hdf5
+      use common_hdf5, only: cleanup_hdf5
 #endif /* HDF5 */
       implicit none
 
+      call cleanup_text_buffers
 #ifdef HDF5
       call cleanup_hdf5
 #endif /* HDF5 */
@@ -596,7 +607,10 @@ contains
    subroutine user_msg_handler(end_sim)
 
       use dataio_pub,   only: msg, printinfo, warn
+      use load_balance, only: umsg_verbosity, V_HOST
       use mpisetup,     only: master, piernik_MPI_Bcast
+      use ppp,          only: umsg_request
+      use procnames,    only: pnames
       use timer,        only: walltime_end
 #ifdef HDF5
       use data_hdf5,    only: write_hdf5
@@ -621,14 +635,30 @@ contains
          select case (trim(umsg))
 #ifdef HDF5
             case ('res', 'dump')
-               call write_restart_hdf5
+               call write_restart_hdf5(.false.)
             case ('hdf')
-               call write_hdf5
+               call write_hdf5(.false.)
 #endif /* HDF5 */
             case ('log')
                call write_log
             case ('tsl')
                call write_timeslice
+            case ('ppp')
+               if (abs(umsg_param) < huge(1_4)) then
+                  umsg_request = max(1, int(umsg_param))
+                  write(msg,'(a,i10,a)') "[dataio:user_msg_handler] enable PPP for ", umsg_request, &
+                       " step(s)" // trim(merge("s", " ", umsg_request == 1))
+                  if (master) call printinfo(msg)
+               else
+                  if (master) call warn("[dataio:user_msg_handler] Cannot convert the parameter to integer")
+               endif
+            case ('perf')
+               if (umsg_param <= 0.) umsg_param = V_HOST
+               if (abs(umsg_param) < huge(1_4)) then
+                  umsg_verbosity = int(umsg_param, kind=4)
+               else
+                  if (master) call warn("[dataio:user_msg_handler] Cannot convert the parameter to integer")
+               endif
             case ('wend')
                wend = umsg_param
                if (master) tn = walltime_end%time_left(wend)
@@ -656,20 +686,28 @@ contains
                call sleep(tsleep)
             case ('stop')
                end_sim = .true.
+            case ('unexclude')
+               call pnames%enable_all
+               ! manual excluding may be helpful too, but we need to pass a list, like "exclude 2,7-9,32769", and process it safely
             case ('help')
                if (master) then
-                  write(msg,*) "[dataio:user_msg_handler] Recognized messages:",char(10),&
-                  &"  help     - prints this information",char(10),&
-                  &"  stop     - finish the simulation",char(10),&
-                  &"  res      - immediately dumps a restart file",char(10),&
-                  &"  dump     - immediately dumps a restart file of full domain for all blocks",char(10),&
-                  &"  hdf      - dumps a plotfile",char(10),&
-                  &"  log      - update logfile",char(10),&
-                  &"  tsl      - write a timeslice",char(10),&
-                  &"  wleft    - show how much walltime is left",char(10),&
-                  &"  wresleft - show how much walltime is left till next restart",char(10),&
-                  &"  sleep <number> - wait <number> seconds",char(10),&
-                  &"  wend|wdtres|tend|nend|dtres|dthdf|dtlog|dttsl <value> - update specified parameter with <value>",char(10),&
+                  write(msg,*) "[dataio:user_msg_handler] Recognized messages:", char(10), &
+                  &"  help      - prints this information", char(10), &
+                  &"  stop      - finish the simulation", char(10), &
+#ifdef HDF5
+                  &"  res       - immediately dumps a restart file", char(10), &
+                  &"  dump      - immediately dumps a restart file of full domain for all blocks", char(10), &
+                  &"  hdf       - dumps a plotfile", char(10), &
+#endif /* HDF5 */
+                  &"  log       - update logfile", char(10), &
+                  &"  tsl       - write a timeslice", char(10), &
+                  &"  ppp [N]   - start ppp_main profiling for N timesteps (default 1)", char(10), &
+                  &"  unexclude - reset thread exclusion mask", char(10), &
+                  &"  perf [N]  - print performance data with verbosity N (default V_HOST)", char(10), &
+                  &"  wleft     - show how much walltime is left", char(10), &
+                  &"  wresleft  - show how much walltime is left till next restart", char(10), &
+                  &"  sleep <number> - wait <number> seconds", char(10), &
+                  &"  wend|wdtres|tend|nend|dtres|dthdf|dtlog|dttsl <value> - update specified parameter with <value>", char(10), &
                   &"Note that only one line at a time is read."
                   call printinfo(msg)
                endif
@@ -716,40 +754,43 @@ contains
 !
    subroutine write_data(output)
 
-      use constants,    only: FINAL_DUMP, HDF, LOGF
-      use dataio_pub,   only: last_res_time, last_hdf_time
+      use constants,    only: FINAL_DUMP, LOGF
       use dataio_user,  only: user_post_write_data
-      use mpisetup,     only: master, piernik_MPI_Bcast
 #ifdef HDF5
+      use constants,    only: HDF
       use data_hdf5,    only: write_hdf5
+      use dataio_pub,   only: last_res_time, last_hdf_time
+      use mpisetup,     only: master, piernik_MPI_Bcast
       use restart_hdf5, only: write_restart_hdf5
 #endif /* HDF5 */
 
       implicit none
 
       integer(kind=4), intent(in) :: output
+#ifdef HDF5
       logical :: tleft
-
+#endif /* HDF5 */
 !- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
       dump(LOGF) = (output == LOGF .or. output == FINAL_DUMP) ; if (dump(LOGF)) call write_log
       dump(TSL)  = (output == TSL  .or. output == FINAL_DUMP) ; if (dump(TSL))  call write_timeslice
 #ifdef HDF5
       call determine_dump(dump(RES), last_res_time, dt_res, output, RES)
-      if (dump(RES)) call write_restart_hdf5
+      call manage_hdf_dump(RES, dump(RES), output)
+      if (dump(RES)) call write_restart_hdf5(.true.)
 
       if (wdt_res > 0.0) then
          if (master) tleft = walltime_nextres%time_left()
          call piernik_MPI_Bcast(tleft)
          if (.not.tleft) then
-            call write_restart_hdf5
+            call write_restart_hdf5(.false.)
             if (master) tleft = walltime_nextres%time_left(wdt_res)
          endif
       endif
 
       call determine_dump(dump(HDF), last_hdf_time, dt_hdf, output, HDF)
-      call manage_hdf_dump(dump(HDF), output)
-      if (dump(HDF)) call write_hdf5
+      call manage_hdf_dump(HDF, dump(HDF), output)
+      if (dump(HDF)) call write_hdf5(.true.)
 #endif /* HDF5 */
       if (associated(user_post_write_data)) call user_post_write_data(output, dump)
 
@@ -775,16 +816,23 @@ contains
 
    end subroutine determine_dump
 
-   subroutine manage_hdf_dump(dmp, output)
+   subroutine manage_hdf_dump(dumptype, dmp, output)
 
-      use constants,    only: INCEPTIVE
+      use constants,  only: INCEPTIVE, HDF, RES
+      use dataio_pub, only: nres
 
       implicit none
 
-      integer(kind=4), intent(in)    :: output  !< type of output
-      logical,         intent(inout) :: dmp     !< perform I/O if True
+      integer(kind=4), intent(in)    :: dumptype !< type of dump
+      integer(kind=4), intent(in)    :: output   !< type of output call
+      logical,         intent(inout) :: dmp      !< perform I/O if True
 
-      if ((output == INCEPTIVE) .and. initial_hdf_dump) dmp = .true.  !< \todo problem_name may be enhanced by '_initial', but this and nhdf should be reverted just after write_hdf5 is called
+      if (output /= INCEPTIVE) return
+      if ((dumptype == HDF) .and. init_hdf_dump) dmp = .true.  !< \todo problem_name may be enhanced by '_initial', but this and nhdf should be reverted just after write_hdf5 is called
+      if ((dumptype == RES) .and. init_res_dump .and. nres == 0) then
+         dmp = .true.
+         nres = -1
+      endif
 
    end subroutine manage_hdf_dump
 
@@ -802,10 +850,10 @@ contains
 
    subroutine check_tsl
 
-      use mpisetup,   only: report_to_master
-      use mpisignals, only: sig
-      use constants,  only: CHK
-      use dataio_pub, only: last_tsl_time
+      use constants,       only: CHK
+      use dataio_pub,      only: last_tsl_time
+      use mpisetup,        only: report_to_master
+      use piernik_mpi_sig, only: sig
 
       implicit none
 
@@ -826,8 +874,9 @@ contains
 #ifdef HDF5
    subroutine find_last_restart(restart_number)
 
-      use common_hdf5,   only: output_fname
-      use constants,     only: RD
+      use common_hdf5, only: output_fname
+      use constants,   only: RD
+      use dataio_pub,  only: restarted_sim
 
       implicit none
 
@@ -846,6 +895,7 @@ contains
          inquire(file = trim(output_fname(RD,'.res', nres)), exist = exist)
          if (exist) then
             restart_number = nres
+            restarted_sim = .true.
             return
          endif
       enddo
@@ -858,9 +908,10 @@ contains
 
    subroutine write_timeslice
 
+      use cg_cost_data,     only: I_OTHER
       use cg_leaves,        only: leaves
       use cg_list,          only: cg_list_element
-      use constants,        only: xdim, ydim, zdim, DST, pSUM, GEO_XYZ, GEO_RPZ, ndims, LO, HI, I_ONE
+      use constants,        only: xdim, DST, pSUM, GEO_XYZ, GEO_RPZ, ndims, LO, HI, I_ONE, INVALID, PPP_IO
       use dataio_pub,       only: log_wr, tsl_file, tsl_lun
 #if defined(__INTEL_COMPILER)
       use dataio_pub,       only: io_blocksize, io_buffered, io_buffno
@@ -877,6 +928,7 @@ contains
       use mass_defect,      only: update_tsl_magic_mass
       use mpisetup,         only: master, piernik_MPI_Allreduce
       use named_array_list, only: wna
+      use ppp,              only: ppp_main
 #ifdef GRAV
       use constants,        only: gpot_n
       use named_array_list, only: qna
@@ -888,20 +940,26 @@ contains
 #ifdef COSM_RAY_ELECTRONS
       use fluidindex,       only: iarr_all_crn
       use initcosmicrays,   only: iarr_cre_e, iarr_cre_n
-#else
+#else /* !COSM_RAY_ELECTRONS */
       use fluidindex,       only: iarr_all_crs
-#endif /* COSM_RAY_ELECTRONS */
+#endif /* !COSM_RAY_ELECTRONS */
 #endif /* COSM_RAYS */
 #ifdef RESISTIVE
       use resistivity,      only: eta1_active
 #endif /* RESISTIVE */
+#ifdef MAGNETIC
+      use constants,        only: ydim, zdim
+#endif /* MAGNETIC */
+#ifdef NBODY
+      use particle_utils,   only: particle_diagnostics, tot_energy, d_energy, tot_angmom, d_angmom
+#endif /* NBODY */
 
       implicit none
 
       integer, parameter                                  :: field_len=17 ! should match formats below
       character(len=field_len), dimension(:), allocatable :: tsl_names
       real,                     dimension(:), allocatable :: tsl_vars
-      real, dimension(:,:,:,:), pointer                   :: pu, pb
+      real, dimension(:,:,:,:), pointer                   :: pu, pb => null()
       type(phys_prop),          pointer                   :: sn
       type(tsl_container)                                 :: tsl
       type(grid_container),     pointer                   :: cg
@@ -914,14 +972,16 @@ contains
 #ifdef GRAV
          enumerator :: T_EPOT                                  !< total gravitational potential energy
 #endif /* GRAV */
+#ifdef MAGNETIC
          enumerator :: T_MFLX, T_MFLY, T_MFLZ                  !< total magnetic fluxes
+#endif /* MAGNETIC */
 #ifdef COSM_RAYS
          enumerator :: T_ENCR                                  !< total CR energy
-#endif /* COSM_RAYS */
 #ifdef COSM_RAY_ELECTRONS
          enumerator :: T_CREE                                  !< total CRE (electron component) energy
          enumerator :: T_CREN                                  !< total CRE (electron component) density
 #endif /* COSM_RAY_ELECTRONS */
+#endif /* COSM_RAYS */
          enumerator :: T_LAST                                  !< DO NOT place any index behind this one
       end enum
       real, dimension(T_MASS:T_LAST-1), save :: tot_q          !< array of total quantities
@@ -929,6 +989,9 @@ contains
       integer(kind=4)                        :: i, ii
       real                                   :: drvol
       integer(kind=4), dimension(ndims, LO:HI) :: ijkse
+      character(len=*), parameter :: tsl_label = "write_timeslice"
+
+      call ppp_main%start(tsl_label, PPP_IO)
 
       if (has_ion) then
          cs_iso2 = flind%ion%cs2
@@ -963,12 +1026,12 @@ contains
 #endif /* MAGNETIC */
 #ifdef COSM_RAYS
             call pop_vector(tsl_names, field_len, ["encr_tot", "encr_min", "encr_max"])
-#endif /* COSM_RAYS */
 #ifdef COSM_RAY_ELECTRONS
             call pop_vector(tsl_names, field_len, ["cren_tot", "cren_min", "cren_max" ])
             call pop_vector(tsl_names, field_len, ["cree_tot", "cree_min", "cree_max"])
             call pop_vector(tsl_names, field_len, ["divv_min", "divv_max" ])
 #endif /* COSM_RAY_ELECTRONS */
+#endif /* COSM_RAYS */
             ! \todo: replicated code, simplify me
             if (has_ion) then
                call pop_vector(tsl_names, field_len, ["deni_min", "deni_max", "vxi_max ", "vyi_max ", "vzi_max "])
@@ -986,6 +1049,9 @@ contains
                call pop_vector(tsl_names, field_len, ["dend_min", "dend_max", "vxd_max ", "vyd_max ", "vzd_max "])
                call pop_vector(tsl_names, field_len, ["dst_mmass_cur", "dst_mmass_cum"])
             endif
+#ifdef NBODY
+            call pop_vector(tsl_names, field_len, ["totpener", "errpener", "totpamom", "errpamom"])
+#endif /* NBODY */
 
             if (associated(user_tsl)) call user_tsl(tsl_vars, tsl_names)
 
@@ -1006,9 +1072,10 @@ contains
       cgl => leaves%first
       do while (associated(cgl))
          cg => cgl%cg
+         call cg%costs%start
 
          pu => cg%w(wna%fi)%span(cg%ijkse)
-         pb => cg%w(wna%bi)%span(cg%ijkse)
+         if (wna%bi > INVALID) pb => cg%w(wna%bi)%span(cg%ijkse)
 
          select case (dom%geometry_type)
 
@@ -1026,23 +1093,23 @@ contains
                tot_q(T_EKIN) = tot_q(T_EKIN) + cg%dvol * sum(sum(ekin(pu(iarr_all_mx(:),:,:,:), pu(iarr_all_my(:),:,:,:), pu(iarr_all_mz(:),:,:,:), max(pu(iarr_all_dn(:),:,:,:),smalld)), dim=1), mask=cg%leafmap)
 #ifdef MAGNETIC
                tot_q(T_EMAG) = tot_q(T_EMAG) + cg%dvol * sum(emag(pb(xdim,:,:,:), pb(ydim,:,:,:), pb(zdim,:,:,:)), mask=cg%leafmap)
-#endif /* MAGNETIC */
                tot_q(T_MFLX) = tot_q(T_MFLX) + cg%dvol/dom%L_(xdim) * sum(pb(xdim,:,:,:), mask=cg%leafmap) !cg%dy*cg%dz/dom%n_d(xdim)
                tot_q(T_MFLY) = tot_q(T_MFLY) + cg%dvol/dom%L_(ydim) * sum(pb(ydim,:,:,:), mask=cg%leafmap) !cg%dx*cg%dz/dom%n_d(ydim)
                tot_q(T_MFLZ) = tot_q(T_MFLZ) + cg%dvol/dom%L_(zdim) * sum(pb(zdim,:,:,:), mask=cg%leafmap) !cg%dx*cg%dy/dom%n_d(zdim)
+#endif /* MAGNETIC */
 #ifndef ISO
                tot_q(T_ENER) = tot_q(T_ENER) + cg%dvol * sum(sum(pu(iarr_all_en,:,:,:), dim=1), mask=cg%leafmap)
 #endif /* !ISO */
 
 #ifdef COSM_RAYS
 #ifdef COSM_RAY_ELECTRONS
-               tot_q(T_ENCR) = tot_q(T_ENCR) + cg%dvol * (sum(sum(pu(iarr_all_crn,:,:,:), dim=1), mask=cg%leafmap))
-               tot_q(T_CREN) = tot_q(T_CREN) + cg%dvol * (sum(sum(pu(iarr_cre_n,:,:,:), dim=1), mask=cg%leafmap))
-               tot_q(T_CREE) = tot_q(T_CREE) + cg%dvol * (sum(sum(pu(iarr_cre_e,:,:,:), dim=1), mask=cg%leafmap))
+               tot_q(T_ENCR) = tot_q(T_ENCR) + cg%dvol * sum(sum(pu(iarr_all_crn,:,:,:), dim=1), mask=cg%leafmap)
+               tot_q(T_CREN) = tot_q(T_CREN) + cg%dvol * sum(sum(pu(iarr_cre_n,  :,:,:), dim=1), mask=cg%leafmap)
+               tot_q(T_CREE) = tot_q(T_CREE) + cg%dvol * sum(sum(pu(iarr_cre_e,  :,:,:), dim=1), mask=cg%leafmap)
                tot_q(T_ENCR) = tot_q(T_ENCR) + tot_q(T_CREE)
 #else /* !COSM_RAY_ELECTRONS */
-               tot_q(T_ENCR) = tot_q(T_ENCR) + cg%dvol * (sum(sum(pu(iarr_all_crs,:,:,:), dim=1), mask=cg%leafmap))
-#endif /* COSM_RAY_ELECTRONS */
+               tot_q(T_ENCR) = tot_q(T_ENCR) + cg%dvol * sum(sum(pu(iarr_all_crs,:,:,:), dim=1), mask=cg%leafmap)
+#endif /* !COSM_RAY_ELECTRONS */
                tot_q(T_ENER) = tot_q(T_ENER) + tot_q(T_ENCR)
 #endif /* COSM_RAYS */
 
@@ -1066,31 +1133,31 @@ contains
                        &                                               max(pu(iarr_all_dn(:), ii, :, :),smalld)), dim=1), mask=cg%leafmap(i, :, :))
 #ifdef MAGNETIC
                   tot_q(T_EMAG) = tot_q(T_EMAG) + drvol * sum(emag(pb(xdim, ii, :, :), pb(ydim, ii, :, :), pb(zdim, ii, :, :)), mask=cg%leafmap(i, :, :))
-#endif /* MAGNETIC */
                   !> \todo Figure out the meaning of tot_q(T_MFL[XY]) and how to compute it properly or remove at all
                   tot_q(T_MFLX) = 0. !tot_q(T_MFLX) + cg%dvol/dom%L_(xdim) * sum(pb(xdim, ii, :, :), mask=cg%leafmap(i, :, :)) !cg%dy*cg%dz/dom%n_d(xdim)
                   tot_q(T_MFLY) = 0. !tot_q(T_MFLY) + cg%dvol/dom%L_(ydim) * sum(pb(ydim, ii, :, :), mask=cg%leafmap(i, :, :)) !cg%dx*cg%dz/dom%n_d(ydim)
                   tot_q(T_MFLZ) = tot_q(T_MFLZ) + drvol/dom%L_(zdim) * sum(pb(zdim, ii, :, :), mask=cg%leafmap(i, :, :)) !cg%dx*cg%dy/dom%n_d(zdim)
+#endif /* MAGNETIC */
 #ifndef ISO
                   tot_q(T_ENER) = tot_q(T_ENER) + drvol * sum(sum(pu(iarr_all_en, ii, :, :), dim=1), mask=cg%leafmap(i, :, :))
 #endif /* !ISO */
 
 #ifdef COSM_RAYS
 #ifdef COSM_RAY_ELECTRONS
-                  tot_q(T_ENCR) = tot_q(T_ENCR) + drvol * (sum(sum(pu(iarr_all_crn, ii, :, :), dim=1), mask=cg%leafmap(i, :, :)))
-                  tot_q(T_CREN) = tot_q(T_CREN) + drvol * (sum(sum(pu(iarr_cre_n,ii,:,:), dim=1), mask=cg%leafmap(i, :, :)))
-                  tot_q(T_CREE) = tot_q(T_CREE) + drvol * (sum(sum(pu(iarr_cre_e,ii,:,:), dim=1), mask=cg%leafmap(i, :, :)))
+                  tot_q(T_ENCR) = tot_q(T_ENCR) + drvol * sum(sum(pu(iarr_all_crn, ii, :, :), dim=1), mask=cg%leafmap(i, :, :))
+                  tot_q(T_CREN) = tot_q(T_CREN) + drvol * sum(sum(pu(iarr_cre_n,   ii, :, :), dim=1), mask=cg%leafmap(i, :, :))
+                  tot_q(T_CREE) = tot_q(T_CREE) + drvol * sum(sum(pu(iarr_cre_e,   ii, :, :), dim=1), mask=cg%leafmap(i, :, :))
                   tot_q(T_ENCR) = tot_q(T_ENCR) + tot_q(T_CREE)
 #else /* !COSM_RAY_ELECTRONS */
                   tot_q(T_ENCR) = tot_q(T_ENCR) + drvol * sum(sum(pu(iarr_all_crs, ii, :, :), dim=1), mask=cg%leafmap(i, :, :))
-#endif /* COSM_RAY_ELECTRONS */
+#endif /* !COSM_RAY_ELECTRONS */
                   tot_q(T_ENER) = tot_q(T_ENER) + tot_q(T_ENCR)
 #endif /* COSM_RAYS */
-
                enddo
 
          end select
 
+         call cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
 
@@ -1106,13 +1173,16 @@ contains
 
       call piernik_MPI_Allreduce(tot_q, pSUM)
 
+#ifdef NBODY
+      call particle_diagnostics(.false.)
+#endif /* NBODY */
+
       call write_log(tsl)
       call update_tsl_magic_mass
 
       if (master) then
          call pop_vector(tsl_vars, [t, dt, tot_q(T_MASS)])
-         if (tsl_with_mom) &
-       & call pop_vector(tsl_vars, [tot_q(T_MOMX), tot_q(T_MOMY), tot_q(T_MOMZ)])
+         if (tsl_with_mom) call pop_vector(tsl_vars, [tot_q(T_MOMX), tot_q(T_MOMY), tot_q(T_MOMZ)])
          call pop_vector(tsl_vars, [tot_q(T_ENER), tot_q(T_EINT), tot_q(T_EKIN)])
 #ifdef GRAV
          call pop_vector(tsl_vars, [tot_q(T_EPOT)])
@@ -1140,6 +1210,9 @@ contains
           & call pop_vector(tsl_vars, [sn%pres_min%val, sn%pres_max%val, sn%temp_min%val, sn%temp_max%val, sn%cs_max%val  ])
             call pop_vector(tsl_vars, [sn%mmass_cur, sn%mmass_cum])
          enddo
+#ifdef NBODY
+         call pop_vector(tsl_vars, [tot_energy, d_energy, tot_angmom, d_angmom])
+#endif /* NBODY */
 
       endif
 
@@ -1151,13 +1224,15 @@ contains
          deallocate(tsl_vars)
       endif
 
+      call ppp_main%stop(tsl_label, PPP_IO)
+
    end subroutine write_timeslice
 
    subroutine common_shout(pr, fluid, pres_tn, temp_tn, cs_tn)
 
-      use domain,      only: is_multicg
-      use fluidtypes,  only: phys_prop
-      use global,      only: use_fargo
+      use domain,     only: is_multicg
+      use fluidtypes, only: phys_prop
+      use global,     only: use_fargo
 
       implicit none
 
@@ -1229,6 +1304,7 @@ contains
    subroutine get_common_vars(fl)
 
       use types,            only: value                          !QA_WARN: used by get_extremum (intel compiler)
+      use cg_cost_data,     only: I_OTHER
       use cg_leaves,        only: leaves
       use cg_list,          only: cg_list_element
       use constants,        only: MINL, MAXL, small, xdim, ydim, zdim, GEO_RPZ
@@ -1239,9 +1315,15 @@ contains
       use mpisetup,         only: master
       use named_array_list, only: qna
       use units,            only: mH, kboltz
-#ifndef ISO
-      use constants,        only: ION, DST, half, I_ZERO
-      use global,           only: smallp
+#ifdef ISO
+      use constants,        only: pMIN, pMAX
+      use mpisetup,         only: piernik_MPI_Allreduce
+#else /* !ISO */
+      use constants,        only: DST, I_ZERO
+#ifdef MAGNETIC
+      use constants,        only: ION
+      use func,             only: emag
+#endif /* MAGNETIC */
 #endif /* !ISO */
 
       implicit none
@@ -1250,16 +1332,17 @@ contains
 
       type(phys_prop),       pointer :: pr
       type(cg_list_element), pointer :: cgl
-      integer :: i, j, k
-      real :: omega_mean
-#ifndef ISO
-      real :: dxmn_safe
-#endif /* !ISO */
+      integer                        :: i, j, k
+      real                           :: omega_mean
 
       pr => fl%snap
       cgl => leaves%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          cgl%cg%wa = cgl%cg%u(fl%idn,:,:,:)
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
       call leaves%get_extremum(qna%wai, MAXL, pr%dens_max)
@@ -1267,11 +1350,15 @@ contains
 
       cgl => leaves%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          where (cgl%cg%u(fl%idn,:, :, :) > 0.0)
             cgl%cg%wa = abs(cgl%cg%u(fl%imx,:, :, :)/cgl%cg%u(fl%idn,:, :, :))
          elsewhere
             cgl%cg%wa = 0.
          endwhere
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
       call leaves%get_extremum(qna%wai, MAXL, pr%velx_max, xdim)
@@ -1280,7 +1367,11 @@ contains
       if (is_multicg) then
          cgl => leaves%first
          do while (associated(cgl))
+            call cgl%cg%costs%start
+
             cgl%cg%wa = cfl * cgl%cg%dx / (cgl%cg%wa + small)
+
+            call cgl%cg%costs%stop(I_OTHER)
             cgl => cgl%nxt
          enddo
          call leaves%get_extremum(qna%wai, MINL, pr%dtvx_min, xdim)
@@ -1291,6 +1382,8 @@ contains
 
       cgl => leaves%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          if (use_fargo) then
             do i = cgl%cg%is, cgl%cg%ie
                omega_mean = sum(cgl%cg%u(fl%imy, i, :, :) / cgl%cg%u(fl%idn, i, :, :) / cgl%cg%x(i)) / size(cgl%cg%u(fl%idn, i, :, :))
@@ -1310,6 +1403,8 @@ contains
                cgl%cg%wa = 0.
             endwhere
          endif
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
       call leaves%get_extremum(qna%wai, MAXL, pr%vely_max, ydim)
@@ -1320,6 +1415,8 @@ contains
 
       cgl => leaves%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          if (is_multicg) cgl%cg%wa = cfl * cgl%cg%dy / (cgl%cg%wa + small)
          if (use_fargo) then
             cgl%cg%wa = cgl%cg%dy / (cgl%cg%wa + small)
@@ -1329,6 +1426,8 @@ contains
                enddo
             endif
          endif
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
       call leaves%get_extremum(qna%wai, MINL, pr%dtvy_min, ydim)
@@ -1341,11 +1440,15 @@ contains
 
       cgl => leaves%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          where (cgl%cg%u(fl%idn,:, :, :) > 0.0)
             cgl%cg%wa = abs(cgl%cg%u(fl%imz,:, :, :)/cgl%cg%u(fl%idn,:, :, :))
          elsewhere
             cgl%cg%wa = 0.
          endwhere
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
       call leaves%get_extremum(qna%wai, MAXL, pr%velz_max, zdim)
@@ -1354,6 +1457,8 @@ contains
       if (use_fargo) then
          cgl => leaves%first
          do while (associated(cgl))
+            call cgl%cg%costs%start
+
             do i = cgl%cg%is, cgl%cg%ie
                cgl%cg%wa(i, : ,:) = &
                   abs( &
@@ -1361,6 +1466,8 @@ contains
                      cgl%cg%u(fl%imy, i-1, :, :) / cgl%cg%u(fl%idn, i-1, :, :) / cgl%cg%x(i-1)   &
                   )
             enddo
+
+            call cgl%cg%costs%stop(I_OTHER)
             cgl => cgl%nxt
          enddo
          call leaves%get_extremum(qna%wai, MAXL, pr%shear_max, ydim)
@@ -1370,7 +1477,11 @@ contains
       if (is_multicg) then
          cgl => leaves%first
          do while (associated(cgl))
+            call cgl%cg%costs%start
+
             cgl%cg%wa = cfl * cgl%cg%dz / (cgl%cg%wa + small)
+
+            call cgl%cg%costs%stop(I_OTHER)
             cgl => cgl%nxt
          enddo
          call leaves%get_extremum(qna%wai, MINL, pr%dtvz_min, zdim)
@@ -1379,9 +1490,9 @@ contains
 
 #ifdef ISO
       pr%pres_min        = pr%dens_min
-      pr%pres_min%val    = fl%cs2*pr%dens_min%val
+      pr%pres_min%val    = fl%cs2*pr%dens_min%val  ! Beware: for locally isothermal it might be incorrect
       pr%pres_max        = pr%dens_max
-      pr%pres_max%val    = fl%cs2*pr%dens_max%val
+      pr%pres_max%val    = fl%cs2*pr%dens_max%val  ! Beware: for locally isothermal it might be incorrect
       pr%cs_max%val      = fl%cs
       pr%cs_max%loc      = 0
       pr%cs_max%coords   = 0.0
@@ -1392,52 +1503,91 @@ contains
          pr%cs_max%assoc = 0.
          ! if there are no blocks on master we should communicate something here
       endif
-      pr%temp_min%val    = (mH * fl%cs2)/ (kboltz * fl%gam)
+      pr%temp_min%val    = (mH * fl%cs2)/ (kboltz * fl%gam)  ! Beware: for locally isothermal it might be incorrect
       pr%temp_min%loc    = 0
       pr%temp_min%coords = 0.0
       pr%temp_min%proc   = 0
-      pr%temp_max        = pr%temp_min
+      pr%temp_max        = pr%temp_min  ! Beware: for locally isothermal it might be incorrect
+
+      pr%dtcs_min%assoc  = 0.
+      pr%dtcs_min%val    = huge(1.)
+      cgl => leaves%first
+      do while (associated(cgl))
+         call cgl%cg%costs%start
+
+         pr%dtcs_min%val   = min(pr%dtcs_min%val,   (cfl * cgl%cg%dxmn) / (max(fl%cs, maxval(cgl%cg%cs_iso2(cgl%cg%is:cgl%cg%ie, cgl%cg%js:cgl%cg%je, cgl%cg%ks:cgl%cg%ke), mask=cgl%cg%leafmap)) + small))
+         pr%dtcs_min%assoc = max(pr%dtcs_min%assoc, max(fl%cs, maxval(cgl%cg%cs_iso2(cgl%cg%is:cgl%cg%ie, cgl%cg%js:cgl%cg%je, cgl%cg%ks:cgl%cg%ke), mask=cgl%cg%leafmap)))
+
+         call cgl%cg%costs%stop(I_OTHER)
+         cgl => cgl%nxt
+      enddo
+      call piernik_MPI_Allreduce(pr%dtcs_min%val,   pMIN)
+      call piernik_MPI_Allreduce(pr%dtcs_min%assoc, pMAX)
+
+      ! Beware: for locally isothermal it actually makes sense to look for the extreme point
+      pr%dtcs_min%loc    = 0
+      pr%dtcs_min%coords = 0.0
+      pr%dtcs_min%proc   = 0
+
 #else /* !ISO */
       if (fl%tag /= DST) then
+         ! wa: none -> pressure
          cgl => leaves%first
          do while (associated(cgl))
+            call cgl%cg%costs%start
+
             cgl%cg%wa(:,:,:) = cgl%cg%u(fl%ien,:,:,:) - ekin(cgl%cg%u(fl%imx,:,:,:), cgl%cg%u(fl%imy,:,:,:), cgl%cg%u(fl%imz,:,:,:), cgl%cg%u(fl%idn,:,:,:)) ! eint
-            if (fl%tag == ION) cgl%cg%wa(:,:,:) = cgl%cg%wa(:,:,:) - half*(sum(cgl%cg%b(:,:,:,:)**2,dim=1))
-            cgl%cg%wa(:,:,:) = max(fl%gam_1*cgl%cg%wa(:,:,:),smallp)  ! pres
+#ifdef MAGNETIC
+            if (fl%tag == ION) cgl%cg%wa(:,:,:) = cgl%cg%wa(:,:,:) - emag(cgl%cg%b(xdim,:,:,:), cgl%cg%b(ydim,:,:,:), cgl%cg%b(zdim,:,:,:))
+#endif /* MAGNETIC */
+            cgl%cg%wa(:,:,:) = fl%gam_1*cgl%cg%wa(:,:,:)
+
+            call cgl%cg%costs%stop(I_OTHER)
             cgl => cgl%nxt
          enddo
          call leaves%get_extremum(qna%wai, MAXL, pr%pres_max)
          call leaves%get_extremum(qna%wai, MINL, pr%pres_min)
 
+         ! wa: pressure -> sound speed squared
          cgl => leaves%first
          do while (associated(cgl))
-            cgl%cg%wa(:,:,:) = fl%gam*cgl%cg%wa(:,:,:)/cgl%cg%u(fl%idn,:,:,:) ! sound speed squared
+            call cgl%cg%costs%start
+
+            cgl%cg%wa(:,:,:) = fl%gam*cgl%cg%wa(:,:,:)/cgl%cg%u(fl%idn,:,:,:)
+
+            call cgl%cg%costs%stop(I_OTHER)
             cgl => cgl%nxt
          enddo
          call leaves%get_extremum(qna%wai, MAXL, pr%cs_max, I_ZERO)
          pr%cs_max%val = sqrt(pr%cs_max%val)
          if (master) pr%cs_max%assoc = cfl * pr%cs_max%assoc / (pr%cs_max%val + small)
 
+         ! wa: sound speed squared -> temperature
          cgl => leaves%first
          do while (associated(cgl))
-            if (cgl%cg%dxmn >= sqrt(huge(1.0))) then
-               dxmn_safe = sqrt(huge(1.0))
-            else
-               dxmn_safe = cgl%cg%dxmn
-            endif
-            cgl%cg%wa = (cfl * dxmn_safe)**2 / (cgl%cg%wa + small)
-            cgl => cgl%nxt
-         enddo
-         call leaves%get_extremum(qna%wai, MINL, pr%dtcs_min)
-         if (pr%dtcs_min%val >= 0.) pr%dtcs_min%val = sqrt(pr%dtcs_min%val)
+            call cgl%cg%costs%start
 
-         cgl => leaves%first
-         do while (associated(cgl))
-            cgl%cg%wa(:,:,:) = (mH * cgl%cg%wa(:,:,:))/ (kboltz * fl%gam) ! temperature
+            cgl%cg%wa(:,:,:) = (mH * cgl%cg%wa(:,:,:))/ (kboltz * fl%gam)
+
+            call cgl%cg%costs%stop(I_OTHER)
             cgl => cgl%nxt
          enddo
          call leaves%get_extremum(qna%wai, MAXL, pr%temp_max)
          call leaves%get_extremum(qna%wai, MINL, pr%temp_min)
+
+         ! wa: temperature -> (sound speed squared) -> sound time across one cell
+         cgl => leaves%first
+         do while (associated(cgl))
+            call cgl%cg%costs%start
+
+            cgl%cg%wa = cgl%cg%wa * (kboltz * fl%gam) / mH ! temperature -> sound speed squared
+            cgl%cg%wa = cfl**2 * cgl%cg%dxmn2 / (cgl%cg%wa + small)
+
+            call cgl%cg%costs%stop(I_OTHER)
+            cgl => cgl%nxt
+         enddo
+         call leaves%get_extremum(qna%wai, MINL, pr%dtcs_min)
+         if (pr%dtcs_min%val >= 0.) pr%dtcs_min%val = sqrt(pr%dtcs_min%val)
 
       endif
 #endif /* !ISO */
@@ -1453,9 +1603,10 @@ contains
 !
    subroutine  write_log(tsl)
 
+      use cg_cost_data,       only: I_OTHER
       use cg_leaves,          only: leaves
       use cg_list,            only: cg_list_element
-      use constants,          only: idlen, small, MAXL
+      use constants,          only: idlen, small, MAXL, PPP_IO
       use dataio_pub,         only: printinfo
       use fluidindex,         only: flind
       use fluids_pub,         only: has_dst, has_ion, has_neu
@@ -1463,27 +1614,37 @@ contains
       use interactions,       only: has_interactions, collfaq
       use mpisetup,           only: master
       use named_array_list,   only: qna
+      use ppp,                only: ppp_main
       use types,              only: value
 #ifdef COSM_RAYS
-      use timestepcosmicrays, only: dt_crs
-#if defined(COSM_RAYS) && defined(COSM_RAY_ELECTRONS)
-      use fluidindex,        only: iarr_all_crn
-#endif /* COSM_RAYS && COSM_RAY_ELECTRONS */
-#if defined(COSM_RAYS) && !defined(COSM_RAY_ELECTRONS)
-      use fluidindex,         only: iarr_all_crs
-#endif /* COSM_RAYS && COSM_RAY_ELECTRONS */
+      use constants,          only: pMIN
 #ifdef COSM_RAY_ELECTRONS
+      use fluidindex,         only: iarr_all_crn
       use initcosmicrays,     only: iarr_cre_e, iarr_cre_n
-      use timestep_cresp,     only: dt_cre_min_ud, dt_cre_min_ub
-#endif /* COSM_RAY_ELECTRONS */
+      use timestep_cresp,     only: dt_cre_adiab, dt_cre_K
+#ifdef MAGNETIC
+      use timestep_cresp,     only: dt_cre_synch
+#endif /* MAGNETIC */
+#else /* !COSM_RAY_ELECTRONS */
+      use fluidindex,         only: iarr_all_crs
+#endif /* !COSM_RAY_ELECTRONS */
+      use mpisetup,           only: piernik_MPI_Allreduce
+      use timestepcosmicrays, only: dt_crs
 #endif /* COSM_RAYS */
 #if defined COSM_RAYS || defined MAGNETIC
       use constants,          only: MINL
 #endif /* COSM_RAYS || MAGNETIC */
 #ifdef MAGNETIC
+      use constants,          only: DIVB_HDC, I_ZERO, RIEMANN_SPLIT
       use dataio_pub,         only: msg
       use func,               only: sq_sum3
-      use global,             only: cfl
+      use global,             only: cfl, divB_0_method, which_solver
+      use hdc,                only: map_chspeed
+      use named_array_list,   only: wna
+#ifndef ISO
+      use constants,          only: half
+      use func,               only: ekin
+#endif /* !ISO */
 #endif /* MAGNETIC */
 #ifdef RESISTIVE
       use resistivity,        only: etamax, cu2max, eta1_active
@@ -1495,166 +1656,210 @@ contains
       use constants,          only: gpot_n
 #endif /* VARIABLE_GP */
 #if defined VARIABLE_GP || defined MAGNETIC
-      use constants,          only: xdim, ydim, zdim, HI, idm, ndims
+      use constants,          only: xdim, ydim, zdim
       use domain,             only: dom
 #endif /* VARIABLE_GP || MAGNETIC */
+#ifdef NBODY
+      use particle_timestep,  only: pacc_max
+#endif /* NBODY */
 
       implicit none
 
-      type(tsl_container), optional      :: tsl
-      real                               :: dxmn_safe
-      type(cg_list_element), pointer     :: cgl
-      type(value)                        :: drag
+      type(tsl_container), optional   :: tsl
+      type(cg_list_element), pointer  :: cgl
+      type(value)                     :: drag
 #ifdef MAGNETIC
-      type(value)                        :: b_min, b_max, divb_max, vai_max, cfi_max
+      type(value)                     :: b_min, b_max, divb_max, vai_max, cfi_max, ch_max
 #endif /* MAGNETIC */
 #ifdef COSM_RAYS
-      type(value)                        :: encr_min, encr_max
+      type(value)                     :: encr_min, encr_max
 #endif /* COSM_RAYS */
 #ifdef COSM_RAY_ELECTRONS
-      type(value)                       :: cren_min, cren_max !< values of cre density
-      type(value)                       :: cree_min, cree_max !< values of cre energy
-      type(value)                       :: divv_min, divv_max !< values of div_v
+      type(value)                     :: cren_min, cren_max !< values of cre density
+      type(value)                     :: cree_min, cree_max !< values of cre energy
+      type(value)                     :: divv_min, divv_max !< values of div_v
 #endif /* COSM_RAY_ELECTRONS */
 #ifdef VARIABLE_GP
-      type(value)                        :: gpxmax, gpymax, gpzmax
-      integer                            :: var_i
+      type(value)                     :: gpxmax, gpymax, gpzmax
+      integer                         :: var_i
 #endif /* VARIABLE_GP */
 #if defined VARIABLE_GP || defined MAGNETIC
-      integer(kind=4), dimension(ndims,ndims,HI) :: D
-      real, dimension(:,:,:), pointer    :: p
+      real, dimension(:,:,:), pointer :: p
 #endif /* VARIABLE_GP || MAGNETIC */
-      character(len=idlen)               :: id
+      character(len=idlen)            :: id
+      character(len=*), parameter     :: log_label = "write_log"
+
+      call ppp_main%start(log_label, PPP_IO)
 
       id = '' ! suppress compiler warnings if none of the modules requiring the id variable are switched on.
-      dxmn_safe = sqrt(huge(1.0))
-      cgl => leaves%first
-      do while (associated(cgl))
-         dxmn_safe = min(dxmn_safe, cgl%cg%dxmn)
-         cgl => cgl%nxt
-      enddo
 
    ! Timestep diagnostics
+      if (has_ion) call get_common_vars(flind%ion)
       if (has_neu) call get_common_vars(flind%neu)
-
-      if (has_ion) then
-         call get_common_vars(flind%ion)
-
-#ifdef MAGNETIC
-         cgl => leaves%first
-         do while (associated(cgl))
-            cgl%cg%wa(:,:,:) = sqrt(sq_sum3(cgl%cg%b(xdim,:,:,:), cgl%cg%b(ydim,:,:,:), cgl%cg%b(zdim,:,:,:)))
-            cgl => cgl%nxt
-         enddo
-         call leaves%get_extremum(qna%wai, MAXL, b_max)
-         call leaves%get_extremum(qna%wai, MINL, b_min)
-#ifdef COSM_RAY_ELECTRONS
-         b_max%assoc = dt_cre_min_ub
-#endif /* COSM_RAY_ELECTRONS */
-         cgl => leaves%first
-         do while (associated(cgl))
-            cgl%cg%wa(:,:,:)  = cgl%cg%wa(:,:,:) / sqrt(cgl%cg%u(flind%ion%idn,:,:,:))
-            cgl => cgl%nxt
-         enddo
-         call leaves%get_extremum(qna%wai, MAXL, vai_max)
-         vai_max%assoc = cfl*dxmn_safe/(vai_max%val+small)
-         cfi_max%val   = sqrt(flind%ion%snap%cs_max%val**2+vai_max%val**2)
-         cfi_max%assoc = cfl*dxmn_safe/sqrt(cfi_max%val**2+small)
-#endif /* MAGNETIC */
-
-      endif
-
       if (has_dst) call get_common_vars(flind%dst)
 
-#if defined VARIABLE_GP || defined MAGNETIC
-      D = spread(reshape([dom%D_*idm(xdim,:),dom%D_*idm(ydim,:),dom%D_*idm(zdim,:)],[ndims,ndims]),ndims,HI)
-#endif /* VARIABLE_GP || MAGNETIC */
-#ifdef VARIABLE_GP
-      var_i = qna%ind(gpot_n)
-      cgl => leaves%first
-      do while (associated(cgl))
-         p => cgl%cg%q(qna%wai)%span(cgl%cg%ijkse)
-         p = abs((cgl%cg%q(var_i)%span(cgl%cg%ijkse+D(xdim,:,:)) - cgl%cg%q(var_i)%span(cgl%cg%ijkse))*cgl%cg%idx)
-         cgl => cgl%nxt ; NULLIFY(p)
-      enddo
-      call leaves%get_extremum(qna%wai, MAXL, gpxmax)
-
-      cgl => leaves%first
-      do while (associated(cgl))
-         p => cgl%cg%q(qna%wai)%span(cgl%cg%ijkse)
-         p = abs((cgl%cg%q(var_i)%span(cgl%cg%ijkse+D(ydim,:,:)) - cgl%cg%q(var_i)%span(cgl%cg%ijkse))*cgl%cg%idy)
-         cgl => cgl%nxt ; NULLIFY(p)
-      enddo
-      call leaves%get_extremum(qna%wai, MAXL, gpymax)
-
-      cgl => leaves%first
-      do while (associated(cgl))
-         p => cgl%cg%q(qna%wai)%span(cgl%cg%ijkse)
-         p = abs((cgl%cg%q(var_i)%span(cgl%cg%ijkse+D(zdim,:,:)) - cgl%cg%q(var_i)%span(cgl%cg%ijkse))*cgl%cg%idz)
-         cgl => cgl%nxt ; NULLIFY(p)
-      enddo
-      call leaves%get_extremum(qna%wai, MAXL, gpzmax)
-#endif /* VARIABLE_GP */
-
 #ifdef MAGNETIC
       cgl => leaves%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
+         cgl%cg%wa(:,:,:) = sqrt(sq_sum3(cgl%cg%b(xdim,:,:,:), cgl%cg%b(ydim,:,:,:), cgl%cg%b(zdim,:,:,:)))
+
+         call cgl%cg%costs%stop(I_OTHER)
+         cgl => cgl%nxt
+      enddo
+      call leaves%get_extremum(qna%wai, MAXL, b_max)
+      call leaves%get_extremum(qna%wai, MINL, b_min)
+#ifdef COSM_RAY_ELECTRONS
+      b_max%assoc = dt_cre_synch
+      call piernik_MPI_Allreduce(b_max%assoc, pMIN)
+#endif /* COSM_RAY_ELECTRONS */
+
+      if (has_ion) then
+         cgl => leaves%first
+         do while (associated(cgl))
+            call cgl%cg%costs%start
+
+            cgl%cg%wa(:,:,:)  = cgl%cg%wa(:,:,:) / sqrt(cgl%cg%u(flind%ion%idn,:,:,:))
+
+            call cgl%cg%costs%stop(I_OTHER)
+            cgl => cgl%nxt
+         enddo
+         call leaves%get_extremum(qna%wai, MAXL, vai_max, I_ZERO)
+         if (master) vai_max%assoc = cfl * vai_max%assoc / (vai_max%val + small)
+
+         cgl => leaves%first
+         do while (associated(cgl))
+            call cgl%cg%costs%start
+
+#ifdef ISO
+            cgl%cg%wa(:,:,:) = sqrt(cgl%cg%wa(:,:,:)**2 + flind%ion%cs2)
+#else /* !ISO */
+            cgl%cg%wa(:,:,:) = (1. / flind%ion%gam_1 / flind%ion%gam - half) * cgl%cg%wa(:,:,:)**2
+            cgl%cg%wa(:,:,:) = cgl%cg%wa(:,:,:) + flind%ion%gam_1 * flind%ion%gam * (cgl%cg%u(flind%ion%ien,:,:,:)    &
+               & - ekin(cgl%cg%u(flind%ion%imx,:,:,:), cgl%cg%u(flind%ion%imy,:,:,:), cgl%cg%u(flind%ion%imz,:,:,:), &
+               &        cgl%cg%u(flind%ion%idn,:,:,:)))/cgl%cg%u(flind%ion%idn,:,:,:)
+            cgl%cg%wa(:,:,:) = sqrt(cgl%cg%wa(:,:,:))
+#endif /* !ISO */
+
+            call cgl%cg%costs%stop(I_OTHER)
+            cgl => cgl%nxt
+         enddo
+         call leaves%get_extremum(qna%wai, MAXL, cfi_max, I_ZERO)
+         if (master) cfi_max%assoc = cfl * cfi_max%assoc / (cfi_max%val + small)
+      endif
+
+      cgl => leaves%first
+      do while (associated(cgl))
+         call cgl%cg%costs%start
+
          p => cgl%cg%q(qna%wai)%span(cgl%cg%ijkse)
-         p =   (cgl%cg%b(xdim, cgl%cg%is+dom%D_x:cgl%cg%ie+dom%D_x, cgl%cg%js        :cgl%cg%je,         cgl%cg%ks        :cgl%cg%ke        ) - &
-              & cgl%cg%b(xdim, cgl%cg%is        :cgl%cg%ie,         cgl%cg%js        :cgl%cg%je,         cgl%cg%ks        :cgl%cg%ke        ))*cgl%cg%dy*cgl%cg%dz &
-              +(cgl%cg%b(ydim, cgl%cg%is        :cgl%cg%ie,         cgl%cg%js+dom%D_y:cgl%cg%je+dom%D_y, cgl%cg%ks        :cgl%cg%ke        ) - &
-              & cgl%cg%b(ydim, cgl%cg%is        :cgl%cg%ie,         cgl%cg%js        :cgl%cg%je,         cgl%cg%ks        :cgl%cg%ke        ))*cgl%cg%dx*cgl%cg%dz &
-              +(cgl%cg%b(zdim, cgl%cg%is        :cgl%cg%ie,         cgl%cg%js        :cgl%cg%je,         cgl%cg%ks+dom%D_z:cgl%cg%ke+dom%D_z) - &
-              & cgl%cg%b(zdim, cgl%cg%is        :cgl%cg%ie,         cgl%cg%js        :cgl%cg%je,         cgl%cg%ks        :cgl%cg%ke        ))*cgl%cg%dx*cgl%cg%dy
-!         p = (cgl%cg%w(wna%bi)%span(xdim,cgl%cg%ijkse+D(xdim,:,:)) - cgl%cg%w(all_cg%bi)%span(xdim,cgl%cg%ijkse))*cgl%cg%dy*cgl%cg%dz &
-!            +(cgl%cg%w(wna%bi)%span(ydim,cgl%cg%ijkse+D(ydim,:,:)) - cgl%cg%w(all_cg%bi)%span(ydim,cgl%cg%ijkse))*cgl%cg%dx*cgl%cg%dz &
-!            +(cgl%cg%w(wna%bi)%span(zdim,cgl%cg%ijkse+D(zdim,:,:)) - cgl%cg%w(all_cg%bi)%span(zdim,cgl%cg%ijkse))*cgl%cg%dx*cgl%cg%dy
+         p = (cgl%cg%w(wna%bi)%span(xdim,cgl%cg%ijkse+dom%D2a(xdim,:,:)) - cgl%cg%w(wna%bi)%span(xdim,cgl%cg%ijkse))*cgl%cg%dy*cgl%cg%dz &
+            +(cgl%cg%w(wna%bi)%span(ydim,cgl%cg%ijkse+dom%D2a(ydim,:,:)) - cgl%cg%w(wna%bi)%span(ydim,cgl%cg%ijkse))*cgl%cg%dx*cgl%cg%dz &
+            +(cgl%cg%w(wna%bi)%span(zdim,cgl%cg%ijkse+dom%D2a(zdim,:,:)) - cgl%cg%w(wna%bi)%span(zdim,cgl%cg%ijkse))*cgl%cg%dx*cgl%cg%dy
          cgl%cg%wa = abs(cgl%cg%wa)
 
          cgl%cg%wa(cgl%cg%ie,:,:) = cgl%cg%wa(cgl%cg%ie-dom%D_x,:,:)
          cgl%cg%wa(:,cgl%cg%je,:) = cgl%cg%wa(:,cgl%cg%je-dom%D_y,:)
          cgl%cg%wa(:,:,cgl%cg%ke) = cgl%cg%wa(:,:,cgl%cg%ke-dom%D_z)
 
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt ; NULLIFY(p)
       enddo
       call leaves%get_extremum(qna%wai, MAXL, divb_max)
+
+      call map_chspeed
+      call leaves%get_extremum(qna%wai, MAXL, ch_max)
 #endif /* MAGNETIC */
 
-#if defined(COSM_RAYS)
+#ifdef VARIABLE_GP
+      var_i = qna%ind(gpot_n)
       cgl => leaves%first
       do while (associated(cgl))
-#if defined(COSM_RAYS) && defined(COSM_RAY_ELECTRONS)
-         cgl%cg%wa        = sum(cgl%cg%u(iarr_all_crn,:,:,:),1)
-#endif /* COSM_RAYS && COSM_RAY_ELECTRONS */
-#if defined(COSM_RAYS) && !defined(COSM_RAY_ELECTRONS)
-         cgl%cg%wa        = sum(cgl%cg%u(iarr_all_crs,:,:,:),1)
-#endif /* COSM_RAYS && !COSM_RAY_ELECTRONS */
+         call cgl%cg%costs%start
+
+         p => cgl%cg%q(qna%wai)%span(cgl%cg%ijkse)
+         p = abs((cgl%cg%q(var_i)%span(cgl%cg%ijkse+dom%D2a(xdim,:,:)) - cgl%cg%q(var_i)%span(cgl%cg%ijkse))*cgl%cg%idx)
+
+         call cgl%cg%costs%stop(I_OTHER)
+         cgl => cgl%nxt ; NULLIFY(p)
+      enddo
+      call leaves%get_extremum(qna%wai, MAXL, gpxmax)
+
+      cgl => leaves%first
+      do while (associated(cgl))
+         call cgl%cg%costs%start
+
+         p => cgl%cg%q(qna%wai)%span(cgl%cg%ijkse)
+         p = abs((cgl%cg%q(var_i)%span(cgl%cg%ijkse+dom%D2a(ydim,:,:)) - cgl%cg%q(var_i)%span(cgl%cg%ijkse))*cgl%cg%idy)
+
+         call cgl%cg%costs%stop(I_OTHER)
+         cgl => cgl%nxt ; NULLIFY(p)
+      enddo
+      call leaves%get_extremum(qna%wai, MAXL, gpymax)
+
+      cgl => leaves%first
+      do while (associated(cgl))
+         call cgl%cg%costs%start
+
+         p => cgl%cg%q(qna%wai)%span(cgl%cg%ijkse)
+         p = abs((cgl%cg%q(var_i)%span(cgl%cg%ijkse+dom%D2a(zdim,:,:)) - cgl%cg%q(var_i)%span(cgl%cg%ijkse))*cgl%cg%idz)
+
+         call cgl%cg%costs%stop(I_OTHER)
+         cgl => cgl%nxt ; NULLIFY(p)
+      enddo
+      call leaves%get_extremum(qna%wai, MAXL, gpzmax)
+#endif /* VARIABLE_GP */
+
+#ifdef COSM_RAYS
+      cgl => leaves%first
+      do while (associated(cgl))
+         call cgl%cg%costs%start
+
+#ifdef COSM_RAY_ELECTRONS
+         cgl%cg%wa = sum(cgl%cg%u(iarr_all_crn,:,:,:),1)
+#else /* !COSM_RAY_ELECTRONS */
+         cgl%cg%wa = sum(cgl%cg%u(iarr_all_crs,:,:,:),1)
+#endif /* !COSM_RAY_ELECTRONS */
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
       call leaves%get_extremum(qna%wai, MAXL, encr_max)
       call leaves%get_extremum(qna%wai, MINL, encr_min)
       encr_max%assoc = dt_crs
-#endif /* COSM_RAYS */
+      call piernik_MPI_Allreduce(encr_max%assoc, pMIN)
 #ifdef COSM_RAY_ELECTRONS
       cgl => leaves%first
       do while (associated(cgl))
-         cgl%cg%wa        = sum(cgl%cg%u(iarr_cre_n,:,:,:),1)
+         call cgl%cg%costs%start
+
+         cgl%cg%wa = sum(cgl%cg%u(iarr_cre_n,:,:,:),1)
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
       call leaves%get_extremum(qna%wai, MAXL, cren_max)
       call leaves%get_extremum(qna%wai, MINL, cren_min)
-      cgl => leaves%first
 
+      cgl => leaves%first
       do while (associated(cgl))
-         cgl%cg%wa        = sum(cgl%cg%u(iarr_cre_e,:,:,:),1)
+         call cgl%cg%costs%start
+
+         cgl%cg%wa = sum(cgl%cg%u(iarr_cre_e,:,:,:),1)
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
       call leaves%get_extremum(qna%wai, MAXL, cree_max)
       call leaves%get_extremum(qna%wai, MINL, cree_min)
-      cgl => leaves%first
+      cree_max%assoc = dt_cre_K
+      call piernik_MPI_Allreduce(cree_max%assoc, pMIN)
 
       cgl => leaves%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          p => cgl%cg%q(qna%wai)%span(cgl%cg%ijkse)
          p =   (cgl%cg%u(flind%ion%imx, cgl%cg%is+dom%D_x:cgl%cg%ie+dom%D_x, cgl%cg%js        :cgl%cg%je,         cgl%cg%ks        :cgl%cg%ke        ) / &
                 cgl%cg%u(flind%ion%idn, cgl%cg%is+dom%D_x:cgl%cg%ie+dom%D_x, cgl%cg%js        :cgl%cg%je,         cgl%cg%ks        :cgl%cg%ke        ) - &
@@ -1672,17 +1877,25 @@ contains
          cgl%cg%wa(cgl%cg%ie,:,:) = cgl%cg%wa(cgl%cg%ie-dom%D_x,:,:)
          cgl%cg%wa(:,cgl%cg%je,:) = cgl%cg%wa(:,cgl%cg%je-dom%D_y,:)
          cgl%cg%wa(:,:,cgl%cg%ke) = cgl%cg%wa(:,:,cgl%cg%ke-dom%D_z)
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt ; NULLIFY(p)
       enddo
       call leaves%get_extremum(qna%wai, MINL, divv_min)
       call leaves%get_extremum(qna%wai, MAXL, divv_max)
-      divv_max%assoc = dt_cre_min_ud
+      divv_max%assoc = dt_cre_adiab
+      call piernik_MPI_Allreduce(divv_max%assoc, pMIN)
 #endif /* COSM_RAY_ELECTRONS */
+#endif /* COSM_RAYS */
 
       if (has_interactions) then
          cgl => leaves%first
          do while (associated(cgl))
+            call cgl%cg%costs%start
+
             cgl%cg%wa = L2norm(cgl%cg%u(flind%dst%imx,:,:,:),cgl%cg%u(flind%dst%imy,:,:,:),cgl%cg%u(flind%dst%imz,:,:,:),cgl%cg%u(flind%neu%imx,:,:,:),cgl%cg%u(flind%neu%imy,:,:,:),cgl%cg%u(flind%neu%imz,:,:,:) ) * cgl%cg%u(flind%dst%idn,:,:,:)
+
+            call cgl%cg%costs%stop(I_OTHER)
             cgl => cgl%nxt
          enddo
          call leaves%get_extremum(qna%wai, MAXL, drag)
@@ -1698,38 +1911,41 @@ contains
                id = "ION"
                write(msg, fmt_dtloc) 'max(c_f)    ', id, cfi_max%val, cfi_max%assoc ; call printinfo(msg, .false.)
                call cmnlog_l(fmt_dtloc, 'max(v_a)    ', id, vai_max)
-               id = "MAG"
-               call cmnlog_s(fmt_loc, 'min(|b|)    ', id, b_min)
-#ifdef COSM_RAY_ELECTRONS
-               call cmnlog_l(fmt_dtloc, 'max(|b|)    ', id, b_max)
-#else /* !COSM_RAY_ELECTRONS */
-               call cmnlog_s(fmt_loc,   'max(|b|)    ', id, b_max)
-#endif /* COSM_RAY_ELECTRONS */
-               call cmnlog_s(fmt_loc, 'max(|divb|) ', id, divb_max)
-#else /* !MAGNETIC */
-!               if (csi_max%val > 0.) write(msg, fmtff8) 'max(c_s )   ION  =', sqrt(csi_max%val**2), 'dt=',cfl*dxmn_safe/sqrt(csi_max%val**2)
-!               call printinfo(msg, .false.)
-#endif /* !MAGNETIC */
+#endif /* MAGNETIC */
             endif
+#ifdef MAGNETIC
+            id = "MAG"
+            call cmnlog_s(fmt_loc,   'min(|b|)    ', id, b_min)
+#ifdef COSM_RAY_ELECTRONS
+            call cmnlog_l(fmt_dtloc, 'max(|b|)    ', id, b_max)
+#else /* !COSM_RAY_ELECTRONS */
+            call cmnlog_s(fmt_loc,   'max(|b|)    ', id, b_max)
+#endif /* COSM_RAY_ELECTRONS */
+            call cmnlog_s(fmt_loc,   'max(|divb|) ', id, divb_max)
+            if (divB_0_method /= DIVB_HDC .or. which_solver /= RIEMANN_SPLIT) id = "N/A"
+            call cmnlog_s(fmt_loc, 'max(|c_h|)  ', id, ch_max)
+#endif /* MAGNETIC */
             if (has_neu) call common_shout(flind%neu%snap,'NEU',.true.,.true.,.true.)
             if (has_dst) call common_shout(flind%dst%snap,'DST',.false.,.false.,.false.)
             if (has_interactions) call cmnlog_l(fmt_dtloc, 'max(drag)   ', "INT", drag)
 #ifdef COSM_RAYS
+#ifdef COSM_RAY_ELECTRONS
+            id = "CRN"
+#else /* !COSM_RAY_ELECTRONS */
             id = "CRS"
+#endif /* COSM_RAY_ELECTRONS */
             call cmnlog_s(fmt_loc,   'min(encr)   ', id, encr_min)
             call cmnlog_l(fmt_dtloc, 'max(encr)   ', id, encr_max)
-#endif /* COSM_RAYS */
-
 #ifdef COSM_RAY_ELECTRONS
             id = "CRE"
             call cmnlog_s(fmt_loc,   'min(cren)    ', id, cren_min)
             call cmnlog_s(fmt_loc,   'max(cren)    ', id, cren_max)
             call cmnlog_s(fmt_loc,   'min(cree)    ', id, cree_min)
-            call cmnlog_s(fmt_loc,   'max(cree)    ', id, cree_max)
+            call cmnlog_l(fmt_dtloc, 'max(cree)    ', id, cree_max)
             call cmnlog_s(fmt_loc,   'min(div_v)   ', id, divv_min)
             call cmnlog_l(fmt_dtloc, 'max(div_v)   ', id, divv_max)
 #endif /* COSM_RAY_ELECTRONS */
-
+#endif /* COSM_RAYS */
 #ifdef RESISTIVE
             if (eta1_active) then
                id = "RES"
@@ -1746,6 +1962,10 @@ contains
             call cmnlog_s(fmt_loc, 'max(|gpy|)  ', id, gpymax)
             call cmnlog_s(fmt_loc, 'max(|gpz|)  ', id, gpzmax)
 #endif /* VARIABLE_GP */
+#ifdef NBODY
+            id = "PRT"
+            call cmnlog_l(fmt_dtloc, 'max(|acc|)  ', id, pacc_max)
+#endif /* NBODY */
             call printinfo('================================================================================================================', .false.)
          else
 #ifdef MAGNETIC
@@ -1780,7 +2000,70 @@ contains
          endif
       endif
 
+      if (.not.present(tsl)) call print_memory_usage
+
+      call ppp_main%stop(log_label, PPP_IO)
+
+   contains
+
+      subroutine print_memory_usage
+
+         use constants,    only: I_ONE, INVALID
+         use dataio_pub,   only: msg, printinfo
+         use memory_usage, only: system_mem_usage
+         use MPIF,         only: MPI_INTEGER, MPI_COMM_WORLD
+         use MPIFUN,       only: MPI_Gather
+         use mpisetup,     only: master, FIRST, LAST, err_mpi
+
+         implicit none
+
+         integer(kind=4) :: rss
+         integer(kind=4), dimension(FIRST:LAST) :: cnt_rss
+
+         rss = system_mem_usage()
+         call MPI_Gather(rss, I_ONE, MPI_INTEGER, cnt_rss, I_ONE, MPI_INTEGER, FIRST, MPI_COMM_WORLD, err_mpi)
+
+         if (master) then
+            if (any(cnt_rss /= INVALID)) then
+               write(msg, '(9a)')"  RSS memory in use (avg/min/max):", &
+                    trim(kMGTP(sum(real(cnt_rss))/size(cnt_rss))), "/", &
+                    trim(kMGTP(minval(real(cnt_rss)))), "/", &
+                    trim(kMGTP(maxval(real(cnt_rss)))), &
+                    ". Total RSS memory:", trim(kMGTP(sum(real(cnt_rss)))), "."
+               call printinfo(msg, .false.)
+            endif
+         endif
+
+      end subroutine print_memory_usage
+
+      function kMGTP(kmem)
+
+         use constants, only: fplen
+
+         implicit none
+
+         real, intent(in) :: kmem
+
+         character(len=fplen) :: kMGTP
+
+         real, parameter :: ord = 2.**10, ki = 1, Mi = ki *ord, Gi = Mi * ord, Ti = Gi * ord, Pi = Ti * ord
+
+         if (kmem < Mi) then
+            write(kMGTP, '(f7.1,a)') kmem / ki, " kiB"
+         else if (kmem < Gi) then
+            write(kMGTP, '(f7.1,a)') kmem / Mi, " MiB"
+         else if (kmem < Ti) then
+            write(kMGTP, '(f7.1,a)') kmem / Gi, " GiB"
+         else if (kmem < Pi) then
+            write(kMGTP, '(f7.1,a)') kmem / Ti, " TiB"
+         else
+            write(kMGTP, '(f10.1,a)') kmem / Pi, " PiB ???"
+         endif
+
+      end function kMGTP
+
    end subroutine write_log
+
 !------------------------------------------------------------------------
    subroutine read_file_msg
 !-------------------------------------------------------------------------
@@ -1791,11 +2074,11 @@ contains
 !-------------------------------------------------------------------------
 
 !> \todo process multiple commands at once
-      use constants,     only: cwdlen
-      use dataio_pub,    only: msg, printinfo, warn
-      use mpisetup,      only: master
+      use constants,  only: cwdlen
+      use dataio_pub, only: msg, printinfo, warn
+      use mpisetup,   only: master
 #if defined(__INTEL_COMPILER)
-      use ifposix,       only: pxfstat, pxfstructcreate, pxfintget, pxfstructfree
+      use ifposix,    only: pxfstat, pxfstructcreate, pxfintget, pxfstructfree
 #endif /* __INTEL_COMPILER */
 
       implicit none
@@ -1851,15 +2134,15 @@ contains
                rewind(msg_lun)
                read(msg_lun, *, iostat=io) umsg
                if (io/=0) then
-                  write(msg, '(5a)'   )"[dataio:read_file_msg] ",trim(msg_origin(i))," message: '",trim(umsg),"'"
+                  write(msg, '(5a)')"[dataio:read_file_msg] ", trim(msg_origin(i)), " message: '", trim(umsg), "'."
                else
-                  write(msg, '(3a)'   )"[dataio:read_file_msg] No value provided in ",trim(msg_origin(i))," message."
+                  write(msg, '(5a)')"[dataio:read_file_msg] No value provided in ", trim(msg_origin(i)), " message '", trim(umsg), "'."
                   call warn(msg)
                   msg=''
                endif
             else
                msg_param_read = .true.
-               write(msg, '(5a,g15.7)')"[dataio:read_file_msg] ",trim(msg_origin(i))," message: '",trim(umsg),"', with parameter = ", umsg_param
+               write(msg, '(5a,g15.7)')"[dataio:read_file_msg] ", trim(msg_origin(i)), " message: '", trim(umsg), "', with parameter = ", umsg_param
             endif
             close(msg_lun)
 

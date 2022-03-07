@@ -70,22 +70,21 @@ contains
 !-----------------------------------------------------------------------------------------------------------------------
    subroutine problem_pointers
 
-      use dataio_user,           only: user_attrs_wr, user_attrs_rd
       use user_hooks,            only: problem_customize_solution, problem_grace_passed, problem_post_restart
       use gravity,               only: grav_pot_3d
 #ifdef HDF5
-      use dataio_user,           only: user_vars_hdf5
+      use dataio_user,           only: user_attrs_wr, user_attrs_rd, user_vars_hdf5
 #endif /* HDF5 */
 
       implicit none
 
-      user_attrs_wr => my_attrs_wr
-      user_attrs_rd => my_attrs_rd
       problem_customize_solution => problem_customize_solution_kepler
       problem_grace_passed => si_grace_passed
       problem_post_restart => kepler_problem_post_restart
       grav_pot_3d => my_grav_pot_3d
 #ifdef HDF5
+      user_attrs_wr => my_attrs_wr
+      user_attrs_rd => my_attrs_rd
       user_vars_hdf5 => prob_vars_hdf5
 #endif /* HDF5 */
 
@@ -108,8 +107,8 @@ contains
 !-----------------------------------------------------------------------------------------------------------------------
    subroutine read_problem_par
 
-      use dataio_pub,            only: nh      ! QA_WARN required for diff_nml
-      use mpisetup,              only: rbuff, ibuff, lbuff, master, slave, piernik_MPI_Bcast
+      use dataio_pub, only: nh
+      use mpisetup,   only: rbuff, ibuff, lbuff, master, slave, piernik_MPI_Bcast
 
       implicit none
 
@@ -377,7 +376,7 @@ contains
          do while (associated(cgl))
             cg => cgl%cg
 
-            if (is_multicg) call die("[initproblem:problem_initial_conditions] multiple grid pieces per procesor not implemented yet") !nontrivial kmid, allocate
+            if (is_multicg) call die("[initproblem:problem_initial_conditions] multiple grid pieces per processor not implemented yet") !nontrivial kmid, allocate
 
             sqr_gm = sqrt(newtong*ptmass)
             do k = cg%lhn(zdim, LO), cg%lhn(zdim, HI)
@@ -660,7 +659,7 @@ contains
       type(cg_list_element), pointer          :: cgl
       type(grid_container),  pointer          :: cg
 
-      if (is_multicg) call die("[initproblem:problem_customize_solution_kepler] multiple grid pieces per procesor not implemented yet") !nontrivial
+      if (is_multicg) call die("[initproblem:problem_customize_solution_kepler] multiple grid pieces per processor not implemented yet") !nontrivial
 
       if (.not.allocated(temp_mean)) allocate(temp_mean(dom%off(xdim):dom%off(xdim)+dom%n_d(xdim)-I_ONE, flind%dst%idn:flind%dst%imz))
 
@@ -865,4 +864,3 @@ contains
    end function signum
 !-----------------------------------------------------------------------------------------------------------------------
 end module initproblem
-! vim: set tw=120:

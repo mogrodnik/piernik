@@ -142,11 +142,11 @@ contains
       if (has_ion) call init_ionized
       if (has_neu) call init_neutral
       if (has_dst) call init_dust
+#ifdef COSM_RAYS
+      call init_cosmicrays
 #ifdef COSM_RAY_ELECTRONS
       call init_cresp
 #endif /* COSM_RAY_ELECTRONS */
-#ifdef COSM_RAYS
-      call init_cosmicrays
 #endif /* COSM_RAYS */
 #ifdef TRACER
       call init_tracer
@@ -185,7 +185,8 @@ contains
 #endif /* COSM_RAYS */
 #ifdef COSM_RAY_ELECTRONS
       use cresp_crspectrum, only: cleanup_cresp
-      use initcrspectrum,   only: cleanup_cresp_virtual_en_arrays
+      use initcrspectrum,   only: cleanup_cresp_work_arrays, cleanup_cresp_sp
+      use cresp_NR_method,  only: deallocate_all_smaps
 #endif /* COSM_RAY_ELECTRONS */
 
       implicit none
@@ -197,7 +198,9 @@ contains
 
 #ifdef COSM_RAY_ELECTRONS
       call cleanup_cresp
-      call cleanup_cresp_virtual_en_arrays
+      call cleanup_cresp_work_arrays
+      call deallocate_all_smaps
+      call cleanup_cresp_sp
 #endif /* COSM_RAY_ELECTRONS */
       call cleanup_magic_mass
 
@@ -210,6 +213,7 @@ contains
 
    subroutine sanitize_smallx_checks
 
+      use constants,        only: INVALID
       use cg_leaves,        only: leaves
       use cg_list,          only: cg_list_element
       use constants,        only: big_float, DST, xdim, ydim, zdim, cs_i2_n, pMAX, pMIN
@@ -228,7 +232,7 @@ contains
       type(grid_container),   pointer :: cg
       class(component_fluid), pointer :: fl
       integer                         :: i
-      real, pointer, dimension(:,:,:) :: dn, mx, my, mz, en, bx, by, bz
+      real, pointer, dimension(:,:,:) :: dn, mx, my, mz, en, bx => null(), by => null(), bz => null()
       real, parameter                 :: safety_factor = 1.e-4
       real, parameter                 :: max_dens_span = 5.0
       real                            :: maxdens, span, mindens, minpres
@@ -241,9 +245,11 @@ contains
       do while (associated(cgl))
          cg => cgl%cg
 
-         bx => cg%w(wna%bi)%span(xdim,cg%ijkse)
-         by => cg%w(wna%bi)%span(ydim,cg%ijkse)
-         bz => cg%w(wna%bi)%span(zdim,cg%ijkse)
+         if (wna%bi > INVALID) then
+            bx => cg%w(wna%bi)%span(xdim,cg%ijkse)
+            by => cg%w(wna%bi)%span(ydim,cg%ijkse)
+            bz => cg%w(wna%bi)%span(zdim,cg%ijkse)
+         endif
 
          if (smalld >= big_float) then
             do i = lbound(flind%all_fluids,1), ubound(flind%all_fluids,1)

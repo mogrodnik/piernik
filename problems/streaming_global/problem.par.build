@@ -67,10 +67,10 @@
     use_smalld = .true.
     smalld = 5.e-7
     relax_time = 5.0
-    integration_order = 2
     limiter= 'vanleer'
     cfr_smooth = 0.01
     geometry25D = .true.
+    divB_0 = "CT" ! because we have GEO_RPZ and GLM is implemented only for GEO_XYZ
  /
 
  $GRAVITY

@@ -73,7 +73,7 @@ module initproblem
    enum, bind(C)
       enumerator :: D0, VX0, VY0
    end enum
-   character(len=dsetnamelen), dimension(D0:VY0), parameter :: q_n = [ "den0", "vlx0", "vly0" ] !< Names of initial condition (t=0.) arrays used for divine_intervention_type = 3
+   character(len=dsetnamelen), dimension(D0:VY0), parameter :: q_n = [ "i_den0", "i_vlx0", "i_vly0" ] !< Names of initial condition (t=0.) arrays used for divine_intervention_type = 3
 
 contains
 
@@ -81,14 +81,19 @@ contains
 
    subroutine problem_pointers
 
+#ifdef HDF5
       use dataio_user, only: user_attrs_wr
-      use user_hooks,  only: problem_customize_solution, cleanup_problem
+#endif /* HDF5 */
+      use user_hooks,  only: problem_customize_solution, cleanup_problem, problem_post_restart
 
       implicit none
 
       problem_customize_solution => problem_customize_solution_wt4
+#ifdef HDF5
       user_attrs_wr              => problem_initial_conditions_attrs
+#endif /* HDF5 */
       cleanup_problem            => cleanup_wt4
+      problem_post_restart       => IC_bnd_update
 
    end subroutine problem_pointers
 
@@ -98,7 +103,7 @@ contains
 
       use cg_list_global, only: all_cg
       use constants,      only: AT_NO_B
-      use dataio_pub,     only: nh      ! QA_WARN required for diff_nml
+      use dataio_pub,     only: nh
       use mpisetup,       only: rbuff, cbuff, ibuff, lbuff, master, slave, piernik_MPI_Bcast
 
       implicit none
@@ -205,7 +210,7 @@ contains
       if (mass_mul < 0.) mass_mul = 1.
 
       do i = D0, VY0
-         call all_cg%reg_var(q_n(i), restart_mode = AT_NO_B)
+         call all_cg%reg_var(q_n(i), restart_mode = AT_NO_B, vital = .true.)
       enddo
 
    end subroutine read_problem_par
@@ -225,13 +230,15 @@ contains
       use dataio_pub,  only: msg, die
       use func,        only: operator(.notequals.)
       use grid_cont,   only: grid_container
-      use mpi,         only: MPI_DOUBLE_PRECISION
-      use mpisetup,    only: proc, master, FIRST, LAST, comm, status, mpi_err
+      use MPIF,        only: MPI_DOUBLE_PRECISION, MPI_STATUS_IGNORE, MPI_COMM_WORLD
+      use MPIFUN,      only: MPI_Send, MPI_Recv
+      use mpisetup,    only: proc, master, FIRST, LAST, err_mpi
 
       implicit none
 
-      integer                             :: i, j, k, v, pe, ostat
-      type(grid_container), pointer       :: cg
+      integer                       :: i, j, k, v, ostat
+      integer(kind=4)               :: pe
+      type(grid_container), pointer :: cg
       enum, bind(C)
          enumerator :: DEN0 = 1, VELX0, VELZ0 = VELX0+ndims-1, ENER0
       end enum
@@ -259,10 +266,10 @@ contains
                enddo
             enddo
             do pe = FIRST+1, LAST
-               call MPI_Send(ic_data, size(ic_data), MPI_DOUBLE_PRECISION, pe, pe, comm, mpi_err)
+               call MPI_Send(ic_data, size(ic_data, kind=4), MPI_DOUBLE_PRECISION, pe, pe, MPI_COMM_WORLD, err_mpi)
             enddo
          else
-            call MPI_Recv(ic_data, size(ic_data), MPI_DOUBLE_PRECISION, FIRST, proc, comm, status, mpi_err)
+            call MPI_Recv(ic_data, size(ic_data, kind=4), MPI_DOUBLE_PRECISION, FIRST, proc, MPI_COMM_WORLD, MPI_STATUS_IGNORE, err_mpi)
          endif
       enddo
 
@@ -303,10 +310,10 @@ contains
 
       use cg_list,          only: cg_list_element
       use cg_leaves,        only: leaves
-      use constants,        only: small, GEO_XYZ, GEO_RPZ
-      use dataio_pub,       only: warn, printinfo, msg, die
+      use constants,        only: small, GEO_XYZ, GEO_RPZ, RTVD_SPLIT
+      use dataio_pub,       only: warn, msg, die  !, printinfo
       use domain,           only: dom
-      use global,           only: smalld
+      use global,           only: smalld, which_solver
       use grid_cont,        only: grid_container
       use fluidindex,       only: flind
       use fluidtypes,       only: component_fluid
@@ -331,7 +338,7 @@ contains
       do while (associated(cgl))
          cg => cgl%cg
 
-         if (master) then
+         if (master .and. .false.) then
             if (maxval(cg%dl(:), mask=dom%has_dir(:)) > ic_dx) then
                write(msg,'(a)')     "[initproblem:problem_initial_conditions] Too low resolution"
                call warn(msg)
@@ -351,11 +358,11 @@ contains
          endif
 
          if (fake_ic) then
-            cg%u(fl%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = 1.
-            cg%u(fl%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = 0.
-            cg%u(fl%imy, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = 0.
-            cg%u(fl%imz, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = 0.
-            cg%cs_iso2(cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = 1e-2
+            cg%u(fl%idn, RNG) = 1.
+            cg%u(fl%imx, RNG) = 0.
+            cg%u(fl%imy, RNG) = 0.
+            cg%u(fl%imz, RNG) = 0.
+            cg%cs_iso2(RNG) = 1e-2
          else
             do k = cg%ks, cg%ke
                kic = nint((cg%z(k) + ic_zsize/2.)/ic_dx)
@@ -365,7 +372,7 @@ contains
                         jic = nint((cg%y(j) + ic_xysize/2.)/ic_dx)
                         do i = cg%is, cg%ie
                            iic = nint((cg%x(i) + ic_xysize/2.)/ic_dx)
-                           call set_point(i, j, k, iic, jic, kic)
+                           call set_point(i, j, k, iic, jic, kic)  ! For the Jeans criterion we should perhaps use minima and maxima over ranges covered by a given cell to prevent flickering on IC
                         enddo
                      enddo
                   case (GEO_RPZ)
@@ -402,12 +409,12 @@ contains
             cg%cs_iso2(:,:,cg%ks-i) = cg%cs_iso2(:,:, cg%ks)
             cg%cs_iso2(:,:,cg%ke+i) = cg%cs_iso2(:,:, cg%ke)
          enddo
-         if (master ) then
-            write(msg,'(2(a,g15.7))') '[initproblem:problem_initial_conditionslem]: minval(dens)    = ', minval(cg%u(fl%idn,:,:,:)),      ' maxval(dens)    = ', maxval(cg%u(fl%idn,:,:,:))
-            call printinfo(msg, .true.)
-            write(msg,'(2(a,g15.7))') '[initproblem:problem_initial_conditionslem]: minval(cs_iso2) = ', minval(cg%cs_iso2(:,:,:)), ' maxval(cs_iso2) = ', maxval(cg%cs_iso2(:,:,:))
-            call printinfo(msg, .true.)
-         endif
+!!$         if (master ) then
+!!$            write(msg,'(2(a,g15.7))') '[initproblem:problem_initial_conditionslem]: minval(dens)    = ', minval(cg%u(fl%idn,:,:,:)),      ' maxval(dens)    = ', maxval(cg%u(fl%idn,:,:,:))
+!!$            call printinfo(msg, .true.)
+!!$            write(msg,'(2(a,g15.7))') '[initproblem:problem_initial_conditionslem]: minval(cs_iso2) = ', minval(cg%cs_iso2(:,:,:)), ' maxval(cs_iso2) = ', maxval(cg%cs_iso2(:,:,:))
+!!$            call printinfo(msg, .true.)
+!!$         endif
 
          call cg%set_constant_b_field([0., 0., 0.])
 
@@ -429,9 +436,7 @@ contains
          cgl => cgl%nxt
       enddo
 
-#ifndef UMUSCL
-      if (master ) call warn("[initproblem:problem_initial_conditionslem]: Without UMUSCL you'll likely get Monet-like density maps.")
-#endif /* !UMUSCL */
+      if (master .and. which_solver == RTVD_SPLIT) call warn("[initproblem:problem_initial_conditionslem]: With RTVD you'll likely get Monet-like density maps.")
 
    contains
 
@@ -462,6 +467,7 @@ contains
 
    end subroutine problem_initial_conditions
 
+#ifdef HDF5
 !> \brief Add some attributes to the datafiles
 
    subroutine problem_initial_conditions_attrs(file_id)
@@ -480,6 +486,24 @@ contains
       call h5ltset_attribute_double_f(file_id, "/", "fpiG", [fpiG], bufsize, error)
 
    end subroutine problem_initial_conditions_attrs
+#endif /* HDF5 */
+
+!> \brief update the IC boundaries after reading them from restart
+
+   subroutine IC_bnd_update
+
+      use cg_leaves,        only: leaves
+      use named_array_list, only: qna
+
+      implicit none
+
+      integer :: i
+
+      do i = lbound(q_n, 1), ubound(q_n, 1)
+         call leaves%leaf_arr3d_boundaries(qna%ind(q_n(i)))
+      enddo
+
+   end subroutine IC_bnd_update
 
 !> \brief modify the density and velocity fields to provide kind of boundary conditions enforced far from domain boundaries
 
@@ -494,6 +518,7 @@ contains
       use fluidtypes,       only: component_fluid
       use grid_cont,        only: grid_container
       use named_array_list, only: qna
+      use mpisetup,         only: master
 
       implicit none
 
@@ -516,15 +541,16 @@ contains
          allocate(mod_str(cg%is:cg%ie))
 
          select case (divine_intervention_type)
+            case (0)                                                                                ! skip modifications (for testing only)
             case (1)                                                                                ! crude
                if (dom%geometry_type /= GEO_XYZ) call die("[initproblem:problem_customize_solution_wt4] Non-cartesian geometry not supported (divine_intervention_type=1).")! remapping required
-               where (cg%u(fl%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) < ambient_density)
-                  cg%u(fl%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = (1. - damp_factor) * cg%u(fl%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)
-                  cg%u(fl%imy, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = (1. - damp_factor) * cg%u(fl%imy, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)
-                  cg%u(fl%imz, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = (1. - damp_factor) * cg%u(fl%imz, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)
-                  cg%cs_iso2(cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = mincs2
+               where (cg%u(fl%idn, RNG) < ambient_density)
+                  cg%u(fl%imx, RNG) = (1. - damp_factor) * cg%u(fl%imx, RNG)
+                  cg%u(fl%imy, RNG) = (1. - damp_factor) * cg%u(fl%imy, RNG)
+                  cg%u(fl%imz, RNG) = (1. - damp_factor) * cg%u(fl%imz, RNG)
+                  cg%cs_iso2(RNG) = mincs2
                elsewhere
-                  cg%cs_iso2(cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = maxcs2
+                  cg%cs_iso2(RNG) = maxcs2
                endwhere
             case (2)                                                                                ! smooth
                if (dom%geometry_type /= GEO_XYZ) call die("[initproblem:problem_customize_solution_wt4] Non-cartesian geometry not supported (divine_intervention_type=2).")
@@ -589,7 +615,7 @@ contains
                enddo
                deallocate(alf)
             case default
-               call warn("[initproblem:problem_customize_solution_wt4] Unknown divine_intervention_type")
+               if (master) call warn("[initproblem:problem_customize_solution_wt4] Unknown divine_intervention_type")
          end select
 
          deallocate(mod_str)

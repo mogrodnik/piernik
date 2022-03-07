@@ -30,6 +30,17 @@
 !!
 !! In this module following namelists of parameters are specified:
 !! \copydetails domain::init_domain
+!!
+!! We have just one domain container for the base grid. The base grid covers the computational domain.
+!! The computational domain is limited to be logically rectangular in chosen geometry.
+!! Use periodic boundary conditions if you need topologically toroidal computational domain.
+!!
+!! Non-rectangular domains aren't currently supported. Such shapes are used in tests like
+!! "Mach-3 wind tunnel with a step" by Emery A.E., Journal of Computational Physics, Vol. 2 (1968). 306-331.
+!! Such L-shaped domain can be implemented by:
+!! * an union of two rectangular domains (may be more tricky than it seems),
+!! * a domain that is only partially covered by the grids (again  a bit tricky and may ruin load balancing),
+!! * implementing embedded reflective boundaries.
 !<
 module domain
 
@@ -39,13 +50,7 @@ module domain
 
    private
    public :: cleanup_domain, init_domain, translate_ints_to_bnds, domain_container, dom, is_uneven, is_mpi_noncart, is_refined, is_multicg, &
-        &    psize, AMR_bsize, minsize, allow_noncart, allow_uneven, dd_unif_quality, dd_rect_quality! temporary export
-
-! AMR: There will be at least one domain container for the base grid.
-!      It will be possible to host one or more refined domains on the base container and on the refined containers.
-!      The refined domains may cover whole parent domain or only a tiny part of it.
-!      The multigrid solver operates also on a stack of coarser domains - parents of the base domain.
-!      The coarser domains must be no smaller than the base domain.
+        &    psize, minsize, allow_noncart, allow_uneven, vel_outd, dd_unif_quality, dd_rect_quality! temporary export
 
    type :: domain_container
       ! primary parameters, read from /DOMAIN_SIZES/, /BOUNDARIES/ and /DOMAIN_LIMITS/ namelists
@@ -55,30 +60,29 @@ module domain
       integer(kind=4), dimension(ndims, LO:HI) :: bnd  !< type of boundary conditions coded in integers
 
       ! derived parameters
-      real, dimension(ndims)    :: L_           !< span of the physical domain [ xmax-xmin, ymax-ymin, zmax-zmin ]
-      real, dimension(ndims)    :: C_           !< center of the physical domain [ (xmax+xmin)/2., (ymax+ymin)/2., (zmax+zmin)/2. ]
-      real                      :: Vol          !< total volume of the physical domain
+      real, dimension(ndims) :: L_   !< span of the physical domain [ xmax-xmin, ymax-ymin, zmax-zmin ]
+      real, dimension(ndims) :: C_   !< center of the physical domain [ (xmax+xmin)/2., (ymax+ymin)/2., (zmax+zmin)/2. ]
+      real                   :: Vol  !< total volume of the physical domain
 
-      logical, dimension(ndims) :: periodic     !< .true. for periodic and shearing boundary pairs
+      logical, dimension(ndims) :: periodic  !< .true. for periodic and shearing boundary pairs
 
       ! Do not use n_t(:) in the Piernik source tree without a good reason
       ! Avoid as a plague allocating buffers of that size because it negates benefits of parallelization
-      ! \todo move them to another type, that extends domain_container?
-      integer(kind=4), dimension(ndims) :: n_t  !< total number of %grid cells in the whole domain in every direction (n_d(:) + 2* nb for existing directions)
+      integer(kind=4), dimension(ndims) :: n_t  !< total number of %grid cells in the whole domain in every direction (n_d(:) + 2* nb for existing directions); avoid using it
 
       integer(kind=8) :: total_ncells           !< total number of %grid cells
       integer         :: geometry_type          !< the type of geometry: cartesian: GEO_XYZ, cylindrical: GEO_RPZ, other: GEO_INVALID
       integer(kind=4) :: D_x                    !< set to 1 when x-direction exists, 0 otherwise
       integer(kind=4) :: D_y                    !< set to 1 when y-direction exists, 0 otherwise.
       integer(kind=4) :: D_z                    !< set to 1 when z-direction exists, 0 otherwise.
+      integer(kind=4), dimension(ndims) :: D_   !< == [D_x, D_y, D_z], Useful for dimensionally-safe indices for difference operators on arrays
+      integer(kind=4), dimension(ndims, ndims, HI) :: D2a !< auxiliary variant of D_
 
-      integer(kind=4), dimension(ndims) :: D_   !< set to 1 for existing directions, 0 otherwise. Useful for dimensionally-safe indices for difference operators on arrays,
-
-      logical, dimension(ndims) :: has_dir      !< .true. for existing directions
-      integer                   :: eff_dim      !< effective dimensionality of the simulation
+      logical, dimension(ndims) :: has_dir      !< .true. when direction exists (domain has >1 cell there)
+      integer                   :: eff_dim      !< effective dimensionality of the simulation (count(has_dir))
       integer(kind=8), dimension(ndims) :: off  !< offset of the base level
 
-    contains
+   contains
 
       procedure :: translate_bnds_to_ints     !< Convert strings to integer-coded boundary types
       procedure :: print_me                   !< Print computational domain details
@@ -90,25 +94,28 @@ module domain
    type(domain_container), protected :: dom !< complete description of base level domain
 
    ! This set of flags can be useful to gently disable modules that does not support certain grid improvements yet
-   !> \todo Get rid of them as soon as all important modules are updated
-   logical :: is_uneven          !< .true. when n_b(:) depend on process rank \todo protect it
-   logical :: is_mpi_noncart     !< .true. when there exist a process that has more than one neighbour in any direction \todo protect it
-   logical :: is_refined         !< .true. when AMR or static refinement is employed \todo protect it
-   logical :: is_multicg         !< .true. when at leas one process has more than one grid container \todo protect it
+   ! \todo protect them, maybe move to something like dom%is%refined
+   logical :: is_uneven          !< .true. when n_b(:) depend on process rank
+   logical :: is_mpi_noncart     !< .true. when there exist a process that has more than one neighbour in any direction
+   logical :: is_refined         !< .true. when AMR or static refinement is employed
+   logical :: is_multicg         !< .true. when at leas one process has more than one grid container
 
-   ! Namelist variables
+   ! Namelist variables for MPI_BLOCKS
 
+   ! typically there is no need to adjust them
+   ! \ToDo verify thresholds for dd_unif_quality and dd_rect_quality that should work in most cases
    integer(kind=4), dimension(ndims) :: psize     !< desired number of MPI blocks in x, y and z-dimension
-   integer(kind=4), dimension(ndims) :: AMR_bsize !< the size of cg for multiblock decomposition
    integer(kind=4), dimension(ndims) :: minsize   !< minimum size of cg, default is dom$nb
+   logical :: allow_uneven                        !< allows different values of n_b(:) on different processes
+   logical :: allow_noncart                       !< allows more than one neighbour on a boundary
+   real    :: dd_unif_quality                     !< uniform domain decomposition may be rejected it its quality is below this threshold (e.g. very elongated local domains are found), nonuniform cartesian decomposition is then tried
+   real    :: dd_rect_quality                     !< rectilinear domain decomposition may be rejected it its quality is below this threshold, noncartesian decomposition is then tried (it still may find cartesian decomposition as optimum)
+   real    :: vel_outd                            !< velocity minimum used in OUTD boundary conditions
    !! \todo Implement maximum size of a cg (in cells) for use with GPGPU kernels. The minimum size id nb**dom%eff_dim
 
-   logical :: allow_uneven            !< allows different values of n_b(:) on different processes
-   logical :: allow_noncart           !< allows more than one neighbour on a boundary
-   real    :: dd_unif_quality         !< uniform domain decomposition may be rejected it its quality is below this threshold (e.g. very elongated local domains are found)
-   real    :: dd_rect_quality         !< rectilinear domain decomposition may be rejected it its quality is below this threshold (not used yet)
+   namelist /MPI_BLOCKS/ psize, minsize, allow_uneven, allow_noncart, dd_unif_quality, dd_rect_quality
 
-   namelist /MPI_BLOCKS/ psize, AMR_bsize, minsize, allow_uneven, allow_noncart, dd_unif_quality, dd_rect_quality
+   ! Namelist variables for BASE_DOMAIN
 
    integer(kind=4), dimension(ndims) :: n_d               !< number of %grid cells in physical domain without boundary cells (where  == 1 then that dimension is reduced to a point with no boundary cells)
    integer(kind=4), protected        :: nb                !< number of boundary cells surrounding the physical domain, same for all directions
@@ -125,10 +132,11 @@ module domain
    real                              :: zmin              !< physical domain left z-boundary position
    real                              :: zmax              !< physical domain right z-boundary position
    character(len=cbuff_len)          :: geometry          !< define system of coordinates: "cartesian" or "cylindrical"
-   integer(kind=8), dimension(ndims) :: dom_off           !< offset of the base level
 
-   namelist /BASE_DOMAIN/ n_d, nb, bnd_xl, bnd_xr, bnd_yl, bnd_yr, bnd_zl, bnd_zr, xmin, xmax, ymin, ymax, zmin, zmax, geometry, dom_off
-   !namelist /BASE_DOMAIN/ dom, geometry, nb
+   ! testing and debugging
+   integer(kind=8), dimension(ndims) :: offset            !< offset of the base level
+
+   namelist /BASE_DOMAIN/ n_d, nb, bnd_xl, bnd_xr, bnd_yl, bnd_yr, bnd_zl, bnd_zr, xmin, xmax, ymin, ymax, zmin, zmax, geometry, offset, vel_outd
 
 contains
 
@@ -156,7 +164,7 @@ contains
 !!   <tr><td>zmin    </td><td>0.         </td><td>real                                      </td><td>\copydoc domain::zmin    </td></tr>
 !!   <tr><td>zmax    </td><td>1.         </td><td>real                                      </td><td>\copydoc domain::zmax    </td></tr>
 !!   <tr><td>geometry</td><td>"cartesian"</td><td>character(len=cbuff_len)                  </td><td>\copydoc domain::geometry</td></tr>
-!!   <tr><td>dom_off </td><td>0, 0, 0    </td><td>integer                                   </td><td>\copydoc domain::dom_off </td></tr>
+!!   <tr><td>offset  </td><td>0, 0, 0    </td><td>integer                                   </td><td>\copydoc domain::offset  </td></tr>
 !! </table>
 !! \n \n
 !! @b MPI_BLOCKS
@@ -164,7 +172,6 @@ contains
 !! <table border="+1">
 !!   <tr><td width="150pt"><b>parameter</b></td><td width="135pt"><b>default value</b></td><td width="200pt"><b>possible values</b></td><td width="315pt"> <b>description</b></td></tr>
 !!   <tr><td>psize(3)       </td><td>1      </td><td>integer</td><td>\copydoc domain::psize          </td></tr>
-!!   <tr><td>AMR_bsize(3)   </td><td>0      </td><td>integer</td><td>\copydoc domain::AMR_bsize      </td></tr>
 !!   <tr><td>minsize(3)     </td><td>domain::nb </td><td>integer</td><td>\copydoc domain::minsize        </td></tr>
 !!   <tr><td>allow_uneven   </td><td>.false.</td><td>logical</td><td>\copydoc domain::allow_uneven   </td></tr>
 !!   <tr><td>allow_noncart  </td><td>.false.</td><td>logical</td><td>\copydoc domain::allow_noncart  </td></tr>
@@ -176,23 +183,20 @@ contains
    subroutine init_domain
 
       use constants,  only: xdim, zdim, ndims, LO, HI, PIERNIK_INIT_MPI, I_ONE, I_ZERO, INVALID
-      use dataio_pub, only: die, warn, code_progress
-      use dataio_pub, only: nh  ! QA_WARN required for diff_nml
-      use mpisetup,   only: cbuff, ibuff, lbuff, rbuff, master, slave, piernik_MPI_Bcast, have_mpi
+      use dataio_pub, only: die,  code_progress, nh
+      use mpisetup,   only: cbuff, ibuff, lbuff, rbuff, master, slave, piernik_MPI_Bcast
 
       implicit none
 
-      character(len=cbuff_len), dimension(HI*ndims) :: bnds  !< Six strings, describing boundary conditions
-      real, dimension(ndims, LO:HI)     :: edges
+      real, dimension(ndims, LO:HI) :: edges
 
       if (code_progress < PIERNIK_INIT_MPI) call die("[domain:init_domain] MPI not initialized.")
 
       ! Begin processing of namelist parameters
 
       psize(:)     = I_ONE
-      AMR_bsize(:) = I_ZERO
       minsize(:)   = INVALID
-      dom_off(:)   = I_ZERO
+      offset(:)   = I_ZERO
 
       n_d(:)   = I_ONE
       nb       = 4
@@ -213,9 +217,11 @@ contains
 
       dd_unif_quality = 0.9
       dd_rect_quality = 0.9
+      vel_outd        = 0.0
 
       if (master) then
-         if (.not.nh%initialized) call nh%init()
+         if (.not. nh%initialized) call nh%init()
+
          open(newunit=nh%lun, file=nh%tmp1, status="unknown")
          write(nh%lun,nml=MPI_BLOCKS)
          close(nh%lun)
@@ -230,7 +236,7 @@ contains
          write(nh%lun,nml=MPI_BLOCKS)
          close(nh%lun)
          call nh%compare_namelist()
-         if (.not.nh%initialized) call nh%init()
+
          open(newunit=nh%lun, file=nh%tmp1, status="unknown")
          write(nh%lun,nml=BASE_DOMAIN)
          close(nh%lun)
@@ -246,8 +252,6 @@ contains
          close(nh%lun)
          call nh%compare_namelist()
 
-         if (any(AMR_bsize(:) > 0 .and. AMR_bsize(:) < nb .and. n_d(:) > 1)) call die("[domain:init_domain] AMR_bsize(:) is too small.")
-
          cbuff(1) = bnd_xl
          cbuff(2) = bnd_xr
          cbuff(3) = bnd_yl
@@ -256,12 +260,11 @@ contains
          cbuff(6) = bnd_zr
          cbuff(7) = geometry
 
-         ibuff(         xdim:zdim) = psize(:)
+         ibuff(       xdim:  zdim) = psize(:)
          ibuff(  zdim+xdim:2*zdim) = n_d(:)
-         ibuff(2*zdim+xdim:3*zdim) = AMR_bsize(:)
-         ibuff(3*zdim+xdim:4*zdim) = minsize(:)
-         ibuff(4*zdim+xdim:5*zdim) = int(dom_off(:), kind=4)
-         ibuff(5*zdim+1)           = nb
+         ibuff(2*zdim+xdim:3*zdim) = minsize(:)
+         ibuff(3*zdim+xdim:4*zdim) = int(offset(:), kind=4)
+         ibuff(4*zdim+1)           = nb
 
          rbuff(1) = xmin
          rbuff(2) = xmax
@@ -271,6 +274,7 @@ contains
          rbuff(6) = zmax
          rbuff(7) = dd_unif_quality
          rbuff(8) = dd_rect_quality
+         rbuff(9) = vel_outd
 
          lbuff(1) = allow_uneven
          lbuff(2) = allow_noncart
@@ -295,6 +299,7 @@ contains
          zmax            = rbuff(6)
          dd_unif_quality = rbuff(7)
          dd_rect_quality = rbuff(8)
+         vel_outd        = rbuff(9)
 
          bnd_xl     = cbuff(1)
          bnd_xr     = cbuff(2)
@@ -304,19 +309,17 @@ contains
          bnd_zr     = cbuff(6)
          geometry   = cbuff(7)
 
-         psize(:)     = int(ibuff(         xdim:zdim), kind=4)
+         psize(:)     = int(ibuff(       xdim:  zdim), kind=4)
          n_d(:)       = int(ibuff(  zdim+xdim:2*zdim), kind=4)
-         AMR_bsize(:) = int(ibuff(2*zdim+xdim:3*zdim), kind=4)
-         minsize(:)   = int(ibuff(3*zdim+xdim:4*zdim), kind=4)
-         dom_off(:)   = int(ibuff(4*zdim+xdim:5*zdim), kind=4)
-         nb           = int(ibuff(5*zdim+1),           kind=4)
+         minsize(:)   = int(ibuff(2*zdim+xdim:3*zdim), kind=4)
+         offset(:)    = int(ibuff(3*zdim+xdim:4*zdim), kind=4)
+         nb           = int(ibuff(4*zdim+1),           kind=4)
 
       endif
 
-      bnds = [bnd_xl, bnd_xr, bnd_yl, bnd_yr, bnd_zl, bnd_zr]
       edges = reshape( [xmin, ymin, zmin, xmax, ymax, zmax], shape=[ndims,HI-LO+I_ONE] )
 
-      call dom%init(nb, n_d, bnds, edges, geometry, dom_off)
+      call dom%init(nb, n_d, [bnd_xl, bnd_xr, bnd_yl, bnd_yr, bnd_zl, bnd_zr], edges, geometry, offset)
 
       where (dom%has_dir(:))
          minsize(:) = max(minsize(:), dom%nb)
@@ -324,10 +327,6 @@ contains
          minsize(:) = 1
       endwhere
 
-      if (have_mpi .and. master) then
-         if (allow_uneven) call warn("[domain:init_domain] Uneven domain decomposition is experimental.")
-         if (allow_noncart) call warn("[domain:init_domain] Non-cartesian domain decomposition is experimental.")
-      endif
       is_uneven = .false.
       is_mpi_noncart = .false.
       is_refined = .false.
@@ -460,7 +459,7 @@ contains
 
    subroutine init(this, nb, n_d, bnds, edges, geometry, off)
 
-      use constants,  only: ndims, LO, HI, big_float, dpi, xdim, ydim, zdim, GEO_XYZ, GEO_RPZ, GEO_INVALID, BND_PER, BND_REF, BND_SHE, I_ONE, I_TWO
+      use constants,  only: idm, ndims, LO, HI, big_float, dpi, xdim, ydim, zdim, GEO_XYZ, GEO_RPZ, GEO_INVALID, BND_PER, BND_REF, BND_SHE, I_ONE, I_TWO
       use dataio_pub, only: die, warn, msg
       use func,       only: operator(.notequals.)
       use mpisetup,   only: master
@@ -494,6 +493,7 @@ contains
       this%D_x = this%D_(xdim)
       this%D_y = this%D_(ydim)
       this%D_z = this%D_(zdim)
+      this%D2a = spread(reshape([this%D_*idm(xdim,:), this%D_*idm(ydim,:), this%D_*idm(zdim,:)],[ndims,ndims]),ndims,HI)
 
       this%total_ncells = product(int(this%n_d(:), kind=8))
       if (any(this%total_ncells < this%n_d(:))) call die("[domain:init_domain] Integer overflow: too many cells")
@@ -596,7 +596,7 @@ contains
 
    subroutine  modify_side(this, d, lh, n)
 
-      use constants,  only: cbuff_len, LO, HI, xdim, ydim, zdim, ndims, I_ONE
+      use constants,  only: LO, HI, xdim, ydim, zdim, ndims, I_ONE
       use dataio_pub, only: warn, die, msg
       use mpisetup,   only: master
 
@@ -607,7 +607,6 @@ contains
       integer,                 intent(in) :: lh       !< side to be updated
       integer(kind=4),         intent(in) :: n        !< how many dells are added/removed
 
-      character(len=cbuff_len), dimension(HI*ndims) :: bnds  !< Six strings, describing boundary conditions
       real, dimension(ndims, LO:HI)     :: edges
       real :: d_edge
 
@@ -619,8 +618,6 @@ contains
       if (.not. this%has_dir(d)) call die("[domain:modify_side] Cannot increase dimenionality of the simulation")
       if (this%periodic(d)) call die("[domain:modify_side] Cannot change periodic direction")
       if (this%nb > this%n_d(d)+n) call die("[domain:modify_side] Cannot shrink that much")
-
-      bnds = [bnd_xl, bnd_xr, bnd_yl, bnd_yr, bnd_zl, bnd_zr]
 
       d_edge = n/real(this%n_d(d))*this%L_(d)
       select case (HI*(d-xdim)+lh)
@@ -647,11 +644,11 @@ contains
       write(msg(len_trim(msg)+1:),'(a,3i6,a)')". New n_d = [",n_d,"]"
       if (master) call warn(msg) ! As long as the restart file does not automagically recognize changed parameters, this message should be easily visible
 
-      if (lh==LO) dom_off(d) = dom_off(d) - n
+      if (lh==LO) offset(d) = offset(d) - n
 
       edges = reshape( [xmin, ymin, zmin, xmax, ymax, zmax], shape=[ndims,HI-LO+I_ONE] )
 
-      call dom%init(nb, n_d, bnds, edges, geometry, dom_off)
+      call dom%init(nb, n_d, [bnd_xl, bnd_xr, bnd_yl, bnd_yr, bnd_zl, bnd_zr], edges, geometry, offset)
 
    end subroutine modify_side
 

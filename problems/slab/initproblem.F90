@@ -51,7 +51,7 @@ contains
 
    subroutine read_problem_par
 
-      use dataio_pub, only: nh      ! QA_WARN required for diff_nml
+      use dataio_pub, only: nh
       use mpisetup,   only: rbuff, master, slave, piernik_MPI_Bcast
 
       implicit none
@@ -122,8 +122,6 @@ contains
       real                            :: xi, yj, zk, vx, vy, vz
       type(cg_list_element),  pointer :: cgl
       type(grid_container),   pointer :: cg
-
-      call read_problem_par
 
 !   Secondary parameters
       fl => flind%ion

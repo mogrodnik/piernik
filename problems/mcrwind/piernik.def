@@ -1,22 +1,19 @@
-#define IONIZED
-#define COSM_RAYS
-#define COSM_RAYS_SOURCES
-#define COSM_RAY_ELECTRONS
-
-#define ISO
-
-
 #if !defined LOCAL_FR_SPEED
 #  define GLOBAL_FR_SPEED
 #endif
 
+#define ISO
+
+#define IONIZED
+
+#define COSM_RAYS
+#define COSM_RAYS_SOURCES
 
 #define MAGNETIC
 #define RESISTIVE
 
-#define GRAV
+#define SELF_GRAV
 
 #define SN_SRC
-
-
-#undef MULTIGRID
+#define RANDOMIZE
+#define MULTIGRID

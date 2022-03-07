@@ -38,15 +38,15 @@ module cg_leaves
    !! \deprecated remove this clause as soon as Intel Compiler gets required
    !! features and/or bug fixes, it's needed for 12.1, fixed in 13.0 but the
    !! latter is broken and we cannot use it yet
-   use cg_list,            only: cg_list_T   ! QA_WARN intel
+   use cg_list,            only: cg_list_t   ! QA_WARN intel
 #endif /* __INTEL_COMPILER */
-   use cg_level_connected, only: cg_level_connected_T
-   use cg_list_bnd,        only: cg_list_bnd_T
+   use cg_level_connected, only: cg_level_connected_t
+   use cg_list_bnd,        only: cg_list_bnd_t
 
    implicit none
 
    private
-   public :: leaves, cg_leaves_T
+   public :: leaves, cg_leaves_t
 
    !>
    !! \brief Special list of grid containers that does not include fully-covered multigrid levels
@@ -54,19 +54,16 @@ module cg_leaves
    !! \todo Exclude also non-multigrid levels when fully covered
    !<
 
-   type, extends(cg_list_bnd_T) :: cg_leaves_T ! cg_list_bnd_T is required for calling bnd_u and bnd_b
-      type(cg_level_connected_T), pointer :: coarsest_leaves
+   type, extends(cg_list_bnd_t) :: cg_leaves_t ! cg_list_bnd_t is required for calling bnd_u and bnd_b
+      type(cg_level_connected_t), private, pointer :: coarsest_leaves
    contains
       procedure :: update                  !< Select grids that should be included on leaves list
       procedure :: balance_and_update      !< Rebalance if required and update
-      procedure :: leaf_arr3d_boundaries   !< Wrapper routine to set up all guardcells (internal, external and fine-coarse) for given rank-3 arrays
-      procedure :: leaf_arr4d_boundaries   !< Wrapper routine to set up all guardcells (internal, external and fine-coarse) for given rank-4 arrays
-      !< \todo fix *_bnd_* routines contents for this type as soon as possible
-      procedure :: internal_bnd_3d         !< Wrapper routine to set up internal boundaries for for given rank-3 arrays
-      procedure :: internal_bnd_4d         !< Wrapper routine to set up internal boundaries for for given rank-4 arrays
-      procedure :: external_bnd_3d         !< Wrapper routine to set up external boundaries for for given rank-3 arrays
-      procedure :: external_bnd_4d         !< Wrapper routine to set up external boundaries for for given rank-4 arrays
-   end type cg_leaves_T
+      procedure :: leaf_arr3d_boundaries   !< Wrapper routine to set up all guardcells (internal, external and fine-coarse) for given rank-3 arrays on leaves
+      procedure :: leaf_arr4d_boundaries   !< Wrapper routine to set up all guardcells (internal, external and fine-coarse) for given rank-4 arrays on leaves
+      procedure :: prioritized_cg          !< Return a leaves list with different ordering of cg to optimize fine->coarse flux transfer
+      procedure :: leaf_only_cg            !< Return a leaves list without fully covered cg
+   end type cg_leaves_t
 
    !>
    !! \deprecated A it is much easier to complete boundary exchanges on whole levels, the leaves list contains all grids from the base level upwards.
@@ -75,7 +72,7 @@ module cg_leaves
    !! \todo exclude base level and some higher levels if these are fully covered by finer grids (does it have side effects on visualization?)
    !! Perhaps it will be useful to keep few similar lists with slightly different inclusion criteria
    !<
-   type(cg_leaves_T) :: leaves   !< grid containers not fully covered by finer grid containers
+   type(cg_leaves_t) :: leaves   !< grid containers not fully covered by finer grid containers
 
 contains
 
@@ -83,29 +80,40 @@ contains
 
    subroutine update(this, str)
 
+!      use cg_level_base,      only: base  ! can't use it because of cyclic dependency
       use cg_level_finest,    only: finest
-      use cg_level_connected, only: cg_level_connected_T
+      use cg_level_connected, only: cg_level_connected_t
       use cg_list,            only: cg_list_element
-      use constants,          only: pSUM, pMAX, base_level_id
+      use constants,          only: pSUM, pMAX, base_level_id, refinement_factor, INVALID, tmr_amr, PPP_AMR
       use dataio_pub,         only: msg, printinfo
+      use domain,             only: dom
       use list_of_cg_lists,   only: all_lists
       use mpisetup,           only: master, piernik_MPI_Allreduce, nproc
+      use ppp,                only: ppp_main
+      use timer,              only: set_timer
 
       implicit none
 
-      class(cg_leaves_T),         intent(inout) :: this          !< object invoking type-bound procedure
-      character(len=*), optional, intent(in)    :: str           !< optional string identifier to show the progress of updating refinement
+      class(cg_leaves_t),         intent(inout) :: this  !< object invoking type-bound procedure
+      character(len=*), optional, intent(in)    :: str   !< optional string identifier to show the progress of updating refinement
 
-      type(cg_level_connected_T), pointer :: curl
+      type(cg_level_connected_t), pointer :: curl
       type(cg_list_element),      pointer :: cgl
 
-      integer :: g_cnt, g_max, sum_max
+      integer :: g_cnt, g_max, sum_max, ih, is, b_cnt
+      integer, save :: prev_is = 0
+      character(len=len(msg)), save :: prev_msg
+      real :: lf
+      character(len=*), parameter :: leaves_label = "leaves_update"
+
+      call ppp_main%start(leaves_label, PPP_AMR)
 
       call leaves%delete
       call all_lists%register(this, "leaves")
 
       msg = "[cg_leaves:update] Grids on levels: "
       if (present(str)) msg(len_trim(msg)+1:) = str
+      ih = len_trim(msg) + 1
 
       sum_max = 0
       curl => finest%level
@@ -113,7 +121,8 @@ contains
          if (curl%l%id == base_level_id) this%coarsest_leaves => curl !> \todo Find first not fully covered level
          curl => curl%coarser
       enddo
-      curl => this%coarsest_leaves
+      b_cnt = INVALID
+      curl => this%coarsest_leaves  ! base%level
       do while (associated(curl))
          cgl => curl%first
          do while (associated(cgl))
@@ -126,13 +135,29 @@ contains
          g_cnt = curl%cnt
          call piernik_MPI_Allreduce(g_cnt, pSUM)
          write(msg(len_trim(msg)+1:),'(i6)') g_cnt
-         call curl%vertical_prep
+         if (associated(curl, this%coarsest_leaves)) b_cnt = g_cnt
+         call curl%vertical_prep  ! is it necessary here?
          curl => curl%finer
       enddo
       g_cnt = leaves%cnt
       call piernik_MPI_Allreduce(g_cnt, pSUM)
-      write(msg(len_trim(msg)+1:), '(a,i7,a,f6.3)')", Sum: ",g_cnt, ". Load balance: ",g_cnt/real(sum_max)
-      if (master) call printinfo(msg)
+      write(msg(len_trim(msg)+1:), '(a,i7,a,f6.3)')", Sum: ",g_cnt, ", cg load balance: ",g_cnt/real(sum_max)
+      is = len_trim(msg)
+      write(msg(len_trim(msg)+1:), '(a,f7.3)') ", dt_wall= ", set_timer(tmr_amr)
+      if (finest%level%l%id > base_level_id) then
+         write(msg(len_trim(msg)+1:), '(a)')", leaves/finest: "
+         lf = g_cnt/(b_cnt * real(refinement_factor)**(dom%eff_dim * finest%level%l%id))
+         if (lf >= 0.0001) then
+            write(msg(len_trim(msg)+1:), '(" ",f8.6)') lf
+         else
+            write(msg(len_trim(msg)+1:), '(" ",e9.2)') lf
+         endif
+      endif
+      if (master .and. (msg(ih:is) /= prev_msg(ih:prev_is))) call printinfo(msg)
+      prev_msg = msg
+      prev_is = is
+
+      call ppp_main%stop(leaves_label, PPP_AMR)
 
    end subroutine update
 
@@ -141,35 +166,48 @@ contains
    subroutine balance_and_update(this, str)
 
       use cg_level_finest,    only: finest
-      use cg_level_connected, only: cg_level_connected_T
+      use cg_level_connected, only: cg_level_connected_t
+      use rebalance,          only: rebalance_all
+      use constants,          only: PPP_AMR
+      use ppp,                only: ppp_main
 
       implicit none
 
-      class(cg_leaves_T),         intent(inout) :: this          !< object invoking type-bound procedure
-      character(len=*), optional, intent(in)    :: str           !< optional string identifier to show the progress of updating refinement
+      class(cg_leaves_t),         intent(inout) :: this  !< object invoking type-bound procedure
+      character(len=*), optional, intent(in)    :: str   !< optional string identifier to show the progress of updating refinement
 
-      type(cg_level_connected_T), pointer :: curl
+      type(cg_level_connected_t), pointer :: curl
+      character(len=*), parameter :: bu_label = "leaves_balance_and_update"
+
+      call ppp_main%start(bu_label, PPP_AMR)
+
+      call rebalance_all
 
       curl => finest%level
-      do while (associated(curl)) ! perhaps it is worth to limit to the base level
-         call curl%balance_old
-         call curl%sync_ru
+      do while (associated(curl))
+         call curl%check_update_all
+         call curl%sync_ru  ! no need to update this%recently_changed here (was done in check_update_all)
          curl => curl%coarser
       enddo
 
       call this%update(str)
+      call ppp_main%stop(bu_label, PPP_AMR)
 
    end subroutine balance_and_update
 
-!> \brief This routine sets up all guardcells (internal, external and fine-coarse) for given rank-3 arrays
+!> \brief This routine sets up all guardcells (internal, external and fine-coarse) for given rank-3 arrays on leaves.
 
    subroutine leaf_arr3d_boundaries(this, ind, area_type, bnd_type, dir, nocorners)
 
-      use cg_level_connected, only: cg_level_connected_T
+      use cg_level_connected, only: cg_level_connected_t
+      use constants,          only: PPP_AMR, O_INJ
+      use global,             only: dirty_debug
+      use named_array_list,   only: qna
+      use ppp,                only: ppp_main
 
       implicit none
 
-      class(cg_leaves_T),        intent(in) :: this       !< the list on which to perform the boundary exchange
+      class(cg_leaves_t),        intent(in) :: this       !< the list on which to perform the boundary exchange
       integer(kind=4),           intent(in) :: ind        !< index of cg%q(:) 3d array
       integer(kind=4), optional, intent(in) :: area_type  !< defines how do we treat boundaries
       integer(kind=4), optional, intent(in) :: bnd_type   !< Override default boundary type on external boundaries (useful in multigrid solver).
@@ -177,148 +215,181 @@ contains
       integer(kind=4), optional, intent(in) :: dir        !< select only this direction
       logical,         optional, intent(in) :: nocorners  !< .when .true. then don't care about proper edge and corner update
 
-      type(cg_level_connected_T), pointer   :: curl
+      type(cg_level_connected_t), pointer   :: curl
+      character(len=*), parameter :: l3b_label = "leaf:arr3d_boundaries", l3bp_label = "leaf:arr3d_boundaries:prolong"
+      logical :: nc
+
+      call ppp_main%start(l3b_label)
+
+      nc = .false.
+      if (present(nocorners)) nc=nocorners
+      if (qna%lst(ind)%ord_prolong /= O_INJ) nc = .false.
 
       curl => this%coarsest_leaves
       do while (associated(curl))
-         ! OPT this results in duplicated calls to level_3d_boundaries for levels from this%coarsest_leaves to finest%level%coarser
-         !> \todo implement it with lower level routines to remove this duplication
-         call curl%arr3d_boundaries(ind, area_type=area_type, bnd_type=bnd_type, dir=dir, nocorners=nocorners)
+         if (dirty_debug) call curl%dirty_boundaries(ind)
+         call curl%level_3d_boundaries(ind, area_type=area_type, bnd_type=bnd_type, dir=dir, nocorners=nc)
+         ! corners are required on all levels except for finest anyway if prolongation is greater than injection
          curl => curl%finer
       enddo
 
+      call ppp_main%start(l3bp_label, PPP_AMR)
+      curl => this%coarsest_leaves
+      do while (associated(curl))
+         ! here we can use any high order prolongation without destroying conservation
+         call curl%prolong_bnd_from_coarser(ind, dir=dir, nocorners=nocorners)
+
+         if (present(bnd_type)) call curl%external_boundaries(ind, area_type=area_type, bnd_type=bnd_type)
+         ! this is needed in multigrid residual to enforce strict BND_NEGREF on fine corners at domain boundaries
+
+         curl => curl%finer
+      enddo
+      call ppp_main%stop(l3bp_label, PPP_AMR)
+
+      call ppp_main%stop(l3b_label)
+
    end subroutine leaf_arr3d_boundaries
 
-!> \brief This routine sets up all guardcells (internal, external and fine-coarse) for given rank-4 arrays
+!> \brief This routine sets up all guardcells (internal, external and fine-coarse) for given rank-4 arrays on leaves.
 
    subroutine leaf_arr4d_boundaries(this, ind, area_type, dir, nocorners)
 
-      use cg_level_connected, only: cg_level_connected_T
+      use cg_level_connected, only: cg_level_connected_t
+      use cg_level_finest,    only: finest
+      use constants,          only: O_INJ
+      use named_array_list,   only: wna
+      use ppp,                only: ppp_main
 
       implicit none
 
-      class(cg_leaves_T),        intent(in) :: this       !< the list on which to perform the boundary exchange
+      class(cg_leaves_t),        intent(in) :: this       !< the list on which to perform the boundary exchange
       integer(kind=4),           intent(in) :: ind        !< index of cg%w(:) 4d array
       integer(kind=4), optional, intent(in) :: area_type  !< defines how do we treat boundaries
       integer(kind=4), optional, intent(in) :: dir        !< select only this direction
       logical,         optional, intent(in) :: nocorners  !< .when .true. then don't care about proper edge and corner update
 
-      type(cg_level_connected_T), pointer   :: curl
+      type(cg_level_connected_t), pointer   :: curl
+      character(len=*), parameter :: l4b_label = "leaf:arr4d_boundaries"
+      logical :: nc
+
+      call ppp_main%start(l4b_label)
+
+      nc = .false.
+      if (present(nocorners)) nc=nocorners
+      if (wna%lst(ind)%ord_prolong /= O_INJ) nc = .false.
+
+      curl => finest%level
+      do while (associated(curl))
+         if (this%coarsest_leaves%l%id <= curl%l%id) &
+              call curl%level_4d_boundaries(ind, area_type=area_type, dir=dir, nocorners=nocorners)
+         curl => curl%coarser
+      enddo
 
       curl => this%coarsest_leaves
       do while (associated(curl))
-         call curl%arr4d_boundaries(ind, area_type=area_type, dir=dir, nocorners=nocorners)
+         call curl%prolong_bnd_from_coarser(ind, arr4d=.true., dir=dir, nocorners=nc)
+         ! corners are required on all levels except for finest anyway if prolongation order is greater than injection
          curl => curl%finer
       enddo
+
+      call ppp_main%stop(l4b_label)
 
    end subroutine leaf_arr4d_boundaries
 
 !>
-!! \brief Wrapper routine to set up internal boundaries for for given rank-3 arrays
-!! \todo make it completed
+!! \brief Change the order of cg to optimize fine->coarse flux transfer.
+!!
+!! * Put these cg which have something to send, but aren't waiting for receives.
+!! * Then put remaining cg which have something to send.
+!! * Then put remaining cg which have any leaf (active) cells.
+!! * Fully covered cg should optionally be appended at the end just in case.
 !<
-   subroutine internal_bnd_3d(this, ind, dir, nocorners)
 
-      use cg_level_connected, only: cg_level_connected_T
-      use dataio_pub,         only: die
+   function prioritized_cg(this, dir, covered_too) result(sorted_leaves)
+
+      use cg_list,        only: cg_list_element
+      use cg_list_dataop, only: cg_list_dataop_t
 
       implicit none
 
-      class(cg_leaves_T),        intent(in) :: this       !< the list on which to perform the boundary exchange
-      integer(kind=4),           intent(in) :: ind        !< Negative value: index of cg%q(:) 3d array
-      integer(kind=4), optional, intent(in) :: dir        !< do the internal boundaries only in the specified dimension
-      logical,         optional, intent(in) :: nocorners  !< .when .true. then don't care about proper edge and corner update
+      class(cg_leaves_t), intent(in) :: this  !< object invoking type-bound procedure
+      integer(kind=4),    intent(in) :: dir
+      logical, optional,  intent(in) :: covered_too
 
-      type(cg_level_connected_T), pointer   :: curl
+      type(cg_list_dataop_t), pointer :: sorted_leaves
+      type(cg_list_element),  pointer :: cgl
 
-      curl => this%coarsest_leaves
-      do while (associated(curl))
-         call curl%internal_boundaries_3d(ind, dir=dir, nocorners=nocorners)
-         curl => curl%finer
-         if (associated(curl)) call die("[cg_leaves::internal_bnd_3d] This routine does not work with finer levels yet")
+      allocate(sorted_leaves)
+      call sorted_leaves%init_new("sorted_leaves")
+
+      cgl => this%first
+      do while (associated(cgl))
+         cgl%cg%processed = .false.
+         if (cgl%cg%is_sending_fc_flux(dir) .and. .not. cgl%cg%is_receiving_fc_flux(dir)) then
+            call sorted_leaves%add(cgl%cg)
+            cgl%cg%processed = .true.
+         endif
+         cgl => cgl%nxt
       enddo
 
-   end subroutine internal_bnd_3d
-
-!>
-!! \brief Wrapper routine to set up internal boundaries for for given rank-4 arrays
-!! \todo make it completed
-!<
-   subroutine internal_bnd_4d(this, ind, dir, nocorners)
-
-      use cg_level_connected, only: cg_level_connected_T
-      use dataio_pub,         only: die
-
-      implicit none
-
-      class(cg_leaves_T),        intent(in) :: this       !< the list on which to perform the boundary exchange
-      integer(kind=4),           intent(in) :: ind        !< Negative value: index of cg%q(:) 3d array
-      integer(kind=4), optional, intent(in) :: dir        !< do the internal boundaries only in the specified dimension
-      logical,         optional, intent(in) :: nocorners  !< .when .true. then don't care about proper edge and corner update
-
-      type(cg_level_connected_T), pointer   :: curl
-
-      curl => this%coarsest_leaves
-      do while (associated(curl))
-         call curl%internal_boundaries_4d(ind, dir=dir, nocorners=nocorners)
-         curl => curl%finer
-         if (associated(curl)) call die("[cg_leaves::internal_bnd_4d] This routine does not work with finer levels yet")
+      cgl => this%first
+      do while (associated(cgl))
+         if (.not. cgl%cg%processed) then
+            if (cgl%cg%is_sending_fc_flux(dir)) then
+               call sorted_leaves%add(cgl%cg)
+               cgl%cg%processed = .true.
+            endif
+         endif
+         cgl => cgl%nxt
       enddo
 
-   end subroutine internal_bnd_4d
-
-!>
-!! \brief Wrapper routine to set up external boundaries for for given rank-3 arrays
-!! \todo make it completed
-!<
-   subroutine external_bnd_3d(this, ind, area_type, bnd_type)
-
-      use cg_level_connected, only: cg_level_connected_T
-      use dataio_pub,         only: die
-
-      implicit none
-
-      class(cg_leaves_T),        intent(in) :: this       !< the list on which to perform the boundary exchange
-      integer(kind=4),           intent(in) :: ind        !< Negative value: index of cg%q(:) 3d array
-      integer(kind=4), optional, intent(in) :: area_type  !< defines how do we treat boundaries
-      integer(kind=4), optional, intent(in) :: bnd_type   !< Override default boundary type on external boundaries (useful in multigrid solver).
-                                                          !< Note that BND_PER, BND_MPI, BND_SHE and BND_COR aren't external and cannot be overridden
-      type(cg_level_connected_T), pointer   :: curl
-
-      curl => this%coarsest_leaves
-      do while (associated(curl))
-         call curl%external_boundaries(ind, area_type=area_type, bnd_type=bnd_type)
-         curl => curl%finer
-         if (associated(curl)) call die("[cg_leaves::external_bnd_3d] This routine does not work with finer levels yet")
+      cgl => this%first
+      do while (associated(cgl))
+         if (.not. cgl%cg%processed) then
+            if (cgl%cg%has_leaves()) then
+               call sorted_leaves%add(cgl%cg)
+               cgl%cg%processed = .true.
+            endif
+         endif
+         cgl => cgl%nxt
       enddo
 
-   end subroutine external_bnd_3d
+      if (covered_too) then
+         cgl => this%first
+         do while (associated(cgl))
+            if (.not. cgl%cg%processed) then
+               call sorted_leaves%add(cgl%cg)
+               cgl%cg%processed = .true.
+            endif
+            cgl => cgl%nxt
+         enddo
+      endif
 
-!>
-!! \brief Wrapper routine to set up external boundaries for for given rank-4 arrays
-!! \todo make it completed
-!<
-   subroutine external_bnd_4d(this) !, ind, area_type, bnd_type)
+   end function prioritized_cg
 
-      use cg_level_connected, only: cg_level_connected_T
-      use dataio_pub,         only: die
+!> \brief Return a leaves list without fully covered cg
+
+   function leaf_only_cg(this) result(selected_leaves)
+
+      use cg_list,        only: cg_list_element
+      use cg_list_dataop, only: cg_list_dataop_t
 
       implicit none
 
-      class(cg_leaves_T),        intent(in) :: this       !< the list on which to perform the boundary exchange
-!      integer(kind=4),           intent(in) :: ind        !< Negative value: index of cg%q(:) 3d array
-!      integer(kind=4), optional, intent(in) :: area_type  !< defines how do we treat boundaries
-!      integer(kind=4), optional, intent(in) :: bnd_type   !< Override default boundary type on external boundaries (useful in multigrid solver).
-                                                          !< Note that BND_PER, BND_MPI, BND_SHE and BND_COR aren't external and cannot be overridden
-      type(cg_level_connected_T), pointer   :: curl
+      class(cg_leaves_t), intent(in) :: this  !< object invoking type-bound procedure
 
-      call die("[cg_leaves::external_bnd_4d] This routine has not been implemented yet.")
-      curl => this%coarsest_leaves
-!      do while (associated(curl))
-!         call curl%external_boundaries(ind, area_type=area_type, bnd_type=bnd_type)
-!         curl => curl%finer
-!      enddo
+      type(cg_list_dataop_t), pointer :: selected_leaves
+      type(cg_list_element), pointer :: cgl
 
-   end subroutine external_bnd_4d
+      allocate(selected_leaves)
+      call selected_leaves%init_new("non-covered_leaves")
+
+      cgl => this%first
+      do while (associated(cgl))
+         if (cgl%cg%has_leaves()) call selected_leaves%add(cgl%cg)
+         cgl => cgl%nxt
+      enddo
+
+   end function leaf_only_cg
 
 end module cg_leaves

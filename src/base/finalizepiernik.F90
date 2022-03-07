@@ -41,74 +41,93 @@ contains
 !<
    subroutine cleanup_piernik
 
-      use dataio,             only: cleanup_dataio
-      use decomposition,      only: cleanup_decomposition
-      use diagnostics,        only: cleanup_diagnostics
-      use domain,             only: cleanup_domain
-      use fargo,              only: cleanup_fargo
-      use fluidindex,         only: cleanup_fluidindex
-      use global,             only: cleanup_global
-      use grid,               only: cleanup_grid
-      use grid_container_ext, only: cg_extptrs
-      use initfluids,         only: cleanup_fluids
-      use interactions,       only: cleanup_interactions
-      use mpisetup,           only: cleanup_mpi
-      use refinement,         only: cleanup_refinement
-      use sortable_list,      only: cleanup_sortable_list
-      use tag_pool,           only: t_pool
-      use timer,              only: cleanup_timers
-      use user_hooks,         only: cleanup_problem
+      use dataio_pub,            only: flush_to_log
+      use decomposition,         only: cleanup_decomposition
+      use diagnostics,           only: cleanup_diagnostics
+      use domain,                only: cleanup_domain
+      use fargo,                 only: cleanup_fargo
+      use fluidindex,            only: cleanup_fluidindex
+      use global,                only: cleanup_global
+      use grid,                  only: cleanup_grid
+      use grid_container_ext,    only: cg_extptrs
+      use initfluids,            only: cleanup_fluids
+      use interactions,          only: cleanup_interactions
+      use procnames,             only: pnames
+      use sortable_list,         only: cleanup_sortable_list
+      use tag_pool,              only: t_pool
+      use timer,                 only: cleanup_timers
+      use unified_ref_crit_list, only: urc_list
+      use user_hooks,            only: cleanup_problem
+#ifdef RANDOMIZE
+      use randomization,         only: cleanup_randomization
+#endif /* RANDOMIZE */
 #ifdef MULTIGRID
-      use multigrid,          only: cleanup_multigrid
+      use multigrid,             only: cleanup_multigrid
 #endif /* MULTIGRID */
-#ifdef GRAV
-      use particle_pub,       only: cleanup_particles
-#endif /* GRAV */
+#if defined(GRAV) && defined(NBODY)
+      use particle_pub,          only: cleanup_particles
+#endif /* GRAV && NBODY */
 #ifdef PIERNIK_OPENCL
-      use piernikcl,          only: cleanup_opencl
+      use piernikcl,             only: cleanup_opencl
 #endif /* PIERNIK_OPENCL */
 #ifdef RESISTIVE
-      use resistivity,        only: cleanup_resistivity
+      use resistivity,           only: cleanup_resistivity
 #endif /* RESISTIVE */
+#ifdef COSM_RAYS_SOURCES
+      use cr_data,               only: cleanup_crsources
+#endif /* COSM_RAYS_SOURCES */
+#ifdef THERM
+      use thermal,               only: cleanup_thermal
+#endif /* THERM */
 
       implicit none
 
-      if (associated(cleanup_problem)) call cleanup_problem; call nextdot(.false.)
-      call cleanup_refinement;     call nextdot(.false.)
-      call t_pool%cleanup;         call nextdot(.false.)
-      call cleanup_interactions;   call nextdot(.false.)
-      call cleanup_dataio;         call nextdot(.false.)
-      call cleanup_fargo;          call nextdot(.false.)
+      call flush_to_log
+
+      if (associated(cleanup_problem)) call cleanup_problem; call nextdot
+      call urc_list%cleanup;       call nextdot
+      call t_pool%cleanup;         call nextdot
+      call cleanup_interactions;   call nextdot
+      call cleanup_fargo;          call nextdot
 #ifdef RESISTIVE
-      call cleanup_resistivity;    call nextdot(.false.)
+      call cleanup_resistivity;    call nextdot
 #endif /* RESISTIVE */
+      call cleanup_grid;           call nextdot
 #ifdef MULTIGRID
-      call cleanup_multigrid;      call nextdot(.false.)
+      call cleanup_multigrid;      call nextdot
 #endif /* MULTIGRID */
-      call cleanup_grid;           call nextdot(.false.)
-      call cleanup_sortable_list;  call nextdot(.false.)
-      call cleanup_fluids;         call nextdot(.false.)
-#ifdef GRAV
-      call cleanup_particles;      call nextdot(.false.)
-#endif /* GRAV */
-      call cleanup_global;         call nextdot(.false.)
-      call cleanup_decomposition;  call nextdot(.false.)
-      call cleanup_domain;         call nextdot(.false.)
-      call cleanup_fluidindex;     call nextdot(.false., print_t = .true.)
-      call cleanup_timers;         call nextdot(.false.)
-      call cleanup_diagnostics;    call nextdot(.false.)
-      call cg_extptrs%epa_cleanup; call nextdot(.false.)
+      call cleanup_sortable_list;  call nextdot
+      call cleanup_fluids;         call nextdot
+#if defined(GRAV) && defined(NBODY)
+      call cleanup_particles;      call nextdot
+#endif /* GRAV && NBODY */
+      call cleanup_global;         call nextdot
+      call cleanup_decomposition;  call nextdot
+      call cleanup_domain;         call nextdot
+      call cleanup_fluidindex;     call nextdot(print_t = .true.)
+      call cleanup_timers;         call nextdot
+      call cleanup_diagnostics;    call nextdot
+      call cg_extptrs%epa_cleanup; call nextdot
+      call pnames%cleanup;         call nextdot
 #ifdef PIERNIK_OPENCL
-      call cleanup_opencl;         call nextdot(.false.)
+      call cleanup_opencl;         call nextdot
 #endif /* PIERNIK_OPENCL */
-      call cleanup_mpi;            call nextdot(.true.)
+#ifdef RANDOMIZE
+      call cleanup_randomization;  call nextdot
+#endif /* RANDOMIZE */
+#ifdef COSM_RAYS_SOURCES
+      call cleanup_crsources;      call nextdot
+#endif /* COSM_RAYS_SOURCES */
+#ifdef THERM
+     call cleanup_thermal;         call nextdot
+#endif /* THERM */
 
    end subroutine cleanup_piernik
 
 !>
 !! Just print a dot on the screen, do not put a newline unless asked to do so.
 !<
-   subroutine nextdot(advance, print_t)
+   subroutine nextdot(print_t)
 
       use mpisetup,  only: master
       use constants, only: stdout, tmr_fu
@@ -116,19 +135,13 @@ contains
 
       implicit none
 
-      logical, intent(in) :: advance
       logical, optional, intent(in) :: print_t
 
       if (master) then
          if (present(print_t)) then
-            if (print_t) &
-               write(stdout,'(f7.2,a)',advance='no') set_timer(tmr_fu), " s "
+            if (print_t) write(stdout,'(f7.2,a)',advance='no') set_timer(tmr_fu), " s "
          endif
-         if (advance) then
-            write(stdout,'(a)')"."
-         else
-            write(stdout,'(a)',advance='no')"."
-         endif
+         write(stdout,'(a)',advance='no')"."
       endif
 
    end subroutine nextdot

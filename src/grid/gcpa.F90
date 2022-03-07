@@ -36,7 +36,7 @@ module gcpa
    implicit none
 
    private
-   public :: gcpa_T
+   public :: gcpa_t
 
    !> a pointer to a grid container
    type :: gcp
@@ -44,28 +44,34 @@ module gcpa
    end type gcp
 
    !> an array of pointers to local grid containers
-   type :: gcpa_T
-      type(gcp), dimension(:), allocatable :: l_pse ! auxiliary array used to convert entries in cg_list_balance_T%dot%gse into pointers to grid containers for local exchanges
+   type :: gcpa_t
+      type(gcp), dimension(:), allocatable :: l_pse ! auxiliary array used to convert entries in cg_list_balance_t%dot%gse into pointers to grid containers for local exchanges
    contains
       procedure :: init
       procedure :: cleanup
-   end type gcpa_T
+   end type gcpa_t
 
 contains
 
-!> \brief Set up an array to be able to convert from local grid_id to pointers to cg
+!>
+!! \brief Set up an array to be able to convert from local grid_id to pointers to cg
+!!
+!! \warning This tends to be very expensive routine when there are thousands of cg on one process.
+!! It is called from init_all_new_cg -> update_everything -> find_neighbors -> find_neighbors_sfc .
+!! Closer relation with dot may help to avoid doing blind O(n^2) searches.
+!<
 
    subroutine init(this, curl)
 
       use cg_list,         only: cg_list_element
-      use cg_list_balance, only: cg_list_balance_T
+      use cg_list_balance, only: cg_list_balance_t
       use dataio_pub,      only: die
       use mpisetup,        only: proc
 
       implicit none
 
-      class(gcpa_T),            intent(inout) :: this !< object invoking type bound procedure
-      class(cg_list_balance_T), intent(inout) :: curl !< current level
+      class(gcpa_t),            intent(inout) :: this !< object invoking type bound procedure
+      class(cg_list_balance_t), intent(inout) :: curl !< current level
 
       type(cg_list_element), pointer :: cgl
       integer                        :: b
@@ -93,7 +99,7 @@ contains
 
       implicit none
 
-      class(gcpa_T), intent(inout) :: this !< object invoking type bound procedure
+      class(gcpa_t), intent(inout) :: this !< object invoking type bound procedure
 
       if (allocated(this%l_pse)) deallocate(this%l_pse)
 

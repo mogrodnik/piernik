@@ -34,48 +34,48 @@ module sortable_list
    implicit none
 
    private
-   public ::  sortable_list_T, cleanup_sortable_list, temp_index
+   public ::  sortable_list_t, cleanup_sortable_list, temp_index
 
    !>
    !! \brief Abstract array of sortable elements with sorting method
    !!
    !! \details This type does not contain any actual array since it is too hard to extend it later to something
    !! usable. Every type that extends this one has to provide own sortable array and methods to allocate it,
-   !! deallocate it, get bounds, make assignments and comparisions based on integer indices.
+   !! deallocate it, get bounds, make assignments and comparisons based on integer indices.
    !! Note that we use special index (parameter temp_index) to denote temporary storage for swapping elements.
    !<
-   type, abstract :: sortable_list_T
+   type, abstract :: sortable_list_t
    contains
       procedure(lubound_list), deferred :: l_bound          !< Get lower bound of the list
       procedure(lubound_list), deferred :: u_bound          !< Get upper bound of the list
       procedure(assign_list),  deferred :: assign_element   !< Make an assignment
-      procedure(compare_list), deferred :: compare_elements !< Make a comparision
+      procedure(compare_list), deferred :: compare_elements !< Make a comparison
       procedure                         :: sort             !< Sorting routine (currently shellsort)
-   end type sortable_list_T
+   end type sortable_list_t
 
    interface
 
       subroutine assign_list(this, a, b)
-         import sortable_list_T
-         class(sortable_list_T), intent(inout) :: this
+         import sortable_list_t
+         class(sortable_list_t), intent(inout) :: this
          integer,                intent(in)    :: a, b
       end subroutine assign_list
 
-      logical function compare_list(this, a, b)
-         import sortable_list_T
-         class(sortable_list_T), intent(inout) :: this
-         integer,                intent(in)    :: a, b
+      pure logical function compare_list(this, a, b)
+         import sortable_list_t
+         class(sortable_list_t), intent(in) :: this
+         integer,                intent(in) :: a, b
       end function compare_list
 
       integer function lubound_list(this)
-         import sortable_list_T
-         class(sortable_list_T), intent(in) :: this
+         import sortable_list_t
+         class(sortable_list_t), intent(in) :: this
       end function lubound_list
 
    end interface
 
    integer, parameter :: temp_index = -huge(1) !< Symbolic index indicating temporary storage
-   integer, dimension(:), allocatable :: gaps  !< Auxiliary array for the sorting routine. Can be expanded and reused, so it is detached from the type sortable_list_T
+   integer, dimension(:), allocatable :: gaps  !< Auxiliary array for the sorting routine. Can be expanded and reused, so it is detached from the type sortable_list_t
 
 contains
 
@@ -105,19 +105,12 @@ contains
 
    subroutine sort(this)
 
-#ifdef DEBUG
-      use dataio_pub, only: msg, warn, die
-#endif /* DEBUG */
-
       implicit none
 
-      class(sortable_list_T), intent(inout) :: this
+      class(sortable_list_t), intent(inout) :: this
 
       integer :: g, i, j
       integer :: lb, ub
-#ifdef DEBUG
-      logical :: fail
-#endif /* DEBUG */
 
       lb = this%l_bound()
       ub = this%u_bound()
@@ -146,15 +139,7 @@ contains
       enddo
 
 #ifdef DEBUG
-      fail = .false.
-      do i = lb, ub - 1
-         if (this%compare_elements(i, i+1)) then
-            write(msg,*)"this%list(",i+1,") < this%list(",i,")%id"
-            call warn(msg)
-            fail = .true.
-         endif
-      enddo
-      if (fail) call die("[sortable_list:sort] failed")
+      call check
 #endif /* DEBUG */
 
    contains
@@ -174,6 +159,28 @@ contains
          tokuda = ceiling(0.8 * (2.25**k - 1.)) ! == ceiling((9**k-4**k)/(5.*4**(k-1)))
 
       end function tokuda
+
+      !> \brief Check if our sorting was performed correctly
+
+      subroutine check
+
+         use dataio_pub, only: msg, warn, die
+
+         implicit none
+
+         logical :: fail
+
+         fail = .false.
+         do i = this%l_bound(), this%u_bound() - 1
+            if (this%compare_elements(i, i+1)) then
+               write(msg,*)"this%list(", i+1, ") < this%list(", i, ")%id"
+               call warn(msg)
+               fail = .true.
+            endif
+         enddo
+         if (fail) call die("[sortable_list:sort] failed")
+
+      end subroutine check
 
    end subroutine sort
 

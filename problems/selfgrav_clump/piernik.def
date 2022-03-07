@@ -1,15 +1,13 @@
-#define IONIZED
-#undef  MAGNETIC
-
-#undef ISO
-
-
 #if !defined LOCAL_FR_SPEED
 #  define GLOBAL_FR_SPEED
 #endif
 
+#undef ISO
 
-#define GRAV
+#ifndef IONIZED
+#  define NEUTRAL
+#endif /* !IONIZED */
 
-#define MULTIGRID
+#undef  MAGNETIC
 
+#define SELF_GRAV

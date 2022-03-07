@@ -1,13 +1,11 @@
-#define NEUTRAL
-#undef  MAGNETIC
-
-#define ISO
-
-
 #if !defined GLOBAL_FR_SPEED
 #  define LOCAL_FR_SPEED
 #endif
 
-#define GRAV
-#define MULTIGRID
+#define ISO
 
+#define NEUTRAL
+
+#undef  MAGNETIC
+
+#define SELF_GRAV

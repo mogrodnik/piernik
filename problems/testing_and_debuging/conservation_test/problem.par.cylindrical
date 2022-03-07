@@ -1,0 +1,77 @@
+! mass and J_z in moving_pulse_ts1_000.tsl should remain constant
+
+ $BASE_DOMAIN
+    n_d = 256, 768, 1
+    bnd_xl = 'ref'
+    bnd_xr = 'ref'
+    bnd_yl = 'per'
+    bnd_yr = 'per'
+    bnd_zl = 'per'
+    bnd_zr = 'per'
+    xmin   =  1.
+    xmax   =  5.
+    ymin   =  0.
+    ymax   =  6.2831853071795862
+    zmin   = -1.
+    zmax   =  1.
+    geometry = "cylindrical"
+ /
+
+ $MPI_BLOCKS
+ /
+
+ $UNITS
+    units_set = "cgs"
+ /
+
+ $RESTART_CONTROL
+    restart  = 'last'
+    res_id   = ''
+    nrestart = 0
+ /
+
+ $END_CONTROL
+    tend   = 0.5
+    nend   = 10000
+ /
+
+ $OUTPUT_CONTROL
+    problem_name ='moving_pulse'
+    run_id =  'ts1'
+    dt_hdf  = 0.1
+    dt_res  = 0.0
+    dt_log  = 0.001
+    dt_tsl  = 0.001
+    vars(1:) = 'inid', 'dens', 'velx', 'vely', 'velz', "v", "level", "proc"
+ /
+
+ $FLUID_NEUTRAL
+    gamma = 1.1 ! Nearly isothermal performs much better than gamma = 5./3.
+    selfgrav = .false.
+ /
+
+ ! Dust has no temperature and thus has effective gamma = 1. and in cylindrical geometry performs better than non-isothermal fluids
+ $FLUID_DUST
+ /
+
+ $NUMERICAL_SETUP
+    cfl    = 0.7
+    smalld = 1.e-25
+    limiter= 'vanleer'
+    dt_max_grow = 1.1
+ /
+
+ $PROBLEM_CONTROL
+    pulse_vel = 0., 6., 0. !2., -2., 2.
+    pulse_off = -2., -3., 0.
+    pulse_size = 1., 2., 0.
+    pulse_amp = 1000.
+!    norm_step = -1
+ /
+
+ $INTERACTIONS
+ /
+
+ $AMR
+!    bsize = 3*16
+ /

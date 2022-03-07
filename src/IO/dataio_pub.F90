@@ -35,16 +35,16 @@ module dataio_pub
    implicit none
 
    public  ! QA_WARN most variables are not secrets here
-   private :: mpi_err, colormessage, T_PLAIN, T_ERR, T_WARN, T_INFO, T_IO, T_SILENT, & ! QA_WARN no need to use these symbols outside dataio_pub
+   private :: err_mpi, colormessage, T_PLAIN, T_ERR, T_WARN, T_INFO, T_IO, T_SILENT, & ! QA_WARN no need to use these symbols outside dataio_pub
         &     ansi_red, ansi_green, ansi_yellow, ansi_blue, ansi_magenta, ansi_cyan, & ! QA_WARN
-        &     namelist_handler_T                                                       ! QA_WARN
+        &     namelist_handler_t, logbuffer                                            ! QA_WARN
    private :: cbuff_len, domlen, idlen, cwdlen ! QA_WARN prevent re-exporting
    !mpisetup uses: ansi_white and ansi_black
 
    real, parameter             :: piernik_hdf5_version = 1.18    !< output version
 
    ! v2 specific
-   real, parameter             :: piernik_hdf5_version2 = 2.01   !< output version for multi-file, multi-domain I/O
+   real, parameter             :: piernik_hdf5_version2 = 2.02   !< output version for multi-file, multi-domain I/O
    logical                     :: use_v2_io                      !< prefer the new I/O format
    logical                     :: gdf_strict                     !< adhere more strictly to GDF standard
    integer(kind=4)             :: nproc_io                       !< how many processes do the I/O (v2 only)
@@ -86,7 +86,7 @@ module dataio_pub
    character(len=cwdlen), target :: par_file                     !< path to the parameter file
    ! Handy variables
    integer(kind=4), target     :: ierrh                          !< variable for iostat error on reading namelists
-   integer(kind=4)             :: mpi_err                        !< variable for error code in MPI calls (should we export it to mpisetup?)
+   integer(kind=4)             :: err_mpi                        !< variable for error code in MPI calls (should we export it to mpisetup?)
    character(len=cwdlen), target :: errstr                       !< string for storing error messages
 
    real                        :: last_log_time                  !< time in simulation of the recent dump of statistics into a log file
@@ -99,14 +99,17 @@ module dataio_pub
    integer, parameter          :: maxparfilelen   = 500          !< max length of line in problem.par file
    integer, parameter          :: maxparfilelines = 256          !< max number of lines in problem.par
    integer(kind=4), parameter  :: bufferlines = 128              !< max number of lines in the log buffer
-   character(len=maxparfilelen), dimension(maxparfilelines) :: parfile !< contents of the parameter file
-   character(len=msglen), dimension(bufferlines) :: logbuffer    !< buffer for log I/O
+   character(len=maxparfilelen), allocatable, dimension(:) :: parfile !< contents of the parameter file
+   character(len=msglen), allocatable, dimension(:) :: logbuffer !< buffer for log I/O
    integer, save               :: parfilelines = 0               !< number of lines in the parameter file
+   integer(kind=4)             :: maxparlen                      !< max length of parfile lines
+   integer(kind=4)             :: maxenvlen                      !< max length of env array
 
    logical, save               :: halfstep = .false.             !< true when X-Y-Z sweeps are done and Z-Y-X are not
    logical, save               :: log_file_initialized = .false. !< logical to mark initialization of logfile
    logical, save               :: log_file_opened = .false.      !< logical to mark opening of logfile
-   integer(kind=4), save       :: require_problem_IC = 0          !< 1 will call initproblem::problem_initial_conditions on restart
+   logical, save               :: restarted_sim = .false.        !< logical to distinguish between new and restarted simulation
+   integer(kind=4), save       :: require_problem_IC = 0         !< 1 will call initproblem::problem_initial_conditions on restart
 
    logical                     :: vizit = .false.                !< perform "live" visualization using pgplot
    logical                     :: multiple_h5files = .false.     !< write one HDF5 file per proc
@@ -128,10 +131,12 @@ module dataio_pub
 
    ! Per suggestion of ZEUS sysops:
    ! http://www.fz-juelich.de/ias/jsc/EN/Expertise/Supercomputers/JUROPA/UserInfo/IO_Tuning.htm
+#if defined(__INTEL_COMPILER)
    integer, parameter               :: io_par = 4
    character(len=io_par), parameter :: io_buffered = "yes"
    integer, parameter               :: io_blocksize = 1048576
    integer, parameter               :: io_buffno = 1
+#endif /* __INTEL_COMPILER */
 
    interface
       subroutine namelist_errh_P(ierrh, nm, skip_eof)
@@ -147,7 +152,7 @@ module dataio_pub
       end subroutine compare_namelist_P
    end interface
 
-   type :: namelist_handler_T
+   type :: namelist_handler_t
       character(len=msglen), pointer :: cmdl_nml   !< buffer for namelist supplied via commandline
       character(len=cwdlen), pointer :: par_file   !< path to the parameter file
       character(len=cwdlen), pointer :: errstr     !< string for storing error messages
@@ -158,21 +163,30 @@ module dataio_pub
       procedure(namelist_errh_P), nopass, pointer    :: namelist_errh
       logical :: initialized = .false.
    contains
-      procedure :: init => namelist_handler_T_init
+      procedure :: init => namelist_handler_t_init
       procedure :: compare_namelist
-   end type namelist_handler_T
+   end type namelist_handler_t
 
-   type(namelist_handler_T) :: nh
+   type(namelist_handler_t) :: nh
 
 contains
 
-   subroutine namelist_handler_T_init(this)
+   subroutine namelist_handler_t_init(this)
+
+      use constants, only: cbuff_len
+#if defined(__INTEL_COMPILER)
+      use ifport,    only: getpid
+#endif /* __INTEL_COMPILER */
+
       implicit none
-      class(namelist_handler_T), intent(inout) :: this
+
+      class(namelist_handler_t), intent(inout) :: this
+
       character(len=cwdlen) :: tmpdir
+      character(len=cbuff_len) :: pid
       integer :: lchar_tmpdir
 
-      call get_environment_variable("TMPDIR", tmpdir)
+      call get_environment_variable("PIERNIK_TMPDIR", tmpdir)
       lchar_tmpdir = len_trim(tmpdir)
       if (lchar_tmpdir == 0) then
          tmpdir = "."
@@ -181,8 +195,12 @@ contains
          if (tmpdir(lchar_tmpdir:lchar_tmpdir) == '/') lchar_tmpdir = lchar_tmpdir - 1
       endif
 
-      write(this%tmp1, '(a,"/temp1.dat")') tmpdir(1:lchar_tmpdir)
-      write(this%tmp2, '(a,"/temp2.dat")') tmpdir(1:lchar_tmpdir)
+      write(pid, '(i5)') getpid()
+
+      ! The filenames here will be unique, unless multiple Piernik instances
+      ! from multiple machines are started in the same shared directory.
+      write(this%tmp1, '(a,"/temp1_' // trim(pid) // '.dat")') tmpdir(1:lchar_tmpdir)
+      write(this%tmp2, '(a,"/temp2_' // trim(pid) // '.dat")') tmpdir(1:lchar_tmpdir)
 
       this%cmdl_nml => cmdl_nml
       this%par_file => par_file
@@ -193,13 +211,13 @@ contains
       this%namelist_errh => namelist_errh
 
       this%initialized = .true.
-   end subroutine namelist_handler_T_init
+   end subroutine namelist_handler_t_init
 !-----------------------------------------------------------------------------
    subroutine set_colors(enable)
 
       implicit none
 
-      logical :: enable
+      logical, intent(in) :: enable
 
       if (enable) then
          write(ansi_black,  '(A1,A3)') char(27),"[0m"
@@ -226,7 +244,7 @@ contains
    subroutine colormessage(nm, mode)
 
       use constants, only: stdout, stderr, idlen, I_ONE
-      use mpi,       only: MPI_COMM_WORLD
+      use MPIF,      only: MPI_COMM_WORLD, MPI_Comm_rank
 
       implicit none
 
@@ -270,7 +288,7 @@ contains
             msg_type_str = ''
       end select
 
-      call MPI_Comm_rank(MPI_COMM_WORLD, proc, mpi_err)
+      call MPI_Comm_rank(MPI_COMM_WORLD, proc, err_mpi)
 
       if (mode /= T_SILENT) then
          if (mode == T_PLAIN) then
@@ -285,31 +303,27 @@ contains
          if (log_file_initialized) then
             if (.not.log_file_opened) then
 #if defined(__INTEL_COMPILER)
-               open(newunit=log_lun, file=log_file, position='append', &
-                 &  blocksize=io_blocksize, buffered=io_buffered, buffercount=io_buffno)
+               open(newunit=log_lun, file=log_file, position='append', blocksize=io_blocksize, buffered=io_buffered, buffercount=io_buffno)
 #else /* __INTEL_COMPILER */
-               open(newunit=log_lun, file=log_file, position='append', asynchronous='yes')
+               open(newunit=log_lun, file=log_file, position='append') !> \todo reconstruct asynchronous writing to log files
 #endif /* !__INTEL_COMPILER */
                log_file_opened = .true.
             endif
          else
             ! BEWARE: possible race condition
 #if defined(__INTEL_COMPILER)
-            open(newunit=log_lun, file=tmp_log_file, status='unknown', position='append', &
-              &  blocksize=io_blocksize, buffered=io_buffered, buffercount=io_buffno)
+            open(newunit=log_lun, file=tmp_log_file, status='unknown', position='append', blocksize=io_blocksize, buffered=io_buffered, buffercount=io_buffno)
 #else /* __INTEL_COMPILER */
-            open(newunit=log_lun, file=tmp_log_file, status='unknown', position='append', asynchronous='yes')
+            open(newunit=log_lun, file=tmp_log_file, status='unknown', position='append')
 #endif /* !__INTEL_COMPILER */
          endif
          if (proc == 0 .and. mode == T_ERR) write(log_lun,'(/,a,/)')"###############     Crashing     ###############"
+         call allocate_text_buffers
          if (cbline < size(logbuffer)) then
             cbline = cbline + I_ONE
             write(logbuffer(cbline), '(2a,i5,2a)') msg_type_str," @", proc, ': ', trim(nm)
          endif
-         if (cbline >= size(logbuffer)) then
-            call flush_to_log
-            cbline = 0
-         endif
+         if (cbline >= size(logbuffer)) call flush_to_log
          if (mode == T_ERR) call flush_to_log
          if (.not. log_file_initialized) close(log_lun)
       else
@@ -323,16 +337,34 @@ contains
       implicit none
       integer :: line
 
+      if (.not. allocated(logbuffer)) return
+
       do line = 1, min(cbline, size(logbuffer, kind=4))
-#if defined(__INTEL_COMPILER)
-         write(log_lun, '(a)') trim(logbuffer(line))
-#else /* __INTEL_COMPILER */
-         write(log_lun, '(a)', asynchronous='yes') trim(logbuffer(line))
-#endif /* !__INTEL_COMPILER */
+         write(log_lun, '(a)') trim(logbuffer(line)) !> \todo reconstruct asynchronous writing to log files
       enddo
-      wait(log_lun)
+      cbline = 0
 
    end subroutine flush_to_log
+!-----------------------------------------------------------------------------
+   subroutine allocate_text_buffers
+
+      implicit none
+
+      if (.not. allocated(logbuffer)) allocate(logbuffer(bufferlines))
+      if (.not. allocated(parfile)) allocate(parfile(maxparfilelines))
+
+   end subroutine allocate_text_buffers
+!-----------------------------------------------------------------------------
+   subroutine cleanup_text_buffers
+
+      implicit none
+
+      if (cbline > 0) call flush_to_log
+
+      if (allocated(logbuffer)) deallocate(logbuffer)
+      if (allocated(parfile)) deallocate(parfile)
+
+   end subroutine cleanup_text_buffers
 !-----------------------------------------------------------------------------
    subroutine printinfo(nm, to_stdout)
 
@@ -357,7 +389,7 @@ contains
 
       implicit none
 
-      character(len=*), intent(in) :: nm
+      character(len=*),  intent(in) :: nm
       logical, optional, intent(in) :: noadvance
 
       logical :: adv
@@ -388,22 +420,22 @@ contains
    !> \deprecated BEWARE: routine is not finished, it should kill PIERNIK gracefully
    subroutine die(nm, allprocs)
 
-      use mpi,    only: MPI_COMM_WORLD
+      use MPIF,   only: MPI_COMM_WORLD, MPI_Barrier, MPI_Finalize
 #if defined(__INTEL_COMPILER)
       use ifcore, only: tracebackqq
 #endif /* __INTEL_COMPILER */
 
       implicit none
 
-      character(len=*), intent(in)  :: nm
+      character(len=*),  intent(in) :: nm
       integer, optional, intent(in) :: allprocs
 
       call colormessage(nm, T_ERR)
 
       if (present(allprocs)) then
          if (allprocs /= 0) then
-            call MPI_Barrier(MPI_COMM_WORLD, mpi_err)
-            call MPI_Finalize(mpi_err)
+            call MPI_Barrier(MPI_COMM_WORLD, err_mpi)
+            call MPI_Finalize(err_mpi)
          endif
       endif
       call colormessage("Following backtrace is used for debugging, please attach it to your bug report", T_ERR)
@@ -465,16 +497,16 @@ contains
    subroutine compare_namelist(this)
 
       use constants, only: PIERNIK_INIT_IO_IC
-      use mpi,       only: MPI_COMM_WORLD
+      use MPIF,      only: MPI_COMM_WORLD, MPI_Comm_rank
 
       implicit none
-      class(namelist_handler_T), intent(inout) :: this
+      class(namelist_handler_t), intent(inout) :: this
       integer                          :: io
       character(len=maxparfilelen)     :: sa, sb
       integer                          :: lun_bef, lun_aft
       integer(kind=4)                  :: proc
 
-      call MPI_Comm_rank(MPI_COMM_WORLD, proc, mpi_err)
+      call MPI_Comm_rank(MPI_COMM_WORLD, proc, err_mpi)
       if (proc > 0) call die("[dataio_pub:compare_namelist] This routine must not be called by many threads at once. Make sure that diff_nml macro is called only from rank 0.")
 
       if (code_progress > PIERNIK_INIT_IO_IC) call warn("[dataio_pub:compare_namelist] Late namelist")
@@ -523,9 +555,11 @@ contains
    end function move_file
 !-----------------------------------------------------------------------------
    subroutine close_txt_file(lfile, llun)
+
       implicit none
-      integer, intent(in)                 :: llun     !< logical unit number for txt file
-      character(len=cwdlen), intent(in)   :: lfile    !< path to txt file
+
+      integer,               intent(in) :: llun     !< logical unit number for txt file
+      character(len=cwdlen), intent(in) :: lfile    !< path to txt file
 
       logical :: lopen
 
@@ -539,19 +573,20 @@ contains
 
    subroutine close_logs
 
-      use mpi,       only: MPI_COMM_WORLD
+      use MPIF, only: MPI_COMM_WORLD, MPI_Comm_rank
 
       implicit none
 
-      integer(kind=4)               :: proc
+      integer(kind=4) :: proc
 
-      call MPI_Comm_rank(MPI_COMM_WORLD, proc, mpi_err)
+      call MPI_Comm_rank(MPI_COMM_WORLD, proc, err_mpi)
 
       if (proc == 0) then
          call flush_to_log
          call close_txt_file(log_file, log_lun)
          call close_txt_file(tsl_file, tsl_lun)
       endif
+
    end subroutine close_logs
 !>
 !! \brief Sanitize a file name
@@ -564,10 +599,11 @@ contains
 
       implicit none
 
-      character(len=*), intent(in)  :: str
+      character(len=*), intent(in) :: str
+
       character(len=len(str)) :: outstr
 
-      integer            :: i
+      integer :: i
 
       outstr = repeat(" ", len(str))
 

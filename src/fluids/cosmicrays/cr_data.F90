@@ -76,14 +76,23 @@ module cr_data
    integer, parameter                                      :: specieslen = 6     !< length of species names
    character(len=specieslen), allocatable, dimension(:)    :: cr_names           !< table of species names
    integer,                   allocatable, dimension(:)    :: cr_table           !< table of flind indices for CR species
+   real,                      allocatable, dimension(:)    :: cr_mass            !< table of mass numbers for CR species
    real,                      allocatable, dimension(:,:)  :: cr_sigma           !< table of cross sections for spallation
    real,                      allocatable, dimension(:)    :: cr_tau             !< table of decay half live times
    real,                      allocatable, dimension(:)    :: cr_primary         !< table of initial source abundances
 
+   real, parameter :: m_H1   = 1.
+   real, parameter :: m_Li7  = 7.
+   real, parameter :: m_Be9  = 9.
+   real, parameter :: m_Be10 = 10.
+   real, parameter :: m_C12  = 12.
+   real, parameter :: m_N14  = 14.
+   real, parameter :: m_O16  = 16.
+
 !<====Cross sections for spallation from Garcia-Munoz 1987 (see also Longair)====>
 
-   real, parameter :: Myear=1d6*365*24*60*60 !< s     \deprecated BEWARE: this line breaks unit consistency, move it to units.F90 and use scaling
-   real, parameter :: mbarn=1e-27            !< cm2   \deprecated BEWARE: this line breaks unit consistency, move it to units.F90 and use scaling
+   real, parameter :: Myear = 1d6*365*24*60*60 !< s     \deprecated BEWARE: this line breaks unit consistency, move it to units.F90 and use scaling
+   real, parameter :: mbarn = 1e-27            !< cm2   \deprecated BEWARE: this line breaks unit consistency, move it to units.F90 and use scaling
 
    real, parameter :: sigma_C12_Li7  = 10   * mbarn
    real, parameter :: sigma_C12_Be9  =  6   * mbarn
@@ -130,8 +139,7 @@ contains
 !<
    subroutine init_crsources(ncrn, crness)
 
-      use dataio_pub,      only: nh   ! QA_WARN required for diff_nml
-      use dataio_pub,      only: msg, printinfo, die
+      use dataio_pub,      only: msg, printinfo, die, nh
       use mpisetup,        only: lbuff, master, slave, piernik_MPI_Bcast
 
       implicit none
@@ -142,6 +150,7 @@ contains
       integer                                    :: icr, i
       character(len=specieslen), dimension(nicr) :: eCRSP_names
       logical,                   dimension(nicr) :: eCRSP_ess
+      real,                      dimension(nicr) :: eCRSP_mass
 
       namelist /CR_SPECIES/ eH1, eLi7, eBe9, eBe10, eC12, eN14, eO16
 
@@ -201,10 +210,11 @@ contains
 
 #undef VS
 
-      eCRSP_names(1:7) = ['H1  ','C12 ','Be9 ','Be10','N14 ','O16 ','Li7 ']
+      eCRSP_names(1:7) = ['p+  ','C12 ','Be9 ','Be10','N14 ','O16 ','Li7 ']
+      eCRSP_mass (1:7) = [m_H1, m_C12, m_Be9, m_Be10, m_N14, m_O16, m_Li7 ]
       eCRSP      (1:7) = [eH1(PRES), eC12(PRES), eBe9(PRES), eBe10(PRES), eN14(PRES), eO16(PRES), eLi7(PRES)]
       eCRSP_ess  (1:7) = [eH1(ESS) , eC12(ESS) , eBe9(ESS) , eBe10(ESS) , eN14(ESS) , eO16(ESS) , eLi7(ESS) ]
-      allocate(cr_names(ncrn), cr_table(nicr), cr_sigma(ncrn,ncrn), cr_tau(ncrn), cr_primary(ncrn))
+      allocate(cr_names(ncrn), cr_table(nicr), cr_sigma(ncrn,ncrn), cr_tau(ncrn), cr_primary(ncrn), cr_mass(ncrn))
       cr_names(:)   = ''
       cr_table(:)   = 0
       cr_sigma(:,:) = 0.0
@@ -219,6 +229,7 @@ contains
             cr_table(i)   = icr
             cr_names(icr) = eCRSP_names(i)
             crness(icr)   = eCRSP_ess(i)
+            cr_mass(icr)  = eCRSP_mass(i)
             if (master) then
                write(msg,'(a,a,l2)') eCRSP_names(i), 'CR species is present; taken into account for grad_pcr: ', crness(icr)
                call printinfo(msg)
@@ -252,6 +263,16 @@ contains
 
 
    end subroutine init_crsources
+
+!> \brief cleanup routine
+
+   subroutine cleanup_crsources
+
+      implicit none
+
+      deallocate(cr_names, cr_table, cr_sigma, cr_tau, cr_primary, cr_mass)
+
+   end subroutine cleanup_crsources
 
 end module cr_data
 

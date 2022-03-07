@@ -43,32 +43,29 @@ contains
 !! \brief Wrapper routine that writes a version 2.x or version 1.x restart file, depending on use_v2_io switch
 !<
 
-   subroutine write_restart_hdf5
+   subroutine write_restart_hdf5(sequential)
 
-      use common_hdf5,     only: set_common_attributes, output_fname
-      use constants,       only: I_ONE, cwdlen, WR, tmr_hdf
-      use dataio_pub,      only: msg, printio, printinfo, thdf, use_v2_io, nres, piernik_hdf5_version, piernik_hdf5_version2, last_res_time
-      use mpisetup,        only: master, piernik_MPI_Barrier
+      use common_hdf5,     only: dump_announcement, dump_announce_time, set_common_attributes
+      use constants,       only: cwdlen, PPP_IO, RES
+      use dataio_pub,      only: use_v2_io, nres, last_res_time
+      use mpisetup,        only: piernik_MPI_Barrier
+      use ppp,             only: ppp_main
       use restart_hdf5_v1, only: write_restart_hdf5_v1
       use restart_hdf5_v2, only: write_restart_hdf5_v2
-      use timer,           only: set_timer
+#if defined(MULTIGRID) && defined(SELF_GRAV)
+      use multigrid_gravity, only: unmark_oldsoln
+#endif /* MULTIGRID && SELF_GRAV */
 
       implicit none
 
-      character(len=cwdlen) :: filename  ! File name
-      real                  :: phv
+      logical,         intent(in) :: sequential
+      character(len=cwdlen)       :: filename  ! File name
+      character(len=*), parameter :: wrr_label = "IO_write_restart"
 
-      nres = nres + I_ONE
+      call ppp_main%start(wrr_label, PPP_IO)
 
-      thdf = set_timer(tmr_hdf,.true.)
+      call dump_announcement(RES, nres, filename, last_res_time, sequential)
 
-      phv = piernik_hdf5_version ; if (use_v2_io) phv = piernik_hdf5_version2
-
-      filename = output_fname(WR,'.res', nres, bcast=.true.)
-      if (master) then
-         write(msg,'(a,es23.16,a,f5.2,1x,2a)') 'ordered t ',last_res_time,': Writing restart v', phv, trim(filename), " ... "
-         call printio(msg, .true.)
-      endif
       call set_common_attributes(filename)
 
       if (use_v2_io) then
@@ -76,13 +73,16 @@ contains
       else
          call write_restart_hdf5_v1(filename)
       endif
+
+#if defined(MULTIGRID) && defined(SELF_GRAV)
+      call unmark_oldsoln
+#endif /* MULTIGRID && SELF_GRAV */
+
       call piernik_MPI_Barrier
 
-      thdf = set_timer(tmr_hdf)
-      if (master) then
-         write(msg,'(a6,f10.2,a2)') ' done ', thdf, ' s'
-         call printinfo(msg, .true.)
-      endif
+      call dump_announce_time
+
+      call ppp_main%stop(wrr_label, PPP_IO)
 
    end subroutine write_restart_hdf5
 
@@ -96,6 +96,9 @@ contains
       use dataio_pub,      only: use_v2_io
       use restart_hdf5_v1, only: read_restart_hdf5_v1
       use restart_hdf5_v2, only: read_restart_hdf5_v2
+#if defined(MULTIGRID) && defined(SELF_GRAV)
+      use multigrid_gravity, only: unmark_oldsoln
+#endif /* MULTIGRID && SELF_GRAV */
 
       implicit none
 
@@ -104,6 +107,10 @@ contains
       status_v2 = STAT_INV
       if (use_v2_io) call read_restart_hdf5_v2(status_v2)
       if (status_v2 /= STAT_OK .or. .not. use_v2_io) call read_restart_hdf5_v1
+
+#if defined(MULTIGRID) && defined(SELF_GRAV)
+      call unmark_oldsoln
+#endif /* MULTIGRID && SELF_GRAV */
 
    end subroutine read_restart_hdf5
 

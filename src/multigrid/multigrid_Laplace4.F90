@@ -30,7 +30,7 @@
 !> \brief Implementation of 4th order, non-compact (5 cell wide) Laplace operator
 
 module multigrid_Laplace4
-! pulled by MULTIGRID && GRAV
+! pulled by MULTIGRID && SELF_GRAV
 
    implicit none
 
@@ -65,10 +65,11 @@ contains
 
    subroutine residual4(cg_llst, src, soln, def)
 
-      use cg_leaves,          only: cg_leaves_T
-      use cg_level_connected, only: cg_level_connected_T
+      use cg_cost_data,       only: I_MULTIGRID
+      use cg_leaves,          only: cg_leaves_t
+      use cg_level_connected, only: cg_level_connected_t
       use cg_list,            only: cg_list_element
-      use cg_list_bnd,        only: cg_list_bnd_T
+      use cg_list_bnd,        only: cg_list_bnd_t
       use constants,          only: ndims, idm2, xdim, ydim, zdim, BND_NEGREF, GEO_XYZ
       use dataio_pub,         only: die, warn
       use domain,             only: dom
@@ -79,7 +80,7 @@ contains
 
       implicit none
 
-      class(cg_list_bnd_T), intent(inout) :: cg_llst !< pointer to a level for which we approximate the solution
+      class(cg_list_bnd_t), intent(inout) :: cg_llst !< pointer to a level for which we approximate the solution
       integer(kind=4),      intent(in) :: src     !< index of source in cg%q(:)
       integer(kind=4),      intent(in) :: soln    !< index of solution in cg%q(:)
       integer(kind=4),      intent(in) :: def     !< index of defect in cg%q(:)
@@ -104,12 +105,12 @@ contains
       endif
 
       select type(cg_llst)
-         type is (cg_leaves_T)
+         type is (cg_leaves_t)
             call cg_llst%leaf_arr3d_boundaries(soln, bnd_type=BND_NEGREF, nocorners=.true.)
-         type is (cg_level_connected_T)
+         type is (cg_level_connected_t)
             call cg_llst%arr3d_boundaries(soln, bnd_type=BND_NEGREF, nocorners=.true.)
          class default
-             call die("[multigrid_Laplace4:residual4] Unknown type")
+            call die("[multigrid_Laplace4:residual4] Unknown type")
       end select
 
       c21 = 1.
@@ -121,6 +122,7 @@ contains
       cgl => cg_llst%first
       do while (associated(cgl))
          cg => cgl%cg
+         call cg%costs%start
 
          Lx1 = c41 * cg%idx2
          Ly1 = c41 * cg%idy2
@@ -163,6 +165,8 @@ contains
                enddo
             enddo
          endif
+
+         call cg%costs%stop(I_MULTIGRID)
          cgl => cgl%nxt
       enddo
 
@@ -174,17 +178,17 @@ contains
 !! \warning For optimal convergence this Laplace operator requires specific relaxation scheme.
 !!
 !! \details Call relaxation for the residual2 operator while specific relaxation scheme is not implemented and expect severely limited convergence.
-!! It is not planned to be implemented anytime soon because 4th order Mehrstellen operator is much better.
+!! It is not planned to be implemented any time soon because 4th order Mehrstellen operator is much better.
 !<
 
    subroutine approximate_solution_relax4(curl, src, soln, nsmoo)
 
-      use cg_level_connected, only: cg_level_connected_T
+      use cg_level_connected, only: cg_level_connected_t
       use multigrid_Laplace2, only: approximate_solution_rbgs2
 
       implicit none
 
-      type(cg_level_connected_T), pointer, intent(inout) :: curl  !< pointer to a level for which we approximate the solution
+      type(cg_level_connected_t), pointer, intent(inout) :: curl  !< pointer to a level for which we approximate the solution
       integer(kind=4),                     intent(in)    :: src   !< index of source in cg%q(:)
       integer(kind=4),                     intent(in)    :: soln  !< index of solution in cg%q(:)
       integer(kind=4),                     intent(in)    :: nsmoo !< number of smoothing repetitions

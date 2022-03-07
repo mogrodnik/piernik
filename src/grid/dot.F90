@@ -32,21 +32,23 @@
 !!
 !! \details The structure that contains most important information of all blocks on all processes on a given level
 !! and information on decomposition as well.
+!!
+!! OPT: consider converting gse to oct-tree for faster and more natural searching.
 !<
 
 module dot
 
-   use decomposition,   only: cuboid
+   use decomposition, only: cuboid
 
    implicit none
 
    private
-   public :: dot_T
+   public :: dot_t
 
    !> \brief cuboid with SFC_id
    type, extends(cuboid) :: c_id
       integer(kind=8) :: SFCid
-   end type C_id
+   end type c_id
 
    !> \brief A list of grid pieces (typically used as a list of all grids residing on a given process)
    type :: cuboids
@@ -56,12 +58,13 @@ module dot
    end type cuboids
 
    !> \brief Depiction of global Topology of a level. Use with care, because this is an antiparallel thing
-   type :: dot_T
+   type :: dot_t
       type(cuboids),   dimension(:),   allocatable :: gse           !< lists of grid chunks on each process (FIRST:LAST)
       integer(kind=8), dimension(:,:), allocatable :: SFC_id_range  !< min and max SFC id on processes
       integer                                      :: tot_se        !< global number of grids on the level
       logical                                      :: is_blocky     !< .true. when all grid pieces on this level on all processes have same shape and size
-      logical                                      :: is_strict_SFC !< .true. when all grid pieces are distributd along SFC curve
+      logical                                      :: is_strict_SFC !< .true. when all grid pieces are distributed along SFC curve
+!      logical                                      :: is_complete   !< .true. but in the future allow incomplete dot for really large simulations containing only neighbor data
    contains
       procedure :: cleanup              !< Deallocate everything
       procedure :: update_global        !< Gather updated information about the level and overwrite it to this%gse
@@ -71,9 +74,10 @@ module dot
       procedure :: check_blocky         !< Check if all blocks in the domain have same size and shape
       procedure :: update_SFC_id_range  !< Update SFC_id_range array and set this%is_strict_SFC
       procedure :: find_grid            !< Find process and grid_id using SFC_id
-   end type dot_T
+   end type dot_t
 
    integer(kind=8), parameter :: huge_SFC = huge(1_8)
+   integer, dimension(:), allocatable :: pp  ! an array used in find_grid
 
 contains
 
@@ -83,10 +87,11 @@ contains
 
       implicit none
 
-      class(dot_T), intent(inout) :: this
+      class(dot_t), intent(inout) :: this
 
       if (allocated(this%gse)) deallocate(this%gse) ! this%gse(:)%c should be deallocated automagically
       if (allocated(this%SFC_id_range)) deallocate(this%SFC_id_range)
+      if (allocated(pp)) deallocate(pp)
 
    end subroutine cleanup
 
@@ -102,13 +107,14 @@ contains
       use cg_list,    only: cg_list_element
       use constants,  only: I_ZERO, I_ONE, ndims, LO, HI
       use dataio_pub, only: die
-      use mpi,        only: MPI_IN_PLACE, MPI_DATATYPE_NULL, MPI_INTEGER
-      use mpisetup,   only: FIRST, LAST, proc, comm, mpi_err
+      use MPIF,       only: MPI_IN_PLACE, MPI_DATATYPE_NULL, MPI_INTEGER, MPI_COMM_WORLD
+      use MPIFUN,     only: MPI_Allgather, MPI_Allgatherv
+      use mpisetup,   only: FIRST, LAST, proc, err_mpi
       use ordering,   only: SFC_order
 
       implicit none
 
-      class(dot_T),                      intent(inout) :: this       !< object invoking type bound procedure
+      class(dot_t),                      intent(inout) :: this       !< object invoking type bound procedure
       type(cg_list_element), pointer,    intent(in)    :: first_cgl  !< first grid on the list belonging to given level
       integer(kind=4),                   intent(in)    :: cnt        !< number of grids on given level
       integer(kind=8), dimension(ndims), intent(in)    :: off        !< offset of the level
@@ -120,11 +126,12 @@ contains
       integer, parameter :: ncub = ndims*HI ! the number of integers in each cuboid
       integer(kind=8) :: prev_id, cur_id
 
+!      this%is_complete = .true.
       ! get the count of grid pieces on each process
       ! Beware: int(this%cnt, kind=4) is not properly updated after calling this%distribute.
       ! Use size(this%dot%gse(proc)%c) if you want to propagate gse before the grid containers are actually added to the level
       ! OPT: this call can be quite long to complete
-      call MPI_Allgather(cnt, I_ONE, MPI_INTEGER, allcnt, I_ONE, MPI_INTEGER, comm, mpi_err)
+      call MPI_Allgather(cnt, I_ONE, MPI_INTEGER, allcnt, I_ONE, MPI_INTEGER, MPI_COMM_WORLD, err_mpi)
 
       ! compute offsets for  a composite table of all grid pieces
       alloff(FIRST) = I_ZERO
@@ -149,7 +156,7 @@ contains
       ! First use of MPI_Allgatherv in the Piernik Code!
       ncub_allcnt(:) = int(ncub * allcnt(:), kind=4)
       ncub_alloff(:) = int(ncub * alloff(:), kind=4)
-      call MPI_Allgatherv(MPI_IN_PLACE, I_ZERO, MPI_DATATYPE_NULL, allse, ncub_allcnt, ncub_alloff, MPI_INTEGER, comm, mpi_err)
+      call MPI_Allgatherv(MPI_IN_PLACE, I_ZERO, MPI_DATATYPE_NULL, allse, ncub_allcnt, ncub_alloff, MPI_INTEGER, MPI_COMM_WORLD, err_mpi)
 
       ! Rewrite the gse array, forget about past.
       if (.not. allocated(this%gse)) allocate(this%gse(FIRST:LAST))
@@ -184,12 +191,13 @@ contains
 
       implicit none
 
-      class(dot_T),                   intent(inout) :: this       !< object invoking type bound procedure
+      class(dot_t),                   intent(inout) :: this       !< object invoking type bound procedure
       type(cg_list_element), pointer, intent(in)    :: first_cgl  !< first grid on the list belonging to given level
       integer(kind=4),                intent(in)    :: cnt        !< number of grids on given level to be initialized
       integer                        :: i
       type(cg_list_element), pointer :: cgl
 
+!      this%is_complete = .true.
       if (.not. allocated(this%gse)) allocate(this%gse(FIRST:LAST))
       if (allocated(this%gse(proc)%c)) deallocate(this%gse(proc)%c)
       allocate(this%gse(proc)%c(cnt))
@@ -217,7 +225,7 @@ contains
 
       implicit none
 
-      class(dot_T), intent(inout) :: this  !< object invoking type bound procedure
+      class(dot_t), intent(inout) :: this  !< object invoking type bound procedure
 
       integer :: p
 
@@ -238,7 +246,7 @@ contains
 
       implicit none
 
-      class(dot_T),                   intent(inout) :: this       !< object invoking type bound procedure
+      class(dot_t),                   intent(inout) :: this       !< object invoking type bound procedure
       type(cg_list_element), pointer, intent(in)    :: first_cgl  !< first grid on the list belonging to given level
 
       type(cg_list_element), pointer :: cgl
@@ -263,17 +271,27 @@ contains
    subroutine check_blocky(this)
 
       use constants,  only: ndims, LO, HI, pLAND, I_ONE
-      use mpi,        only: MPI_INTEGER, MPI_REQUEST_NULL
-      use mpisetup,   only: proc, req, status, comm, mpi_err, LAST, inflate_req, slave, piernik_MPI_Allreduce
+      use MPIF,       only: MPI_INTEGER, MPI_REQUEST_NULL, MPI_COMM_WORLD
+      use MPIFUN,     only: MPI_Irecv, MPI_Isend, MPI_Comm_dup, MPI_Comm_free
+      use mpisetup,   only: proc, req, err_mpi, LAST, inflate_req, slave, piernik_MPI_Allreduce
+      use ppp_mpi,    only: piernik_Waitall
+#ifdef MPIF08
+      use MPIF,       only: MPI_Comm
+#endif /* MPIF08 */
 
       implicit none
 
-      class(dot_T), intent(inout) :: this       !< object invoking type bound procedure
+      class(dot_t), intent(inout) :: this       !< object invoking type bound procedure
 
       integer(kind=4), dimension(ndims) :: shape, shape1
       integer(kind=4), parameter :: sh_tag = 7
-      integer, parameter :: nr = 2
+      integer(kind=4), parameter :: nr = 2
       integer :: i
+#ifdef MPIF08
+      type(MPI_Comm)  :: dot_comm
+#else /* !MPIF08 */
+      integer(kind=4) :: dot_comm
+#endif /* !MPIF08 */
 
       call inflate_req(nr)
       this%is_blocky = .true.
@@ -290,10 +308,15 @@ contains
             enddo
          endif
       endif
+
+      call MPI_Comm_dup(MPI_COMM_WORLD, dot_comm, err_mpi)
       req = MPI_REQUEST_NULL
-      if (slave)     call MPI_Irecv(shape1, size(shape1), MPI_INTEGER, proc-I_ONE, sh_tag, comm, req(1 ), mpi_err)
-      if (proc<LAST) call MPI_Isend(shape,  size(shape),  MPI_INTEGER, proc+I_ONE, sh_tag, comm, req(nr), mpi_err)
-      call MPI_Waitall(nr, req(:nr), status(:, :nr), mpi_err)
+      if (slave)     call MPI_Irecv(shape1, size(shape1, kind=4), MPI_INTEGER, proc-I_ONE, sh_tag, dot_comm, req(1 ), err_mpi)
+      if (proc<LAST) call MPI_Isend(shape,  size(shape, kind=4),  MPI_INTEGER, proc+I_ONE, sh_tag, dot_comm, req(nr), err_mpi)
+
+      call piernik_Waitall(nr, "dot:chk_blocky")
+      call MPI_Comm_free(dot_comm, err_mpi)
+
       if (any(shape /= 0) .and. any(shape1 /= 0)) then
          if (any(shape /= shape1)) this%is_blocky = .false.
       endif
@@ -311,15 +334,16 @@ contains
 
    subroutine update_SFC_id_range(this, off)
 
-      use constants,  only: LO, HI, ndims
+      use constants,  only: LO, HI, ndims, I_ONE
       use dataio_pub, only: die
-      use mpi,        only: MPI_INTEGER8
-      use mpisetup,   only: FIRST, LAST, proc, comm, mpi_err
+      use MPIF,       only: MPI_INTEGER8, MPI_COMM_WORLD
+      use MPIFUN,     only: MPI_Allgather
+      use mpisetup,   only: FIRST, LAST, proc, err_mpi
       use ordering,   only: SFC_order
 
       implicit none
 
-      class(dot_T),                      intent(inout) :: this !< object invoking type bound procedure
+      class(dot_t),                      intent(inout) :: this !< object invoking type bound procedure
       integer(kind=8), dimension(ndims), intent(in)    :: off  !< offset of the level
 
       integer(kind=8) :: SFC_id
@@ -344,7 +368,8 @@ contains
       endif
 
       allocate(id_buf(size(this%SFC_id_range)))
-      call MPI_Allgather(this%SFC_id_range(proc, :), HI-LO+1, MPI_INTEGER8, id_buf, HI-LO+1, MPI_INTEGER8, comm, mpi_err)
+      call MPI_Allgather([this%SFC_id_range(proc, LO), this%SFC_id_range(proc, HI)], HI-LO+I_ONE, MPI_INTEGER8, &
+           &             id_buf, HI-LO+I_ONE, MPI_INTEGER8, MPI_COMM_WORLD, err_mpi)
       this%SFC_id_range(:, LO) = id_buf(1::2)
       this%SFC_id_range(:, HI) = id_buf(2::2)
 
@@ -370,20 +395,23 @@ contains
 
       implicit none
 
-      class(dot_T),    intent(inout) :: this
+      class(dot_t),    intent(inout) :: this
       integer(kind=8), intent(in)    :: SFC_id
-      integer,         intent(out)   :: p
+      integer(kind=4), intent(out)   :: p
       integer,         intent(out)   :: grid_id
 
-      integer, dimension(:), allocatable :: pp
-      integer :: ip, il, iu, j
+      integer :: ip, il, iu, j, pp_lb, pp_ub
+      integer, parameter :: bin2seq = 3  ! when to switch from bisection to sequential search? 3 seemed to be most optimal value to switch to sequential in one experiment.
+
+      if (.not. allocated(pp)) allocate(pp(FIRST:LAST))
 
       ! search for p
       p = INVALID
       if (this%is_strict_SFC) then
          ! binary search
-         allocate(pp(1))
-         pp = INVALID
+         pp_lb = FIRST
+         pp_ub = pp_lb
+         pp(pp_lb) = INVALID
          il = lbound(this%SFC_id_range, dim=1)
          iu = ubound(this%SFC_id_range, dim=1)
          do while (iu-il > 1)
@@ -397,14 +425,15 @@ contains
             endif
          enddo
          do j = il, iu
-            if (this%SFC_id_range(j, LO) <= SFC_id .and. this%SFC_id_range(j, HI) >= SFC_id) pp(1) = j
+            if (this%SFC_id_range(j, LO) <= SFC_id .and. this%SFC_id_range(j, HI) >= SFC_id) pp(pp_lb) = j
          enddo
       else
          ! sequential search, return many possible p's
-         allocate(pp(FIRST:LAST))
-         pp = INVALID
-         il = lbound(pp, dim=1)
-         do ip = lbound(pp, dim=1), ubound(pp, dim=1)
+         pp_lb = FIRST
+         pp_ub = LAST
+         pp(pp_lb:pp_ub) = INVALID
+         il = pp_lb
+         do ip = pp_lb, pp_ub
             if (this%SFC_id_range(ip, LO) <= SFC_id .and. this%SFC_id_range(ip, HI) >= SFC_id) then
                pp(il) = ip
                il = il + 1
@@ -414,13 +443,13 @@ contains
 
       ! search for grid_id
       grid_id = INVALID
-      do ip = lbound(pp, dim=1), ubound(pp, dim=1)
+      do ip = pp_lb, pp_ub
          if (pp(ip) /= INVALID) then
             if (this%gse(pp(ip))%sorted) then
                ! binary search
                il = lbound(this%gse(pp(ip))%c, dim=1)
                iu = ubound(this%gse(pp(ip))%c, dim=1)
-               do while (iu-il > 1)
+               do while (iu-il > bin2seq)
                   j = (il+iu)/2
                   if (this%gse(pp(ip))%c(j)%SFCid <= SFC_id) then
                      il = j
@@ -440,7 +469,6 @@ contains
       enddo
 
       if (grid_id == INVALID) p = INVALID
-      deallocate(pp)
 
    contains
 
@@ -453,7 +481,7 @@ contains
          do j = i1, i2
             if (this%gse(pp(ip))%c(j)%SFCid == SFC_id) then
                grid_id = j
-               p = pp(ip)
+               p = int(pp(ip), kind=4)
                exit
             endif
          enddo

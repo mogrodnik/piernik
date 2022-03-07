@@ -3,7 +3,7 @@
 import re
 import sys
 
-print sys.argv
+print(sys.argv)
 if len(sys.argv) != 2:
     print("USAGE: extract_problem.par LOGFILE")
     sys.exit(1)
@@ -21,6 +21,10 @@ for line in data:
     if re.search(namelist, line):
         print('$%s' % (line.split('&')[-1]))
     if re.search(change, line):
-        print('  %s' % (line.split('* ')[-1].strip(',')))
+        ln = line.split('* ')[-1].strip(',')
+        ln = re.sub(' *"', '"', ln)
+        ln = re.sub(' *, *', ', ', ln)
+        ln = re.sub(' *= *', ' = ', ln)
+        print('  %s' % ln)
     if re.search(slash, line.strip()):
         print('/\n')

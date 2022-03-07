@@ -36,13 +36,13 @@ module timestep
    implicit none
 
    private
-   public :: time_step, cfl_manager
+   public :: time_step, cfl_manager, check_cfl_violation
 #if defined(__INTEL_COMPILER) || defined(_CRAYFTN)
    !! \deprecated remove this clause as soon as Intel Compiler gets required features and/or bug fixes
    public :: init_time_step
 #endif /* __INTEL_COMPILER || _CRAYFTN */
 
-   real :: c_all_old
+   logical :: flexible_shrink
 #if defined(__INTEL_COMPILER) || defined(_CRAYFTN)
    !! \deprecated remove this clause as soon as Intel Compiler gets required features and/or bug fixes
    procedure(), pointer :: cfl_manager
@@ -63,16 +63,24 @@ contains
 
       use constants,  only: PIERNIK_INIT_GLOBAL
       use dataio_pub, only: msg, die, warn, code_progress
-      use global,     only: cflcontrol
+      use global,     only: cflcontrol, repetitive_steps
 
       implicit none
 
       if (code_progress < PIERNIK_INIT_GLOBAL) call die("[timestep:init_time_step] globals not initialized.")
 
-      c_all_old = 0. ! safe initial value
+      repetitive_steps = .false.
       select case (cflcontrol)
          case ('warn')
             cfl_manager => cfl_warn
+         case ('redo', 'repeat')
+            cfl_manager => cfl_warn
+            repetitive_steps = .true.
+            flexible_shrink  = .false.
+         case ('flex', 'flexible')
+            cfl_manager => cfl_warn
+            repetitive_steps = .true.
+            flexible_shrink  = .true.
          case ('auto', 'adaptive')
             cfl_manager => cfl_auto
          case ('none', '')
@@ -86,6 +94,9 @@ contains
          call warn("[timestep:init_time_step] cfl_manager was not associated.")
          return
       endif
+#ifdef NBODY
+      if (repetitive_steps) call die("[timestep:init_time_step] step repeating (clfcontrol == 'redo' or 'flex') unsupported by NBODY (not implemented yet).")
+#endif /* NBODY */
 #if !(defined(__INTEL_COMPILER) || defined(_CRAYFTN))
       !! \deprecated remove this clause as soon as Intel Compiler gets required features and/or bug fixes
       call cfl_manager
@@ -100,98 +111,103 @@ contains
 !! These routines return limit for timestep due to various physical and numerical conditions.
 !! At the end the timestep is checked against remaining simulation time, minimum, and maximum allowed values etc.
 !<
-   subroutine time_step(dt, flind)
+   subroutine time_step(dt, flind, main_call)
 
-      use cg_leaves,            only: leaves
-      use cg_list,              only: cg_list_element
-      use constants,            only: one, two, zero, half, pMIN, pMAX
-      use dataio,               only: write_crashed
-      use dataio_pub,           only: tend, msg, warn
-      use fargo,                only: timestep_fargo, fargo_mean_omega
-      use fluidtypes,           only: var_numbers
-      use global,               only: t, dt_old, dt_max_grow, dt_initial, dt_min, nstep, use_fargo
-      use grid_cont,            only: grid_container
-      use mpisetup,             only: master, piernik_MPI_Allreduce
-      use timestep_pub,         only: c_all
-      use timestepinteractions, only: timestep_interactions
+      use cg_cost_data,       only: I_OTHER
+      use cg_leaves,          only: leaves
+      use cg_list,            only: cg_list_element
+      use cmp_1D_mpi,         only: compare_array1D
+      use constants,          only: one, two, zero, half, pMIN, pMAX
+      use dataio,             only: write_crashed
+      use dataio_pub,         only: tend, msg, warn
+      use fargo,              only: timestep_fargo
+      use fluidtypes,         only: var_numbers
+      use global,             only: t, dt_old, dt_full, dt_max_grow, dt_initial, dt_min, dt_max, nstep, repetitive_steps
+      use grid_cont,          only: grid_container
+      use mpisetup,           only: master, piernik_MPI_Allreduce
+      use ppp,                only: ppp_main
+      use sources,            only: timestep_sources
+      use timestep_pub,       only: c_all, c_all_old
 #ifdef COSM_RAYS
-      use timestepcosmicrays,   only: timestep_crs, dt_crs
+      use timestepcosmicrays, only: timestep_crs
 #endif /* COSM_RAYS */
-#ifdef COSM_RAY_ELECTRONS
-      use cresp_grid,           only: dt_cre, grid_cresp_timestep
-#endif /* COSM_RAY_ELECTRONS */
 #ifdef RESISTIVE
-      use resistivity,          only: dt_resist, timestep_resist
+      use resistivity,        only: timestep_resist
 #endif /* RESISTIVE */
 #ifdef DEBUG
-      use dataio_pub,           only: printinfo
-      use piernikdebug,         only: has_const_dt, constant_dt
+      use dataio_pub,         only: printinfo
+      use piernikdebug,       only: has_const_dt, constant_dt
 #endif /* DEBUG */
+#ifdef NBODY
+      use particle_timestep,    only: timestep_nbody
+#endif /* NBODY */
 
       implicit none
 
-      real,              intent(inout) :: dt    !< the timestep
-      type(var_numbers), intent(in)    :: flind !< the structure with all fluid indices
+      real,              intent(inout) :: dt        !< the timestep
+      type(var_numbers), intent(in)    :: flind     !< the structure with all fluid indices
+      logical,           intent(in)    :: main_call !< .true. for the main call at the beginning of the step, .false. for checking cfl violation
 
       type(cg_list_element), pointer   :: cgl
       type(grid_container),  pointer   :: cg
       real                             :: c_, dt_
       integer                          :: ifl
+      character(len=*), parameter :: ts_label = "timestep"
+
+      call ppp_main%start(ts_label)
 
 ! Timestep computation
 
-      dt_old = dt
+      if (main_call) dt_old = dt
 
       c_all = zero
       dt = huge(1.)
 
-      if (use_fargo) call fargo_mean_omega
-
       cgl => leaves%first
       do while (associated(cgl))
          cg => cgl%cg
+         call cg%costs%start
 
-         !> \todo make the timestep_* routines members of fluidtypes::component_fluid
          do ifl = lbound(flind%all_fluids, dim=1), ubound(flind%all_fluids, dim=1)
             call timestep_fluid(cg, flind%all_fluids(ifl)%fl, dt_, c_)
             dt    = min(dt, dt_)
             c_all = max(c_all, c_)
          enddo
-#ifdef COSM_RAY_ELECTRONS
-         call grid_cresp_timestep
-         dt = min(dt, dt_cre)
-#endif /* COSM_RAY_ELECTRONS */
 
-#ifdef COSM_RAYS
-         call timestep_crs(cg)
-         dt = min(dt, dt_crs)
-#endif /* COSM_RAYS */
-
-#ifdef RESISTIVE
-         call timestep_resist(cg)
-         dt = min(dt, dt_resist)
-#endif /* RESISTIVE */
-
-#ifndef BALSARA
-         dt = min(dt,timestep_interactions(cg))
-#endif /* BALSARA */
-
-         if (use_fargo) dt = min(dt, timestep_fargo(cg, dt))
+         call cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
+
+#ifdef COSM_RAYS
+      call timestep_crs(dt)
+#endif /* COSM_RAYS */
+#ifdef RESISTIVE
+      call timestep_resist(dt)
+#endif /* RESISTIVE */
+
+      call timestep_sources(dt)
+      call timestep_fargo(dt)
 
       call piernik_MPI_Allreduce(dt,    pMIN)
       call piernik_MPI_Allreduce(c_all, pMAX)
 
+#ifdef NBODY
+      call timestep_nbody(dt)
+#endif /* NBODY */
+
       ! finally apply some sanity factors
-      if (nstep <=1) then
-         if (dt_initial > zero) dt = min(dt, dt_initial)
+      if (nstep < 1) then
+         if (dt_initial > zero) then
+            dt = min(dt, dt_initial)
+         else if (dt_initial < zero) then ! extra factor for shortening first timestep
+            dt = min(dt, -dt_initial * dt)
+         endif
       else
          if (dt_old > zero) dt = min(dt, dt_old*dt_max_grow)
       endif
 
-      if (associated(cfl_manager)) call cfl_manager
-      c_all_old = c_all
+      if (associated(cfl_manager) .and. (main_call .neqv. repetitive_steps)) call cfl_manager
+      if (main_call) c_all_old = c_all
 
       if (dt < dt_min) then ! something nasty had happened
          if (master) then
@@ -201,17 +217,88 @@ contains
          call write_crashed("[timestep:time_step] dt < dt_min")
       endif
 
-      dt = min(dt, (half*(tend-t)) + (two*epsilon(one)*((tend-t))))
+      dt = min(min(dt, dt_max), (half*(tend-t)) + (two*epsilon(one)*((tend-t))))
 #ifdef DEBUG
       ! We still need all above for c_all
       if (has_const_dt) then
-         dt    = constant_dt
+         dt = constant_dt
          write(msg,*) "[timestep:time_step]: (constant_dt) c_all = ", c_all
          call printinfo(msg)
       endif
 #endif /* DEBUG */
+      call compare_array1D([dt])  ! just in case
+      if (main_call) dt_full = dt
+
+      call ppp_main%stop(ts_label)
 
    end subroutine time_step
+
+!>
+!! \brief Timestep prediction after fluidupdate
+!!
+!! \details This routine calls is important while step redoing due to cfl violation is activated and prevent to dump h5 and restart files until cfl-violated step is successfully redone.
+!<
+   subroutine check_cfl_violation(flind)
+
+      use constants,      only: pLOR
+      use dataio_pub,     only: warn
+      use fluidtypes,     only: var_numbers
+      use global,         only: dn_negative, ei_negative, disallow_negatives, repeat_step, repetitive_steps, unwanted_negatives
+      use mpisetup,       only: piernik_MPI_Allreduce, master
+      use timestep_pub,   only: c_all
+      use timestep_retry, only: reset_freezing_speed
+#ifdef COSM_RAYS
+      use global,         only: cr_negative, disallow_CRnegatives
+#ifdef COSM_RAY_ELECTRONS
+      use cresp_grid,     only: cfl_cresp_violation
+#endif /* COSM_RAY_ELECTRONS */
+#endif /* COSM_RAYS */
+
+      implicit none
+
+      type(var_numbers), intent(in) :: flind     !< the structure with all fluid indices
+      real                          :: checkdt   !< checked dt after fluid_update
+      real                          :: c_all_bck !< backup for timestep sensitive variables
+
+      if (.not. repetitive_steps) return
+
+      unwanted_negatives = .false.
+      c_all_bck = c_all
+      call time_step(checkdt, flind, .false.)
+      c_all = c_all_bck
+
+      call piernik_MPI_Allreduce(dn_negative, pLOR)
+      call piernik_MPI_Allreduce(ei_negative, pLOR)
+#ifdef COSM_RAYS
+#ifdef COSM_RAY_ELECTRONS
+      call piernik_MPI_Allreduce(cfl_cresp_violation, pLOR) ! check cg if cfl_cresp_violation anywhere
+      if (cfl_cresp_violation) then
+         if (master) call warn("[timestep:check_cfl_violation] Possible violation of CFL in CRESP module")
+         unwanted_negatives = .true.
+      endif
+#endif /* COSM_RAY_ELECTRONS */
+      call piernik_MPI_Allreduce(cr_negative, pLOR)
+      if (cr_negative .and. disallow_CRnegatives) then
+         if (master) call warn('[timestep:check_cfl_violation] Possible violation of CFL: negatives in CRS')
+         if (disallow_negatives) unwanted_negatives = .true.
+      endif
+      cr_negative  = .false.
+#endif /* COSM_RAYS */
+      if (dn_negative) then
+         if (master) call warn('[timestep:check_cfl_violation] Possible violation of CFL: negative density')
+         if (disallow_negatives) unwanted_negatives = .true.
+         dn_negative  = .false.
+      endif
+      if (ei_negative) then
+         if (master) call warn('[timestep:check_cfl_violation] Possible violation of CFL: negative internal energy')
+         if (disallow_negatives) unwanted_negatives = .true.
+         ei_negative  = .false.
+      endif
+
+      repeat_step = repeat_step .or. unwanted_negatives
+      if (repeat_step) call reset_freezing_speed
+
+   end subroutine check_cfl_violation
 
 !------------------------------------------------------------------------------------------
 !>
@@ -220,40 +307,42 @@ contains
 
    subroutine cfl_warn
 
+      use constants,    only: I_ONE, one
       use dataio_pub,   only: msg, warn
-      use global,       only: cfl, cfl_max, cfl_violated
+      use global,       only: cfl, cfl_max, dt_cur_shrink, dt_shrink, repeat_step, repetitive_steps, tstep_attempt, unwanted_negatives
       use mpisetup,     only: piernik_MPI_Bcast, master
-      use timestep_pub, only: c_all
-#ifdef COSM_RAY_ELECTRONS
-      use cresp_grid,   only: cfl_cresp_violation
-      use initcrspectrum, only: cfl_cre
-#endif /* COSM_RAY_ELECTRONS */
+      use timestep_pub, only: c_all, c_all_old, stepcfl
 
       implicit none
 
-      real :: stepcfl
-
-      stepcfl = cfl
-      if (c_all_old > 0.) stepcfl = c_all/c_all_old*cfl
+      stepcfl = cfl * dt_cur_shrink
+      if (c_all_old > 0.) stepcfl = c_all / c_all_old * cfl * dt_cur_shrink
 
       if (master) then
          msg = ''
-         cfl_violated = .false.
+         repeat_step = unwanted_negatives ! \> information about unwanted_negatives from the last fluid_update call if disallow_negatives
          if (stepcfl > cfl_max) then
-            write(msg,'(a,g10.3)') "[timestep:cfl_warn] Possible violation of CFL: ",stepcfl
-            cfl_violated = .true.
-#ifdef COSM_RAY_ELECTRONS
-         else if ( cfl_cresp_violation ) then
-            write(msg,'(a,g10.3)') "[timestep:cfl_warn] Possible violation of CFL @ CRESP module:", cfl_cre
-            cfl_violated = .true.
-#endif /* COSM_RAY_ELECTRONS */
+            write(msg,'(a,g10.3)') "[timestep:cfl_warn] Possible violation of CFL: ", stepcfl
+            repeat_step = .true.
          else if (stepcfl < 2*cfl - cfl_max) then
             write(msg,'(2(a,g10.3))') "[timestep:cfl_warn] Low CFL: ", stepcfl, " << ", cfl
          endif
          if (len_trim(msg) > 0) call warn(msg)
       endif
 
-      call piernik_MPI_Bcast(cfl_violated)
+      if (repetitive_steps) then
+         call piernik_MPI_Bcast(repeat_step)
+         if (repeat_step) then
+            if (flexible_shrink) then
+               dt_cur_shrink = cfl_max / stepcfl
+               if (tstep_attempt >= I_ONE) dt_cur_shrink = dt_cur_shrink * dt_shrink
+            else
+               dt_cur_shrink = dt_shrink**(tstep_attempt + I_ONE)
+            endif
+         else
+            dt_cur_shrink = one
+         endif
+      endif
 
    end subroutine cfl_warn
 
@@ -269,12 +358,11 @@ contains
       use dataio_pub,   only: msg, warn
       use global,       only: cfl, cfl_max, dt, dt_old
       use mpisetup,     only: master
-      use timestep_pub, only: c_all
+      use timestep_pub, only: c_all, c_all_old, cfl_c, stepcfl
 
       implicit none
 
-      real, save :: stepcfl=zero, cfl_c=one
-      real       :: stepcfl_old
+      real :: stepcfl_old
 
       stepcfl_old = stepcfl
       stepcfl = cfl
@@ -329,9 +417,10 @@ contains
 
    subroutine timestep_fluid(cg, fl, dt, c_fl)
 
-      use cg_level_connected, only: cg_level_connected_T, find_level
+      use cg_level_connected, only: cg_level_connected_t
       use constants,          only: xdim, ydim, zdim, ndims, GEO_RPZ, ndims, small
       use domain,             only: dom
+      use find_lev,           only: find_level
       use fluidtypes,         only: component_fluid
       use global,             only: cfl, use_fargo
       use grid_cont,          only: grid_container
@@ -348,7 +437,7 @@ contains
       real, dimension(ndims) :: v                         !< maximum velocity of fluid in all directions
       real, dimension(ndims) :: dt_proc                   !< timestep for the current cg
       integer                :: i, j, k, d
-      type(cg_level_connected_T), pointer :: curl
+      type(cg_level_connected_t), pointer :: curl
 
       curl => find_level(cg%l%id)
 

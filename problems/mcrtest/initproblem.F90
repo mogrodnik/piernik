@@ -27,6 +27,9 @@
 
 #include "piernik.h"
 
+#ifndef COSM_RAYS
+#error COSM_RAYS is required for mcrtest
+#endif /* COSM_RAYS */
 module initproblem
 
    implicit none
@@ -34,11 +37,10 @@ module initproblem
    private
    public :: read_problem_par, problem_initial_conditions, problem_pointers
 
-   integer(kind=4)    :: norm_step
-   real               :: t_sn
-   real               :: d0, p0, bx0, by0, bz0, x0, y0, z0, r0, beta_cr, amp_cr, vxd0, vyd0, vzd0, expansion_cnst
+   real :: d0, p0, bx0, by0, bz0, x0, y0, z0, r0, beta_cr, amp_cr1, amp_cr2
 
-   namelist /PROBLEM_CONTROL/ d0, p0, bx0, by0, bz0, x0, y0, z0, r0, vxd0, vyd0, vzd0, beta_cr, amp_cr, norm_step, expansion_cnst
+   namelist /PROBLEM_CONTROL/ d0, p0, bx0, by0, bz0, x0, y0, z0, r0, beta_cr, amp_cr1, amp_cr2
+
 contains
 
 !-----------------------------------------------------------------------------
@@ -53,36 +55,26 @@ contains
 
    subroutine read_problem_par
 
-      use constants,  only: I_TEN
-      use dataio_pub, only: nh ! QA_WARN required for diff_nml
-      use dataio_pub, only: die
+      use dataio_pub, only: die, nh
       use domain,     only: dom
       use func,       only: operator(.equals.)
-      use mpisetup,   only: ibuff, rbuff, master, slave, piernik_MPI_Bcast
+      use mpisetup,   only: rbuff, master, slave, piernik_MPI_Bcast
 
       implicit none
 
-      t_sn = 0.0
+      d0             = 1.0e5       !< density
+      p0             = 1.0         !< pressure
+      bx0            =   0.        !< Magnetic field component x
+      by0            =   0.        !< Magnetic field component y
+      bz0            =   0.        !< Magnetic field component z
+      x0             = 0.0         !< x-position of the blob
+      y0             = 0.0         !< y-position of the blob
+      z0             = 0.0         !< z-position of the blob
+      r0             = 5.* minval(dom%L_(:)/dom%n_d(:), mask=dom%has_dir(:))  !< radius of the blob
 
-      d0           = 1.0e5     !< density
-      p0           = 1.0       !< pressure
-      bx0          =   0.      !< Magnetic field component x
-      by0          =   0.      !< Magnetic field component y
-      bz0          =   0.      !< Magnetic field component z
-      x0           = 0.0       !< x-position of the blob
-      y0           = 0.0       !< y-position of the blob
-      z0           = 0.0       !< z-position of the blob
-      r0           = 5.* minval(dom%L_(:)/dom%n_d(:), mask=dom%has_dir(:))  !< radius of the blob
-      vxd0         = 0.0       !< initial velocity_x, refers to whole domain
-      vyd0         = 0.0       !< initial velocity_y, refers to whole domain
-      vzd0         = 0.0       !< initial velocity_z, refers to whole domain
-
-      beta_cr      = 0.0       !< ambient level
-      amp_cr       = 1.0       !< amplitude of the blob
-
-      norm_step    = I_TEN     !< how often to compute the norm (in steps)
-
-      expansion_cnst = 0.0
+      beta_cr        = 0.0         !< ambient level
+      amp_cr1        = 1.0         !< amplitude of the blob
+      amp_cr2        = 0.1*amp_cr1 !< amplitude for the second species
 
       if (master) then
 
@@ -112,17 +104,11 @@ contains
          rbuff(8)  = z0
          rbuff(9)  = r0
          rbuff(10) = beta_cr
-         rbuff(11) = amp_cr
-         rbuff(12) = vxd0
-         rbuff(13) = vyd0
-         rbuff(14) = vzd0
-         rbuff(15) = expansion_cnst
-
-         ibuff(1)  = norm_step
+         rbuff(11) = amp_cr1
+         rbuff(12) = amp_cr2
 
       endif
 
-      call piernik_MPI_Bcast(ibuff)
       call piernik_MPI_Bcast(rbuff)
 
       if (slave) then
@@ -137,13 +123,8 @@ contains
          z0        = rbuff(8)
          r0        = rbuff(9)
          beta_cr   = rbuff(10)
-         amp_cr    = rbuff(11)
-         vxd0      = rbuff(12)
-         vyd0      = rbuff(13)
-         vzd0      = rbuff(14)
-         expansion_cnst = rbuff(15)
-
-         norm_step = int(ibuff(1), kind=4)
+         amp_cr1   = rbuff(11)
+         amp_cr2   = rbuff(12)
 
       endif
 
@@ -157,7 +138,7 @@ contains
 
       use cg_leaves,      only: leaves
       use cg_list,        only: cg_list_element
-      use constants,      only: xdim, ydim, zdim, LO, HI, pMAX
+      use constants,      only: ndims, xdim, ydim, zdim, LO, HI, pMAX, BND_PER
       use dataio_pub,     only: msg, warn, printinfo
       use domain,         only: dom
       use fluidindex,     only: flind
@@ -167,37 +148,19 @@ contains
       use initcosmicrays, only: iarr_crn, iarr_crs, gamma_crn, K_crn_paral, K_crn_perp
       use mpisetup,       only: master, piernik_MPI_Allreduce
 #ifdef COSM_RAYS_SOURCES
-      use cr_data,        only: icr_H1, icr_C12, cr_table
+      use cr_data,        only: eCRSP, icr_H1, icr_C12, cr_table
 #endif /* COSM_RAYS_SOURCES */
-#ifdef COSM_RAY_ELECTRONS
-     use initcosmicrays,   only: iarr_cre_e, iarr_cre_n
-     use initcrspectrum,   only: expan_order, taylor_coeff_2nd, taylor_coeff_3rd, smallecre, cresp, cre_eff
-     use cresp_crspectrum, only: cresp_get_scaled_init_spectrum
-#endif /* COSM_RAY_ELECTRONS */
 
       implicit none
 
       class(component_fluid), pointer :: fl
       integer                         :: i, j, k, icr, ipm, jpm, kpm
-      real                            :: cs_iso, xsn, ysn, zsn, r2, maxv
-      real                            :: sn_exp, sn_rdist2
+      integer, dimension(ndims,LO:HI) :: mantle
+      real                            :: cs_iso, decr, r2, maxv
       type(cg_list_element),  pointer :: cgl
       type(grid_container),   pointer :: cg
-      logical        :: first_run = .true.
-#ifndef COSM_RAYS_SOURCES
-      integer, parameter              :: icr_H1 = 1, icr_C12 = 2
-#endif /* !COSM_RAYS_SOURCES */
-#ifdef COSM_RAY_ELECTRONS
-      real                            :: e_tot
-#endif /* COSM_RAY_ELECTRONS */
 
-     if (first_run .eqv. .true.) then
       fl => flind%ion
-
-      ! BEWARE: temporary fix
-      xsn = x0
-      ysn = y0
-      zsn = z0
 
 ! Uniform equilibrium state
 
@@ -213,92 +176,57 @@ contains
          K_crn_perp(:)  = 0.
       endif
 
+      mantle = 0
+      do i = xdim, zdim
+         if (any(dom%bnd(i,:) == BND_PER)) mantle(i,:) = [-1,1] !> for periodic boundary conditions
+      enddo
 
       cgl => leaves%first
       do while (associated(cgl))
          cg => cgl%cg
 
          call cg%set_constant_b_field([bx0, by0, bz0])
-         cg%u(fl%idn, :, :, :) = d0
-         cg%u(fl%imx:fl%imz, :, :, :) = 0.0
+         cg%u(fl%idn,RNG) = d0
+         cg%u(fl%imx:fl%imz,RNG) = 0.0
 
 #ifndef ISO
-         do k = cg%lhn(zdim,LO), cg%lhn(zdim,HI)
-            do j = cg%lhn(ydim,LO), cg%lhn(ydim,HI)
-               do i = cg%lhn(xdim,LO), cg%lhn(xdim,HI)
-                  cg%u(fl%ien,i,j,k) = p0/fl%gam_1 + &
-                       &               ekin(cg%u(fl%imx,i,j,k), cg%u(fl%imy,i,j,k), cg%u(fl%imz,i,j,k), cg%u(fl%idn,i,j,k)) + &
-                       &               emag(cg%b(xdim,i,j,k), cg%b(ydim,i,j,k), cg%b(zdim,i,j,k))
-               enddo
-            enddo
-         enddo
+         cg%u(fl%ien,RNG) = p0/fl%gam_1 + ekin(cg%u(fl%imx,RNG), cg%u(fl%imy,RNG), cg%u(fl%imz,RNG), cg%u(fl%idn,RNG)) + &
+              &             emag(cg%b(xdim,RNG), cg%b(ydim,RNG), cg%b(zdim,RNG))
 #endif /* !ISO */
 
-#ifdef COSM_RAYS
-         do icr = 1, flind%crs%all
-            cg%u(iarr_crs(icr), :, :, :) =  beta_cr*fl%cs2 * cg%u(fl%idn, :, :, :)/(gamma_crn(icr)-1.0)
-         enddo
+         cg%u(iarr_crn, RNG) = 0.0
+#ifdef COSM_RAYS_SOURCES
+         if (eCRSP(icr_H1 )) cg%u(iarr_crn(cr_table(icr_H1 )), RNG) = beta_cr*fl%cs2 * cg%u(fl%idn, RNG)/(gamma_crn(cr_table(icr_H1 ))-1.0)
+         if (eCRSP(icr_C12)) cg%u(iarr_crn(cr_table(icr_C12)), RNG) = beta_cr*fl%cs2 * cg%u(fl%idn, RNG)/(gamma_crn(cr_table(icr_C12))-1.0)
+#else /* !COSM_RAYS_SOURCES */
+         cg%u(iarr_crn(1), RNG) = beta_cr*fl%cs2 * cg%u(fl%idn, RNG)/(gamma_crn(1)-1.0)
+         cg%u(iarr_crn(2), RNG) = beta_cr*fl%cs2 * cg%u(fl%idn, RNG)/(gamma_crn(2)-1.0)
+#endif /* !COSM_RAYS_SOURCES */
 
 ! Explosions
-         do icr = 1, flind%crn%all
-            do k = cg%ks, cg%ke
-               do j = cg%js, cg%je
-                  do i = cg%is, cg%ie
-
-                     do ipm=-1,1
-                        do jpm=-1,1
-                           do kpm=-1,1
-                              r2 = (cg%x(i)-xsn+real(ipm)*dom%L_(xdim))**2+(cg%y(j)-ysn+real(jpm)*dom%L_(ydim))**2+(cg%z(k)-zsn+real(kpm)*dom%L_(zdim))**2
-                              sn_rdist2 = r2/r0**2
-                              sn_exp = 0.0
-                              if (sn_rdist2 <= 10.0) then
-                                 sn_exp = exp(-sn_rdist2)
-                              endif
-                              if (icr == cr_table(icr_H1)) then
-                                 cg%u(iarr_crn(icr), i, j, k) = cg%u(iarr_crn(icr), i, j, k) + amp_cr*sn_exp
-                              elseif (icr == cr_table(icr_C12)) then
-                                 cg%u(iarr_crn(icr), i, j, k) = cg%u(iarr_crn(icr), i, j, k) + amp_cr*0.1*sn_exp ! BEWARE: magic number
-                              else
-                                 cg%u(iarr_crn(icr), i, j, k) = 0.0
-                              endif
-                           enddo
-                        enddo
-                     enddo
-
-                  enddo
-               enddo
-            enddo
-         enddo
-#ifdef COSM_RAY_ELECTRONS
-! Explosions @CRESP independent of cr nucleons
          do k = cg%ks, cg%ke
             do j = cg%js, cg%je
                do i = cg%is, cg%ie
 
-                  e_tot = 0.0
-                  do ipm=-1,1
-                     do jpm=-1,1
-                        do kpm=-1,1
-                           r2 = (cg%x(i)-xsn+real(ipm)*dom%L_(xdim))**2+(cg%y(j)-ysn+real(jpm)*dom%L_(ydim))**2+(cg%z(k)-zsn+real(kpm)*dom%L_(zdim))**2
-                           sn_rdist2 = r2/r0**2
-                           sn_exp = 0.0
-                           if (sn_rdist2 <= 10.0) then
-                              sn_exp = exp(-sn_rdist2)
-                           endif
-                           e_tot = e_tot + amp_cr*sn_exp
+                  decr = 0.0
+                  do ipm = mantle(xdim,LO), mantle(xdim,HI)
+                     do jpm = mantle(xdim,LO), mantle(xdim,HI)
+                        do kpm = mantle(xdim,LO), mantle(xdim,HI)
+                           r2 = (cg%x(i)-x0+real(ipm)*dom%L_(xdim))**2+(cg%y(j)-y0+real(jpm)*dom%L_(ydim))**2+(cg%z(k)-z0+real(kpm)*dom%L_(zdim))**2
+                           decr = decr + exp(-r2/r0**2)
                         enddo
                      enddo
                   enddo
-                  cresp%n = 0.0 ;  cresp%e = 0.0 ; e_tot = e_tot * cre_eff
-                  if (e_tot .gt. smallecre) then
-                    call cresp_get_scaled_init_spectrum(cresp%n, cresp%e, e_tot)
-                    cg%u(iarr_cre_n,i,j,k) = cg%u(iarr_cre_n,i,j,k) + cresp%n
-                    cg%u(iarr_cre_e,i,j,k) = cg%u(iarr_cre_e,i,j,k) + cresp%e
-                  endif
+#ifdef COSM_RAYS_SOURCES
+                  if (eCRSP(icr_H1 )) cg%u(iarr_crn(cr_table(icr_H1 )), i, j, k) = cg%u(iarr_crn(cr_table(icr_H1 )), i, j, k) + amp_cr1*decr
+                  if (eCRSP(icr_C12)) cg%u(iarr_crn(cr_table(icr_C12)), i, j, k) = cg%u(iarr_crn(cr_table(icr_C12)), i, j, k) + amp_cr2*decr
+#else /* !COSM_RAYS_SOURCES */
+                  cg%u(iarr_crn(1:2), i, j, k) = cg%u(iarr_crn(1:2), i, j, k) + [amp_cr1, amp_cr2]*decr
+#endif /* !COSM_RAYS_SOURCES */
                enddo
             enddo
          enddo
-#endif /* COSM_RAY_ELECTRONS */
+
          cgl => cgl%nxt
       enddo
 
@@ -307,68 +235,20 @@ contains
          maxv = - huge(1.)
          cgl => leaves%first
          do while (associated(cgl))
-            maxv = max(maxv, maxval(cgl%cg%u(iarr_crs(icr),:,:,:)))
+            associate (cg => cgl%cg)
+               maxv = max(maxv, maxval(cg%u(iarr_crs(icr), RNG)))
+            end associate
             cgl => cgl%nxt
          enddo
 
          call piernik_MPI_Allreduce(maxv, pMAX)
          if (master) then
-#ifdef COSM_RAY_ELECTRONS
-            if (icr .lt. flind%cre%nbeg) then
-               write(msg,*) '[initproblem:problem_initial_conditions] icr(nuc)  =',icr,' maxecr(nuc) =',maxv
-            else if (icr .lt. flind%cre%ebeg .and. icr .ge. flind%cre%nbeg) then
-               write(msg,*) '[initproblem:problem_initial_conditions] icr(cre_n)=',icr,' maxncr(cre) =',maxv
-            else
-               write(msg,*) '[initproblem:problem_initial_conditions] icr(cre_e)=',icr,' maxecr(cre) =',maxv
-            endif
-#else
-            write(msg,*) '[initproblem:problem_initial_conditions] icr=',icr,' maxecr =',maxv
-#endif /* COSM_RAY_ELECTRONS */
+            write(msg,*) '[initproblem:problem_initial_conditions] icr=', icr, ' maxecr =', maxv
             call printinfo(msg)
          endif
 
       enddo
 
-#endif /* COSM_RAYS */
-#ifdef COSM_RAY_ELECTRONS
-      write(msg,*) '[initproblem:problem_initial_conditions]: Taylor_exp._ord. (cresp)    = ', expan_order
-      call printinfo(msg)
-      write(msg,*) '[initproblem:problem_initial conditions]: Taylor_exp._coeff.(2nd,3rd) = ', taylor_coeff_2nd, taylor_coeff_3rd
-      call printinfo(msg)
-#endif /* COSM_RAY_ELECTRONS */
-
-! Velocity field
-      cgl => leaves%first
-      do while (associated(cgl))
-        cg => cgl%cg
-        if (expansion_cnst .notequals. 0.0 ) then ! adiabatic expansion / compression
-         write(msg,*) '[initproblem:problem_initial_conditions] setting up expansion/compression, expansion_cnst=',expansion_cnst
-#ifdef IONIZED
-! Ionized
-         do k = cg%lhn(zdim,LO), cg%lhn(zdim,HI)
-            do j = cg%lhn(ydim,LO), cg%lhn(ydim,HI)
-               do i = cg%lhn(xdim,LO), cg%lhn(xdim,HI)
-                    cg%u(flind%ion%imx,i,j,k) = cg%u(flind%ion%idn,i,j,k) * (cg%x(i)-x0) * expansion_cnst  !< vxd0 * rho
-                    cg%u(flind%ion%imy,i,j,k) = cg%u(flind%ion%idn,i,j,k) * (cg%y(j)-y0) * expansion_cnst  !< vyd0 * rho
-                    cg%u(flind%ion%imz,i,j,k) = cg%u(flind%ion%idn,i,j,k) * (cg%z(k)-z0) * expansion_cnst  !< vzd0 * rho
-                  enddo
-                enddo
-            enddo
-#endif /* IONIZED */
-        else
-
-#ifdef IONIZED
-! Ionized
-            cg%u(flind%ion%imx,:,:,:) = vxd0 * cg%u(flind%ion%idn,:,:,:)
-            cg%u(flind%ion%imy,:,:,:) = vyd0 * cg%u(flind%ion%idn,:,:,:)
-            cg%u(flind%ion%imz,:,:,:) = vzd0 * cg%u(flind%ion%idn,:,:,:)
-#endif /* IONIZED */
-
-        endif
-        cgl => cgl%nxt
-      enddo
-
-      first_run = .false.
-    endif
    end subroutine problem_initial_conditions
+
 end module initproblem

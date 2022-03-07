@@ -11,7 +11,6 @@
  /
 
  $MPI_BLOCKS
-    AMR_bsize = 3*16
  /
 
  $UNITS
@@ -46,7 +45,6 @@
  $PROBLEM_CONTROL
     maxiter = 100000
     !smooth_map = .false.
-    deref_thr = 0.
     log_polar = .true.
     x_polar = -0.75232384419713483
     y_polar = -0.03980694105081919
@@ -57,6 +55,7 @@
  /
 
  $AMR
+    bsize = 3*16
     level_max = 3
     n_updAMR = 1
  /

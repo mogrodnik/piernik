@@ -64,7 +64,7 @@ contains
    subroutine read_problem_par
 
       use constants,  only: cbuff_len
-      use dataio_pub, only: nh      ! QA_WARN required for diff_nml
+      use dataio_pub, only: nh
       use mpisetup,   only: rbuff, cbuff, master, slave, piernik_MPI_Bcast
 
       implicit none
@@ -177,8 +177,6 @@ contains
       type(cg_list_element),  pointer :: cgl
       type(grid_container),   pointer :: cg
       integer                         :: p
-
-      call read_problem_par
 
       !   Secondary parameters
       do p = 1, flind%fluids

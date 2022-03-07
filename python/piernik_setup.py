@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import os
 import re
@@ -33,36 +33,6 @@ have_inc = re.compile(r"^#include\s", re.IGNORECASE).search
 have_mod = re.compile(r"^\s*module\s+(?!procedure)", re.IGNORECASE).search
 cpp_junk = re.compile("(?!#define\s_)", re.IGNORECASE)
 
-desc = '''
-EXAMPLE:
-> cd obj
-> ./newcompiler <settingsname>
-> make
-then copy files to your run directory (optional), e.g.
-> cp {piernik,problem.par} ../runs/<problem>
-> cd ../runs/<problem>
-
-to run PIERNIK:
-edit problem.par as appropriate, e.g.
-* add var names for visualisation => var(<number>)='<name>'
-* change domain dimensions/resolution => DOMAIN_SIZES
-* change domain divisions for parallel processing => MPI_BLOCKS
-* change frequency of data dumps => dt_* entries
-* etc.
-execute
-> ./piernik
-or for <np> parallel processes
-> mpirun -n <np> ./piernik
-
-HEALTH WARNINGS:
-* the contents of \'./obj\' and \'./runs/<problem>\' are overwritten
-  each time setup <problem>\' is run, unless you specify -obj <postfix>
-  in which case the contents of runs/<problem>_<postfix> will be only updated
-* by default PIERNIK will read the configuration file \'problem.par\' from the
-working directory, to use alternative configurations execute
-\'./piernik <directory with an alternative problem.par>\'
-Enjoy your work with the Piernik Code!
-'''
 
 head_block1 = '''ifneq (,$(findstring h5pfc, $(F90)))
 LIBS += ${STATIC} -lz ${DYNAMIC}
@@ -98,15 +68,25 @@ define ECHO_CC
 endef
 endif
 
+CPPFLAGS := $(CPPFLAGS) $(shell $(F90) $(CPPFLAGS) $(F90FLAGS) ../compilers/tests/mpi_allgatherv_bug.F90 && $(F90) $(LDFLAGS) -o mpi_allgatherv_bug mpi_allgatherv_bug.o $(LIBS) && ./mpi_allgatherv_bug 2> /dev/null || echo -DFORBID_F08)
+CPPFLAGS := $(CPPFLAGS) $(shell $(F90) $(CPPFLAGS) $(F90FLAGS) ../compilers/tests/mpi_f08.F90 2> /dev/null && echo -DMPIF08 || echo -DNO_MPIF08_AVAILABLE)
+CPPFLAGS := $(CPPFLAGS) $(shell $(F90) $(CPPFLAGS) $(F90FLAGS) ../compilers/tests/mpi.F90 2> /dev/null || echo -DNO_ALL_MPI_FUNCTIONS_AVAILABLE)
+
 all: env.dat print_setup $(PROG)
 
-$(PROG): $(OBJS)
+check_mpi:
+\t@$(F90) $(CPPFLAGS) $(F90FLAGS) ../compilers/tests/mpi_f08.F90
+\t@$(F90) $(CPPFLAGS) $(F90FLAGS) ../compilers/tests/mpi.F90
+
+$(PROG): $(OBJS) check_mpi
 ifeq ("$(SILENT)","1")
 \t@$(ECHO) $(PNAME)FC = $(F90) $(CPPFLAGS) $(F90FLAGS) -c
 \t@$(ECHO) $(PNAME)CC = $(CC) $(CPPFLAGS) $(CFLAGS) -c
 endif
 \t@$(ECHO) $(F90) $(LDFLAGS) -o $@ '*.o' $(LIBS)
 \t@$(F90) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
+\t@touch mpi_f08.o mpi.o a.out mpi_allgatherv_bug mpi_allgatherv_bug.o
+\t@$(RM) mpi_f08.o mpi.o a.out mpi_allgatherv_bug mpi_allgatherv_bug.o
 \t@AO1=`mktemp _ao_XXXXXX`;\\
 \tAO2=`mktemp _ao_XXXXXX`;\\
 \t$(ECHO) $(OBJS) | tr ' ' '\\n' | sort > $$AO1;\\
@@ -127,14 +107,30 @@ env.dat: piernik.def *.h $(SRCS_V)
 head_block2 = '''
 \tawk '{print}' piernik.def | sed -e '/^$$/ d' -e "/^\// d" ) > env.dat
 \t@$(ECHO) "Recent history:" >> env.dat
-\t@git log -5 --decorate --graph | sed -e 's/"//g' >> env.dat
+\t@git log -5 --decorate --graph 2> /dev/null | sed -e 's/"//g' >> env.dat
+
+os_detect.F90:
+\t@( OS=INVALID; \\
+\tgrep -q LINUX constants.F90 && gcc -dM -E - </dev/null | grep -q  __linux__ && OS=LINUX; \\
+\tgrep -q APPLE constants.F90 && gcc -dM -E - </dev/null | grep -q  __APPLE__ && OS=APPLE; \\
+\t$(ECHO) "module os_detect"; \\
+\t$(ECHO) "   implicit none"; \\
+\t$(ECHO) "   public"; \\
+\t$(ECHO) "contains"; \\
+\t$(ECHO) "   integer function which_os()"; \\
+\t$(ECHO) "      use constants, only: "$$OS; \\
+\t$(ECHO) "      implicit none"; \\
+\t$(ECHO) "      which_os = "$$OS; \\
+\t$(ECHO) "   end function which_os"; \\
+\t$(ECHO) "end module os_detect" ) > os_detect.F90; \\
+\t$(ECHO) 'generated os_detect.F90'
 
 version.F90: env.dat
 \t@( $(ECHO) "module version"; \\
 \t$(ECHO) "   implicit none"; \\
 \t$(ECHO) "   public"; \\
 \twc -l env.dat | awk '{print "   integer, parameter :: nenv = "$$1"+0"}'; \\
-\tawk '{if (length($0)>s) s=length($0)} END {print "   character(len="s"), dimension(nenv) :: env\\ncontains\\n   subroutine init_version\\n      implicit none"}' env.dat; \\
+\tawk '{if (length($0)>s) s=length($0)} END {print "   character(len="s+10"), dimension(nenv) :: env\\ncontains\\n   subroutine init_version\\n      implicit none"}' env.dat; \\
 \tawk '{printf("      env(%i) = \\"%s\\"\\n",NR,$$0)}' env.dat; \\
 \t$(ECHO) "   end subroutine init_version"; \\
 \t$(ECHO) "end module version" ) > version_.F90; \\
@@ -168,18 +164,18 @@ dep.png: dep.dot
 '''
 
 
-def striplist(l):
-    return([x.strip() for x in l])
+def striplist(ll):
+    return([x.strip() for x in ll])
 
 
-def strip_leading_path(l):
-    return([x.split('/')[-1] for x in l])
-#  return([x.rpartition('/')[2] for x in l])
+def strip_leading_path(ll):
+    return([x.split('/')[-1] for x in ll])
+#  return([x.rpartition('/')[2] for x in ll])
 
 
-def remove_suf(l):
-    return([x.split('.')[0] for x in l])
-#  return([x.partition('.')[0] for x in l])
+def remove_suf(ll):
+    return([x.split('.')[0] for x in ll])
+#  return([x.partition('.')[0] for x in ll])
 
 
 def pretty_format(fname, list, col):
@@ -230,8 +226,8 @@ def list_info(dir, indent):
     try:
         file = open(dir + "/info", "r")
         il = 0
-        for l in file:
-            tab.append([name if (il == 0) else "", l.strip()])
+        for ll in file:
+            tab.append([name if (il == 0) else "", ll.strip()])
             il += 1
         if (il == 0):
             tab.append([name, '\033[93m' + "empty info" + '\033[0m'])
@@ -402,17 +398,10 @@ def setup_piernik(data=None):
         print(our_defs)
 
     files = ['src/base/defines.c']
-    
+
     uses = [[]]
     incl = ['']
     module = dict()
-
-    if "COSM_RAY_ELECTRONS" in our_defs: # args[0] == 'mcrtest':
-        ratio_path="src/fluids/cosmicrays/"
-        allfiles.append(ratio_path + "p_ratios_lo.dat")
-        allfiles.append(ratio_path + "f_ratios_lo.dat")
-        allfiles.append(ratio_path + "p_ratios_up.dat")
-        allfiles.append(ratio_path + "f_ratios_up.dat")
 
     for f in f90files:  # exclude links that symbolise file locks
         if (not os.access(f, os.F_OK)):
@@ -500,6 +489,13 @@ def setup_piernik(data=None):
                 print("Possible duplicate link or a name clash :", f)
                 raise
 
+    if (options.hard_copy):
+        otdir = objdir + "/tests/"
+        os.mkdir(otdir)
+        ctdir = "compilers/tests/"
+        for f in os.listdir(ctdir):
+            shutil.copy(ctdir + f, otdir)
+
     if(options.param != 'problem.par'):
         os.symlink(options.param, objdir + '/' + 'problem.par')
 
@@ -513,13 +509,18 @@ def setup_piernik(data=None):
     stripped_files = strip_leading_path(files)
     stripped_files_v = strip_leading_path(files)
 
-    stripped_files.append("version.F90")   # adding version
-    incl.append('')
-    uses.append([])
-    module.setdefault('version', 'version')
-    known_external_modules = (
-        "hdf5", "h5lt", "mpi", "iso_c_binding", "iso_fortran_env", "fgsl",
-        "ifposix", "ifport", "ifcore")  # Ugly trick: these modules are detected by -D__INTEL_COMPILER
+    for f in ("version", "os_detect"):  # adding version.F90 and os_detect.F90, which are generated by the Makefile
+        stripped_files.append(f + ".F90")
+        incl.append('')
+        if f == "os_detect":
+            uses.append(["constants"])
+        else:
+            uses.append([])
+        module.setdefault(f, f)
+
+    known_external_modules = ["hdf5", "h5lt", "iso_c_binding", "iso_fortran_env", "fgsl",
+                              "ifposix", "ifport", "ifcore"]  # Ugly trick: these modules are detected by -D__INTEL_COMPILER
+    known_external_modules.append("mpi_f08" if "-DMPIF08" in cppflags.split() else "mpi")
 
     files_to_build = remove_suf(stripped_files)
 
@@ -538,19 +539,16 @@ def setup_piernik(data=None):
     if("PGPLOT" in our_defs):
         m.write("LIBS += -lpgplot\n")
     if("SHEAR" in our_defs or "MULTIGRID" in our_defs):
-        m.write("LIBS += $(shell pkg-config --libs fftw3)\n")
-    if("POISSON_FFT" in our_defs):
-        m.write("LIBS += $(shell pkg-config --libs fftw3 lapack)\n")
+        if ("NO_FFT" not in our_defs):
+            m.write("LIBS += $(shell pkg-config --libs fftw3)\n")
+        m.write("CPPFLAGS += $(shell pkg-config --libs fftw3 2> /dev/null || echo '-DNO_FFT')\n")
     if("PIERNIK_OPENCL" in our_defs):
         m.write("LIBS += $(shell pkg-config --libs fortrancl)\n")
         m.write("F90FLAGS += $(shell pkg-config --cflags fortrancl)\n")
-    if(options.laconic):
-        m.write("SILENT = 1\n\n")
-    else:
-        m.write("SILENT = 0\n\n")
-    m.write(head_block1)
-    m.write(
-        "\t@( $(ECHO) \"%s\"; \\" % ("./setup " + " ".join(all_args)))
+
+    m.write("SILENT = %d\n\n" % (1 if options.laconic else 0))
+    m.write(head_block1.replace("./compilers", "") if options.hard_copy else head_block1)
+    m.write("\t@( $(ECHO) \"%s\"; \\" % ("./setup " + " ".join(all_args)))
     m.write(head_block2)
 
     for i in range(0, len(files_to_build)):
@@ -667,15 +665,20 @@ def setup_piernik(data=None):
     try:
         os.makedirs(rundir)
     except OSError:
-        print('\033[93m' + "Found old run." + '\033[0m' +
-              " Making copy of old 'problem.par'.")
-        try:
-            if(os.path.isfile(rundir + 'problem.par')):
-                shutil.move(rundir + 'problem.par', rundir + 'problem.par.old')
-        except (IOError, OSError):
-            print('\033[91m' +
-                  "Problem with copying 'problem.par' to 'problem.par.old'." +
-                  '\033[0m')
+        if (not options.keep_par):
+            print('\033[93m' + "Found old run." + '\033[0m' +
+                  " Making copy of old 'problem.par'.")
+            try:
+                if(os.path.isfile(rundir + 'problem.par')):
+                    shutil.move(rundir + 'problem.par', rundir + 'problem.par.old')
+            except (IOError, OSError):
+                print('\033[91m' +
+                      "Problem with copying 'problem.par' to 'problem.par.old'." +
+                      '\033[0m')
+        else:
+            if (os.path.isfile(rundir + 'problem.par')):
+                print('\033[93m' + "Found old run." + '\033[0m' +
+                      " Preserving copy of old 'problem.par'.")
         try:
             if(os.path.isfile(rundir + 'piernik')):
                 os.remove(rundir + 'piernik')
@@ -690,26 +693,6 @@ def setup_piernik(data=None):
             print('\033[91m' +
                   "Problem with removing old 'piernik.def' from '%s'." %
                   rundir.rstrip('/') + '\033[0m')
-        
-    if "COSM_RAY_ELECTRONS" in our_defs: # added by mogrodnik, CRESP needs these, flagname might change
-        ratio_path="src/fluids/cosmicrays/"
-        for suf_nam in ["lo","up"]:
-            for pref_nam in ["p","f"]:
-                ratio_f_nam = str(pref_nam+'_ratios_'+suf_nam+'.dat')
-                try:
-                    if(os.path.isfile(rundir + ratio_f_nam)):
-                        print('\033[92m' + '('+args[0]+') ' + '\033[0m' +
-                        "Ratios file ("+ratio_f_nam+") already present in "+
-                        rundir.strip('/')+".")
-                    else:
-                        #shutil.copy(probdir + ratio_f_nam, rundir + ratio_f_nam)
-                        os.symlink("../../"+ratio_path + ratio_f_nam, rundir + ratio_f_nam)
-                        print('\033[92m' + '('+args[0]+') ' + '\033[0m' + "CRESP ratios ("
-                        +ratio_f_nam+") linked to "+'\033[92m'+rundir.strip('/')+".")
-                except (IOError):
-                    print ('\033[93m'+'('+args[0]+') '+ '\033[0m' +
-                    "Problem with copying "+ratio_f_nam+
-                    ". Piernik will compute it from scratch." )
 
     if (options.link_exe):
         try:
@@ -733,7 +716,8 @@ def setup_piernik(data=None):
                 fatal_problem = True
 
     try:
-        shutil.copy(objdir + "/" + options.param, rundir + 'problem.par')
+        if (not (options.keep_par and os.path.isfile(rundir + 'problem.par'))):
+            shutil.copy(objdir + "/" + options.param, rundir + 'problem.par')
     except IOError:
         print('\033[91m' + "Failed to copy 'problem.par' to '%s'." %
               rundir.rstrip('/') + '\033[0m')
@@ -769,63 +753,66 @@ def piernik_parse_args(data=None):
 autocompletion. Frequently used options (like --linkexe, --laconic or
 -c <configuration>) can be stored in .setuprc and .setuprc.${HOSTNAME} files.
 """
-    usage = "usage: %prog [problem_name|--last|--problems|--units|--help] [options ...]"
+    usage = "Usage: %prog [problem_name|--last|--problems|--units|--help] [options ...]"
     try:
         parser = OptionParser(usage=usage, epilog=epilog_help)
     except TypeError:
         parser = OptionParser(usage=usage)
 
     parser.add_option("-v", "--verbose", action="store_true", dest="verbose",
-                      default=False, help="""try to confuse the user with some
+                      default=False, help="""Try to confuse the user with some
 diagnostics ;-)""")
 
     parser.add_option("-q", "--laconic", action="store_true", dest="laconic",
-                      default=False, help="compress stdout from make process")
+                      default=False, help="Compress the stdout from make.")
 
     parser.add_option("--debug", action="store_true", dest="piernik_debug",
-                      default=False, help="Use debug set of compiler flags")
+                      default=False, help="Use debug set of compiler flags.")
 
     parser.add_option("-n", "--nocompile", action="store_true",
                       dest="nocompile", default=False, help='''Create object
-directory, check for circular dependencies, but do not compile or prepare run
-directory. In combination with --copy will prepare portable object directory.
+directory, check for circular dependencies, but do not compile.
+In combination with --copy will prepare portable object directory.
 ''')
 
     parser.add_option("--problems", dest="show_problems", action="store_true",
-                      help="print available problems and exit")
+                      help="Print available problems and exit.")
 
     parser.add_option("-u", "--units", dest="show_units", action="store_true",
-                      help="print available units and exit")
+                      help="Print available measurement units and exit.")
 
     parser.add_option("--last", dest="recycle_cmd", action="store_true",
-                      default=False, help="""call setup with last used options
-and arguments (require Pickles)""")
+                      default=False, help="""Call setup with last used options
+and arguments (require Pickles).""")
 
     parser.add_option("--copy", dest="hard_copy", action="store_true",
-                      help="hard-copy source files instead of linking them")
+                      help="Hard-copy source files instead of linking them.")
 
     parser.add_option("-l", "--linkexe", dest="link_exe", action="store_true",
-                      help="""do not copy obj/piernik to runs/<problem> but link
-it instead""")
+                      help="""Do not copy obj/piernik to runs/<problem> but link
+it instead.""")
 
     parser.add_option("-p", "--param", dest="param", metavar="FILE",
-                      help="use FILE instead problem.par",
+                      help="Use FILE instead of problem.par .",
                       default="problem.par")
 
     parser.add_option("-d", "--define", dest="cppflags", metavar="CPPFLAGS",
-                      action="append", help="""add precompiler directives, '-d
-DEF1,DEF2' is equivalent to '-d DEF1 -d DEF2' or '--define DEF1 -d DEF2'""")
+                      action="append", help="""Add precompiler directives, '-d
+DEF1,DEF2' is equivalent to '-d DEF1 -d DEF2' or '--define DEF1 -d DEF2'.""")
 
     parser.add_option("--f90flags", dest="f90flags", metavar="F90FLAGS",
-                      help="pass additional compiler flags to F90FLAGS")
+                      help="Pass additional compiler flags to F90FLAGS .")
 
     parser.add_option("-c", "--compiler", dest="compiler",
-                      default="default.in", help="""choose specified config from
-compilers directory""", metavar="FILE")
+                      default="default.in", help="""Choose specified config from
+compilers directory.""", metavar="FILE")
 
     parser.add_option("-o", "--obj", dest="objdir", metavar="POSTFIX",
-                      default='', help="""use obj_POSTFIX directory instead of obj/ and
-runs/<problem>_POSTFIX rather than runs/<problem>""")
+                      default='', help="""Use obj_POSTFIX directory instead of obj/ and
+runs/<problem>_POSTFIX rather than runs/<problem> .""")
+
+    parser.add_option("-k", "--keeppar", action="store_true", dest="keep_par",
+                      help="Do not override existing problem.par file with the default one.")
 
     if data is None:
         all_args = []

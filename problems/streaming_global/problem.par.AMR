@@ -17,7 +17,6 @@
  /
 
  $MPI_BLOCKS
-    AMR_bsize = 16, 16, 16
  /
 
  $UNITS
@@ -62,7 +61,6 @@
     use_smalld = .true.
     smalld = 5.e-7
     relax_time = 0.00001
-    integration_order = 2
     limiter= 'vanleer'
     cfr_smooth = 0.01
     geometry25D = .false.
@@ -124,6 +122,7 @@
  /
 
  $AMR
+    bsize = 16, 16, 16
     n_updamr = 2
     level_max = 2
 !    refine_points(1) = 1, 4.5, .001, 0.001

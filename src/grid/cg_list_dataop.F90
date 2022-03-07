@@ -26,19 +26,22 @@
 !
 #include "piernik.h"
 
-!> \brief This module contains grid container list and some methods to manipulate data contained in cg
+!>
+!! \brief This module contains grid container list methods to manipulate field data contained in cg.
+!! Non-field operations should be implemented in cg_list_misc_t.
+!<
 
 module cg_list_dataop
 
-   use cg_list, only: cg_list_T
+   use cg_list_misc, only: cg_list_misc_t
 
    implicit none
 
    private
-   public :: cg_list_dataop_T, ind_val, dirty_label, expanded_domain
+   public :: cg_list_dataop_t, ind_val, expanded_domain
 
    !> \brief Arbitrary list of grid containers
-   type, extends(cg_list_T) :: cg_list_dataop_T
+   type, extends(cg_list_misc_t) :: cg_list_dataop_t
    contains
 
       ! Misc
@@ -67,9 +70,8 @@ module cg_list_dataop
       generic,   public  :: reset_boundaries => zero_boundaries, dirty_mg_boundaries
       procedure, private :: zero_boundaries                   !< Clear boundary values
       procedure, private :: dirty_mg_boundaries               !< Set boundary values
-!> \todo merge lists
 
-   end type cg_list_dataop_T
+   end type cg_list_dataop_t
 
    !> \brief Index - value pairs for calling arithmetic on the grids with q_lin_comb
    type :: ind_val
@@ -77,10 +79,7 @@ module cg_list_dataop
       real    :: val  !< value for multiplication
    end type ind_val
 
-   integer, parameter    :: dl_len = 64 !< length of label buffer
-   character(len=dl_len) :: dirty_label !< buffer for label for check_dirty subroutine
-
-   type(cg_list_dataop_T):: expanded_domain !< grid pieces that were created in the area, where computational domain was recently expanded
+   type(cg_list_dataop_t):: expanded_domain !< grid pieces that were created in the area, where computational domain was recently expanded
 
 contains
 
@@ -91,19 +90,25 @@ contains
 !<
    subroutine get_extremum(this, ind, minmax, prop, dir)
 
-      use cg_list,     only: cg_list_element
-      use constants,   only: MINL, MAXL, I_ZERO, I_ONE, ndims, xdim, ydim, zdim, big_float, LO
-      use dataio_pub,  only: msg, warn, die
-      use domain,      only: dom
-      use grid_cont,   only: grid_container
-      use mpi,         only: MPI_DOUBLE_PRECISION, MPI_INTEGER, MPI_STATUS_IGNORE, MPI_2DOUBLE_PRECISION, MPI_MINLOC, MPI_MAXLOC, MPI_IN_PLACE
-      use mpisetup,    only: comm, mpi_err, master, proc, FIRST
+      use cg_cost_data, only: I_OTHER
+      use cg_list,      only: cg_list_element
+      use constants,    only: MINL, MAXL, I_ZERO, I_ONE, ndims, xdim, ydim, zdim, big_float, LO
+      use dataio_pub,   only: msg, warn, die
+      use domain,       only: dom
+      use grid_cont,    only: grid_container
+      use MPIF,         only: MPI_DOUBLE_PRECISION, MPI_INTEGER, MPI_2DOUBLE_PRECISION, &
+           &                  MPI_STATUS_IGNORE, MPI_COMM_WORLD, MPI_MINLOC, MPI_MAXLOC, MPI_IN_PLACE
+      use MPIFUN,       only: MPI_Allreduce, MPI_Send, MPI_Recv
+      use mpisetup,     only: err_mpi, master, proc, FIRST
 !      use named_array_list, only: qna
-      use types,       only: value
+      use types,        only: value
+#ifdef MPIF08
+      use MPIF,         only: MPI_Op
+#endif /* MPIF08 */
 
       implicit none
 
-      class(cg_list_dataop_T),   intent(in)    :: this    !< object invoking type-bound procedure
+      class(cg_list_dataop_t),   intent(in)    :: this    !< object invoking type-bound procedure
       integer(kind=4),           intent(in)    :: ind     !< Index in cg%q(:)
       integer(kind=4),           intent(in)    :: minmax  !< minimum or maximum ?
       type(value),               intent(out)   :: prop    !< precise location of the extremum to be found
@@ -113,8 +118,12 @@ contains
       type(grid_container),   pointer          :: cg_x
       type(cg_list_element),  pointer          :: cgl
       real, dimension(:,:,:), pointer          :: tab
-      integer,                       parameter :: tag1 = 11, tag2 = tag1 + 1, tag3 = tag2 + 1
-      integer, dimension(MINL:MAXL), parameter :: op = [ MPI_MINLOC, MPI_MAXLOC ]
+      integer(kind=4),               parameter :: tag1 = 11, tag2 = tag1 + 1, tag3 = tag2 + 1
+#ifdef MPIF08
+      type(MPI_Op) :: op
+#else /* !MPIF08 */
+      integer(kind=4) :: op
+#endif /* !MPIF08 */
       enum, bind(C)
          enumerator :: I_V, I_P !< value and proc
       end enum
@@ -126,8 +135,10 @@ contains
       select case (minmax)
          case (MINL)
             prop%val = huge(1.)
+            op = MPI_MINLOC
          case (MAXL)
             prop%val = -huge(1.)
+            op = MPI_MAXLOC
          case default
             prop%val = 0.0   !! set dummy value
             write(msg,*) "[cg_list_dataop:get_extremum]: I don't know what to do with minmax = ", minmax
@@ -139,6 +150,7 @@ contains
          cgl => this%first
          if (ind > ubound(cgl%cg%q(:), dim=1) .or. ind < lbound(cgl%cg%q(:), dim=1)) call die("[cg_list_dataop:get_extremum] Wrong index")
          do while (associated(cgl))
+            call cgl%cg%costs%start
 
             tab => cgl%cg%q(ind)%span(cgl%cg%ijkse)
             select case (minmax)
@@ -146,7 +158,7 @@ contains
                   if (minval(tab) < prop%val) then
                      prop%val = minval(tab)
                      prop%loc = minloc(tab) + cgl%cg%ijkse(:, LO) - 1
-                     ! it isn't too much intiutive that minloc and maxloc return values as the array indexing start from 1, but here tab does so anyway
+                     ! it isn't too much intuitive that minloc and maxloc return values as the array indexing start from 1, but here tab does so anyway
                      cg_x => cgl%cg
                   endif
                case (MAXL)
@@ -156,6 +168,8 @@ contains
                      cg_x => cgl%cg
                   endif
             end select
+
+            call cgl%cg%costs%stop(I_OTHER)
             cgl => cgl%nxt
          enddo
          v_red(I_V) = prop%val;
@@ -165,10 +179,10 @@ contains
 
       v_red(I_P) = real(proc)
 
-      call MPI_Allreduce(MPI_IN_PLACE, v_red, I_ONE, MPI_2DOUBLE_PRECISION, op(minmax), comm, mpi_err)
+      call MPI_Allreduce(MPI_IN_PLACE, v_red, I_ONE, MPI_2DOUBLE_PRECISION, op, MPI_COMM_WORLD, err_mpi)
 
       prop%val = v_red(I_V)
-      prop%proc = int(v_red(I_P))
+      prop%proc = int(v_red(I_P), kind=4)
 
       if (proc == prop%proc) then
          where (.not. dom%has_dir(:)) prop%coords(:) = 0.
@@ -191,14 +205,14 @@ contains
 
       if (prop%proc /= 0) then
          if (proc == prop%proc) then ! slave
-            call MPI_Send (prop%loc,    ndims, MPI_INTEGER,          FIRST, tag1, comm, mpi_err)
-            call MPI_Send (prop%coords, ndims, MPI_DOUBLE_PRECISION, FIRST, tag2, comm, mpi_err)
-            if (present(dir)) call MPI_Send (prop%assoc, I_ONE, MPI_DOUBLE_PRECISION, FIRST, tag3, comm, mpi_err)
+            call MPI_Send (prop%loc,    ndims, MPI_INTEGER,          FIRST, tag1, MPI_COMM_WORLD, err_mpi)
+            call MPI_Send (prop%coords, ndims, MPI_DOUBLE_PRECISION, FIRST, tag2, MPI_COMM_WORLD, err_mpi)
+            if (present(dir)) call MPI_Send (prop%assoc, I_ONE, MPI_DOUBLE_PRECISION, FIRST, tag3, MPI_COMM_WORLD, err_mpi)
          endif
          if (master) then
-            call MPI_Recv (prop%loc,    ndims, MPI_INTEGER,          prop%proc, tag1, comm, MPI_STATUS_IGNORE, mpi_err)
-            call MPI_Recv (prop%coords, ndims, MPI_DOUBLE_PRECISION, prop%proc, tag2, comm, MPI_STATUS_IGNORE, mpi_err)
-            if (present(dir)) call MPI_Recv (prop%assoc, I_ONE, MPI_DOUBLE_PRECISION, prop%proc, tag3, comm, MPI_STATUS_IGNORE, mpi_err)
+            call MPI_Recv (prop%loc,    ndims, MPI_INTEGER,          prop%proc, tag1, MPI_COMM_WORLD, MPI_STATUS_IGNORE, err_mpi)
+            call MPI_Recv (prop%coords, ndims, MPI_DOUBLE_PRECISION, prop%proc, tag2, MPI_COMM_WORLD, MPI_STATUS_IGNORE, err_mpi)
+            if (present(dir)) call MPI_Recv (prop%assoc, I_ONE, MPI_DOUBLE_PRECISION, prop%proc, tag3, MPI_COMM_WORLD, MPI_STATUS_IGNORE, err_mpi)
          endif
       endif
 
@@ -208,11 +222,12 @@ contains
 
    subroutine set_q_value(this, ind, val)
 
-      use cg_list, only: cg_list_element
+      use cg_cost_data, only: I_OTHER
+      use cg_list,      only: cg_list_element
 
       implicit none
 
-      class(cg_list_dataop_T), intent(in) :: this    !< object invoking type-bound procedure
+      class(cg_list_dataop_t), intent(in) :: this    !< object invoking type-bound procedure
       integer(kind=4),         intent(in) :: ind     !< Index in cg%q(:)
       real,                    intent(in) :: val     !< value to put
 
@@ -220,7 +235,11 @@ contains
 
       cgl => this%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          cgl%cg%q(ind)%arr(:, :, :) = val
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
 
@@ -234,11 +253,12 @@ contains
 
    subroutine q_copy(this, i_from, i_to)
 
-      use cg_list, only: cg_list_element
+      use cg_cost_data, only: I_OTHER
+      use cg_list,      only: cg_list_element
 
       implicit none
 
-      class(cg_list_dataop_T), intent(in) :: this    !< object invoking type-bound procedure
+      class(cg_list_dataop_t), intent(in) :: this    !< object invoking type-bound procedure
       integer(kind=4),         intent(in) :: i_from  !< Index of source in cg%q(:)
       integer(kind=4),         intent(in) :: i_to    !< Index of destination in cg%q(:)
 
@@ -246,7 +266,11 @@ contains
 
       cgl => this%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          cgl%cg%q(i_to)%arr(:, :, :) = cgl%cg%q(i_from)%arr(:, :, :)
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
 
@@ -256,22 +280,32 @@ contains
 
    subroutine qw_copy(this, q_from, w_to, w_ind)
 
-      use cg_list, only: cg_list_element
+      use cg_cost_data, only: I_OTHER
+      use cg_list,      only: cg_list_element
+      use constants,    only: PPP_AMR
+      use ppp,          only: ppp_main
 
       implicit none
 
-      class(cg_list_dataop_T), intent(in) :: this    !< object invoking type-bound procedure
+      class(cg_list_dataop_t), intent(in) :: this    !< object invoking type-bound procedure
       integer(kind=4),         intent(in) :: q_from  !< Index of source in cg%q(:)
       integer(kind=4),         intent(in) :: w_to    !< Index of destination in cg%w(:)
       integer(kind=4),         intent(in) :: w_ind   !< First index of destination in cg%w(w_to)%arr(:,:,:,:)
 
       type(cg_list_element), pointer      :: cgl
+      character(len=*), parameter :: qwc_label = "qw_copy"
 
+      call ppp_main%start(qwc_label, PPP_AMR)
       cgl => this%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          cgl%cg%w(w_to)%arr(w_ind, :, :, :) = cgl%cg%q(q_from)%arr(:, :, :)
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
+      call ppp_main%stop(qwc_label, PPP_AMR)
 
    end subroutine qw_copy
 
@@ -279,22 +313,32 @@ contains
 
    subroutine wq_copy(this, w_from, w_ind, q_to)
 
-      use cg_list, only: cg_list_element
+      use cg_cost_data, only: I_OTHER
+      use cg_list,      only: cg_list_element
+      use constants,    only: PPP_AMR
+      use ppp,          only: ppp_main
 
       implicit none
 
-      class(cg_list_dataop_T), intent(in) :: this    !< object invoking type-bound procedure
+      class(cg_list_dataop_t), intent(in) :: this    !< object invoking type-bound procedure
       integer(kind=4),         intent(in) :: w_from  !< Index of source in cg%w(:)
       integer(kind=4),         intent(in) :: w_ind   !< First index of source in cg%w(w_from)%arr(:,:,:,:)
       integer(kind=4),         intent(in) :: q_to    !< Index of destination in cg%q(:)
 
       type(cg_list_element), pointer      :: cgl
+      character(len=*), parameter :: wqc_label = "wq_copy"
 
+      call ppp_main%start(wqc_label, PPP_AMR)
       cgl => this%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          cgl%cg%q(q_to)%arr(:, :, :) = cgl%cg%w(w_from)%arr(w_ind, :, :, :)
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
+      call ppp_main%stop(wqc_label, PPP_AMR)
 
    end subroutine wq_copy
 
@@ -302,11 +346,12 @@ contains
 
    subroutine q_add(this, i_add, i_to)
 
-      use cg_list, only: cg_list_element
+      use cg_cost_data, only: I_OTHER
+      use cg_list,      only: cg_list_element
 
       implicit none
 
-      class(cg_list_dataop_T), intent(in) :: this    !< object invoking type-bound procedure
+      class(cg_list_dataop_t), intent(in) :: this    !< object invoking type-bound procedure
       integer(kind=4),         intent(in) :: i_add   !< Index of field to be added in cg%q(:)
       integer(kind=4),         intent(in) :: i_to    !< Index of field to be modified in cg%q(:)
 
@@ -315,7 +360,11 @@ contains
 
       cgl => this%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          cgl%cg%q(i_to)%arr(:, :, :) = cgl%cg%q(i_to)%arr(:, :, :) + cgl%cg%q(i_add)%arr(:, :, :)
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
 
@@ -325,11 +374,12 @@ contains
 
    subroutine q_add_val(this, i_add, val)
 
-      use cg_list, only: cg_list_element
+      use cg_cost_data, only: I_OTHER
+      use cg_list,      only: cg_list_element
 
       implicit none
 
-      class(cg_list_dataop_T), intent(in) :: this    !< object invoking type-bound procedure
+      class(cg_list_dataop_t), intent(in) :: this    !< object invoking type-bound procedure
       integer(kind=4),         intent(in) :: i_add   !< Index of field to be modified in cg%q(:)
       real,                    intent(in) :: val     !< Value to be added
 
@@ -338,7 +388,11 @@ contains
 
       cgl => this%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          cgl%cg%q(i_add)%arr(:, :, :) = cgl%cg%q(i_add)%arr(:, :, :) + val
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
 
@@ -354,12 +408,13 @@ contains
 
    subroutine q_lin_comb(this, iv, ind)
 
-      use cg_list,    only: cg_list_element
-      use dataio_pub, only: die, warn
+      use cg_cost_data, only: I_OTHER
+      use cg_list,      only: cg_list_element
+      use dataio_pub,   only: die, warn
 
       implicit none
 
-      class(cg_list_dataop_T),     intent(in) :: this    !< object invoking type-bound procedure
+      class(cg_list_dataop_t),     intent(in) :: this    !< object invoking type-bound procedure
       type(ind_val), dimension(:), intent(in) :: iv      !< list of (coefficient, index) pairs
       integer(kind=4),             intent(in) :: ind     !< Index in cg%q(:)
 
@@ -387,14 +442,18 @@ contains
 
       cgl => this%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          cgl%cg%q(ind)%arr(:, :, :) = iv_safe(lbound(iv_safe, dim=1))%val * cgl%cg%q(iv_safe(lbound(iv_safe, dim=1))%ind)%arr(:, :, :)
          do i = lbound(iv_safe, dim=1)+1, ubound(iv_safe, dim=1)
             cgl%cg%q(ind)%arr(:, :, :) = cgl%cg%q(ind)%arr(:, :, :) + iv_safe(i)%val * cgl%cg%q(iv_safe(i)%ind)%arr(:, :, :)
          enddo
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
 
-    end subroutine q_lin_comb
+   end subroutine q_lin_comb
 
 !>
 !! \brief Compute the average value over a list and subtract it
@@ -404,6 +463,7 @@ contains
 
    subroutine subtract_average(this, iv)
 
+      use cg_cost_data,     only: I_OTHER
       use cg_list,          only: cg_list_element
       use constants,        only: GEO_XYZ, GEO_RPZ, pSUM
       use dataio_pub,       only: die
@@ -418,7 +478,7 @@ contains
 
       implicit none
 
-      class(cg_list_dataop_T), intent(in) :: this !< list for which we want to subtract its average from
+      class(cg_list_dataop_t), intent(in) :: this !< list for which we want to subtract its average from
       integer(kind=4),         intent(in) :: iv   !< index of variable in cg%q(:) which we want to have zero average
 
       real                                :: avg, vol
@@ -431,6 +491,8 @@ contains
       cgl => this%first
       do while (associated(cgl))
          cg => cgl%cg
+         call cg%costs%start
+
          select case (dom%geometry_type)
             case (GEO_XYZ)
                avg = avg + sum(cg%q(iv)%span(cg%ijkse), mask=cg%leafmap) * cg%dvol
@@ -443,6 +505,8 @@ contains
             case default
                call die("[cg_list_dataop:subtract_average] Unsupported geometry.")
          end select
+
+         call cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
       call piernik_MPI_Allreduce(avg, pSUM)
@@ -470,16 +534,17 @@ contains
 
    real function norm_sq(this, iv, nomask) result (norm)
 
-      use cg_list,    only: cg_list_element
-      use constants,  only: GEO_XYZ, GEO_RPZ, pSUM
-      use dataio_pub, only: die
-      use domain,     only: dom
-      use grid_cont,  only: grid_container
-      use mpisetup,   only: piernik_MPI_Allreduce
+      use cg_cost_data, only: I_OTHER
+      use cg_list,      only: cg_list_element
+      use constants,    only: GEO_XYZ, GEO_RPZ, pSUM
+      use dataio_pub,   only: die
+      use domain,       only: dom
+      use grid_cont,    only: grid_container
+      use mpisetup,     only: piernik_MPI_Allreduce
 
       implicit none
 
-      class(cg_list_dataop_T), intent(in) :: this   !< list for which we want to calculate the L2 norm
+      class(cg_list_dataop_t), intent(in) :: this   !< list for which we want to calculate the L2 norm
       integer(kind=4),         intent(in) :: iv     !< index of variable in cg%q(:) for which we want to find the norm
       logical, optional,       intent(in) :: nomask !< Treat the list as a complete level and do not use leafmask
 
@@ -497,6 +562,8 @@ contains
       cgl => this%first
       do while (associated(cgl))
          cg => cgl%cg
+         call cg%costs%start
+
          select case (dom%geometry_type)
             case (GEO_XYZ)
                if (mask) then
@@ -515,6 +582,8 @@ contains
             case default
                call die("[cg_list_dataop:norm_sq] Unsupported geometry.")
          end select
+
+         call cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
       call piernik_MPI_Allreduce(norm, pSUM)
@@ -526,13 +595,14 @@ contains
 
    real function scalar_product(this, var1, var2)
 
-      use cg_list,    only: cg_list_element
-      use constants,  only: pSUM
-      use mpisetup,   only: piernik_MPI_Allreduce
+      use cg_cost_data, only: I_OTHER
+      use cg_list,      only: cg_list_element
+      use constants,    only: pSUM
+      use mpisetup,     only: piernik_MPI_Allreduce
 
       implicit none
 
-      class(cg_list_dataop_T), intent(in) :: this   !< list for which we want to calculate the scalar product
+      class(cg_list_dataop_t), intent(in) :: this   !< list for which we want to calculate the scalar product
       integer(kind=4),         intent(in) :: var1   !< first vector
       integer(kind=4),         intent(in) :: var2   !< second vector
 
@@ -542,8 +612,12 @@ contains
 
       cgl => this%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          scalar_product = scalar_product + sum(cgl%cg%q(var1)%span(cgl%cg%ijkse)*cgl%cg%q(var2)%span(cgl%cg%ijkse), mask=cgl%cg%leafmap)
          ! do we need any weighting by volume of elements?
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
       call piernik_MPI_Allreduce(scalar_product, pSUM)
@@ -554,11 +628,12 @@ contains
 
    subroutine mul_by_r(this, ind)
 
-      use cg_list,   only: cg_list_element
+      use cg_cost_data, only: I_OTHER
+      use cg_list,      only: cg_list_element
 
       implicit none
 
-      class(cg_list_dataop_T), intent(in) :: this  !< object invoking type-bound procedure
+      class(cg_list_dataop_t), intent(in) :: this  !< object invoking type-bound procedure
       integer(kind=4),         intent(in) :: ind   !< index of variable in cg%q(:) which we want to pollute
 
       type(cg_list_element), pointer :: cgl
@@ -566,9 +641,13 @@ contains
 
       cgl => this%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          do i = lbound(cgl%cg%q(ind)%arr, dim=1), ubound(cgl%cg%q(ind)%arr, dim=1)
             cgl%cg%q(ind)%arr(i, :, :) = cgl%cg%q(ind)%arr(i, :, :) * cgl%cg%x(i)
          enddo
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
 
@@ -578,14 +657,15 @@ contains
 
    subroutine div_by_r(this, ind)
 
-      use cg_list,    only: cg_list_element
-      use constants,  only: zero
-      use dataio_pub, only: die
-      use func,       only: operator(.equals.)
+      use cg_cost_data, only: I_OTHER
+      use cg_list,      only: cg_list_element
+      use constants,    only: zero
+      use dataio_pub,   only: die
+      use func,         only: operator(.equals.)
 
       implicit none
 
-      class(cg_list_dataop_T), intent(in) :: this  !< object invoking type-bound procedure
+      class(cg_list_dataop_t), intent(in) :: this  !< object invoking type-bound procedure
       integer(kind=4),         intent(in) :: ind   !< index of variable in cg%q(:) which we want to pollute
 
       type(cg_list_element), pointer :: cgl
@@ -593,10 +673,14 @@ contains
 
       cgl => this%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          do i = lbound(cgl%cg%q(ind)%arr, dim=1), ubound(cgl%cg%q(ind)%arr, dim=1)
             if (cgl%cg%x(i).equals.zero) call die("[cg_list_dataop:div_by_r] cannot divide by radius == 0")
             cgl%cg%q(ind)%arr(i, :, :) = cgl%cg%q(ind)%arr(i, :, :) / cgl%cg%x(i)
          enddo
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
 
@@ -608,7 +692,7 @@ contains
 
       implicit none
 
-      class(cg_list_dataop_T), intent(inout) :: this  !< list for which clear the boundary values (typically a single level)
+      class(cg_list_dataop_t), intent(inout) :: this  !< list for which clear the boundary values (typically a single level)
 
       call this%dirty_mg_boundaries(0.)
 
@@ -618,20 +702,25 @@ contains
 
    subroutine dirty_mg_boundaries(this, value)
 
-      use cg_list, only: cg_list_element
+      use cg_cost_data, only: I_OTHER
+      use cg_list,      only: cg_list_element
 
       implicit none
 
-      class(cg_list_dataop_T), intent(inout) :: this   !< list for which clear the boundary values (typically a single level)
+      class(cg_list_dataop_t), intent(inout) :: this   !< list for which clear the boundary values (typically a single level)
       real,                    intent(in)    :: value  !< value to pollute
 
       type(cg_list_element), pointer         :: cgl
 
       cgl => this%first
       do while (associated(cgl))
+         call cgl%cg%costs%start
+
          cgl%cg%mg%bnd_x(:,:,:) = value
          cgl%cg%mg%bnd_y(:,:,:) = value
          cgl%cg%mg%bnd_z(:,:,:) = value
+
+         call cgl%cg%costs%stop(I_OTHER)
          cgl => cgl%nxt
       enddo
 
@@ -644,19 +733,25 @@ contains
 !! the insane value should pollute the solution in an easily visible way.
 !<
 
-   subroutine set_dirty(this, iv)
+   subroutine set_dirty(this, iv, val)
 
-      use constants, only: dirtyH
+      use constants, only: dirtyH1
       use global,    only: dirty_debug
 
       implicit none
 
-      class(cg_list_dataop_T), intent(inout) :: this !< list for which we want to apply pollution
-      integer(kind=4),         intent(in)    :: iv   !< index of variable in cg%q(:) which we want to pollute
+      class(cg_list_dataop_t), intent(inout) :: this  !< list for which we want to apply pollution
+      integer(kind=4),         intent(in)    :: iv    !< index of variable in cg%q(:) which we want to pollute
+      real, optional,          intent(in)    :: val   !< use value to pollute the data, if provided, or dirtyH otherwise
+
+      real :: v
 
       if (.not. dirty_debug) return
 
-      call this%set_q_value(iv, dirtyH)
+      v = 1.11111111111111*dirtyH1
+      if (present(val)) v = val
+
+      call this%set_q_value(iv, v)
 
    end subroutine set_dirty
 
@@ -668,7 +763,7 @@ contains
 
       implicit none
 
-      class(cg_list_dataop_T),   intent(inout) :: this      !< level which we are checking
+      class(cg_list_dataop_t),   intent(inout) :: this      !< level which we are checking
       character(len=*),          intent(in)    :: label     !< label to indicate the origin of call
       integer(kind=4), optional, intent(in)    :: expand    !< also check guardcells
       logical, optional,         intent(in)    :: warn_only !< do not die when dirty value has been spotted
@@ -701,14 +796,14 @@ contains
 
       implicit none
 
-      class(cg_list_dataop_T),   intent(inout) :: this      !< level which we are checking
+      class(cg_list_dataop_t),   intent(inout) :: this      !< level which we are checking
       integer(kind=4),           intent(in)    :: iv        !< index of variable in cg%q(:) which we want to check
       character(len=*),          intent(in)    :: label     !< label to indicate the origin of call
       integer(kind=4), optional, intent(in)    :: expand    !< also check guardcells
       integer(kind=4), optional, intent(in)    :: subfield  !< when present use it to check cg%w array
       logical, optional,         intent(in)    :: warn_only !< do not die when dirty value has been spotted
 
-      integer                                  :: i, j, k, ng, cnt
+      integer                                  :: i, j, k, ng, cnt, cnt_tot
       type(cg_list_element), pointer           :: cgl
 
       if (.not. dirty_debug .or. no_dirty_checks) return
@@ -723,6 +818,7 @@ contains
       ng = 0
       if (present(expand)) ng = min(dom%nb, expand)
 
+      cnt_tot = 0
       cnt = 0
       cgl => this%first
       do while (associated(cgl))
@@ -730,6 +826,7 @@ contains
             do j = cgl%cg%js-ng*dom%D_y, cgl%cg%je+ng*dom%D_y
                do i = cgl%cg%is-ng*dom%D_x, cgl%cg%ie+ng*dom%D_x
                   ! if (count([i<cgl%cg%is .or. i>cgl%cg%ie, j<cgl%cg%js .or. j>cgl%cg%je, k<cgl%cg%ks .or. k>cgl%cg%ke]) <=1) then ! excludes corners
+                  cnt_tot = cnt_tot + 1
                   if (present(subfield)) then
                      if (associated(cgl%cg%w(iv)%arr)) then
                         if (abs(cgl%cg%w(iv)%arr(subfield, i, j, k)) > dirtyL) then
@@ -768,7 +865,7 @@ contains
 
       call piernik_MPI_Allreduce(cnt, pSUM)
       if (cnt /= 0 .and. master) then
-         write(msg,'(3a,i8,a)')"[cg_list_dataop:check_dirty] @'",trim(label),"' Found ", cnt, " dirty value(s) in '"
+         write(msg,'(3a,2(i8,a))')"[cg_list_dataop:check_dirty] @'",trim(label),"' Found ", cnt, " dirty value(s) out of ", cnt_tot, " cells in '"
          if (present(subfield)) then
             write(msg(len_trim(msg)+1:), '(2a,i3,a)') trim(wna%lst(iv)%name),"(",subfield,")'"
          else
@@ -792,13 +889,13 @@ contains
    subroutine check_for_dirt(this)
 
       use cg_list,          only: cg_list_element
-      use constants,        only: big_float
+      use constants,        only: dirtyH1c
       use dataio_pub,       only: warn, msg
       use named_array_list, only: qna, wna
 
       implicit none
 
-      class(cg_list_dataop_T), intent(in) :: this          !< object invoking type-bound procedure
+      class(cg_list_dataop_t), intent(in) :: this          !< object invoking type-bound procedure
 
       integer                             :: i
       type(cg_list_element), pointer      :: cgl
@@ -808,14 +905,14 @@ contains
          do i = lbound(qna%lst(:), dim=1), ubound(qna%lst(:), dim=1)
             if (cgl%cg%q(i)%check()) then
                write(msg,'(3a,I12,a)') "[cg_list_dataop:check_for_dirt] Array ", trim(qna%lst(i)%name), " has ", &
-                  & count(cgl%cg%q(i)%arr >= big_float), " wrong values."
+                  & count(cgl%cg%q(i)%arr >= dirtyH1c), " wrong values."
                call warn(msg)
             endif
          enddo
          do i = lbound(wna%lst(:), dim=1), ubound(wna%lst(:), dim=1)
             if (cgl%cg%w(i)%check()) then
                write(msg,'(3a,I12,a)') "[cg_list_dataop:check_for_dirt] Array ", trim(wna%lst(i)%name), " has ", &
-                  & count(cgl%cg%w(i)%arr >= big_float), " wrong values."
+                  & count(cgl%cg%w(i)%arr >= dirtyH1c), " wrong values."
                call warn(msg)
             endif
          enddo
@@ -825,7 +922,7 @@ contains
    end subroutine check_for_dirt
 
 !>
-!! \brief Cut out a cross in the middle of the grid block and move the data to shov what is stored in corners and partially in edges and faces as well.
+!! \brief Cut out a cross in the middle of the grid block and move the data to show what is stored in corners and partially in edges and faces as well.
 !! Put the result in cg%wa. Useful for debugging boundaries
 !<
 
@@ -837,7 +934,7 @@ contains
 
       implicit none
 
-      class(cg_list_dataop_T), intent(in) :: this  !< object invoking type-bound procedure
+      class(cg_list_dataop_t), intent(in) :: this  !< object invoking type-bound procedure
       integer(kind=4),         intent(in) :: ind   !< index of variable in cg%q(:) which we want to pollute
 
       type(cg_list_element), pointer :: cgl
