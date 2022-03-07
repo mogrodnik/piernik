@@ -121,13 +121,13 @@ contains
       real, dimension(1:2), optional, intent(inout) :: p_out
       integer(kind=4), optional,      intent(in)    :: substeps
 
-      logical                                       :: solve_fail_lo, solve_fail_up, empty_cell
+      logical                                       :: empty_cell
+      logical, dimension(LO:HI)                     :: unsolved_cutoff
       integer                                       :: i_sub, n_substep
 
       e = zero; n = zero; edt = zero; ndt = zero
-      solve_fail_lo = .false.
-      solve_fail_up = .false.
-      empty_cell    = .false.
+      unsolved_cutoff(:)  = .false.
+      empty_cell          = .false.
       cfl_cresp_violation = .false.
 
       approx_p = e_small_approx_p
@@ -179,14 +179,14 @@ contains
 
       if (approx_p(HI) > 0) then
          if (i_cut(HI) > 1) then
-            call get_fqp_cutoff(HI, solve_fail_up)
+            call get_fqp_cutoff(HI, unsolved_cutoff(HI))
          else                                                  !< spectrum cutoff beyond the fixed momentum grid
             p_cut(HI)     = p_fix(i_cut(HI))
             p(i_cut(HI))  = p_fix(i_cut(HI))
-            solve_fail_up = .false.
+            unsolved_cutoff(HI) = .false.
          endif
 
-         if (solve_fail_up) then                               !< exit_code support
+         if (unsolved_cutoff(HI)) then
             if (i_cut(HI) < ncre) then
                if (allow_unnatural_transfer) call manually_deactivate_bin_via_transfer(i_cut(HI), -I_ONE, n, e)
                call decr_vec(active_bins, num_active_bins)
@@ -207,14 +207,14 @@ contains
 
       if (approx_p(LO) > 0) then
          if (i_cut(LO) + 1 /= ncre) then
-            call get_fqp_cutoff(LO, solve_fail_lo)
+            call get_fqp_cutoff(LO, unsolved_cutoff(LO))
          else                                                  !< spectrum cutoff beyond the fixed momentum grid
             p_cut(LO)     = p_fix(i_cut(LO))
             p(i_cut(LO))  = p_cut(LO)
-            solve_fail_lo = .false.
+            unsolved_cutoff(LO) = .false.
          endif
 
-         if (solve_fail_lo) then                               !< exit_code support
+         if (unsolved_cutoff(LO)) then
             if (i_cut(LO) > 0) then
                if (allow_unnatural_transfer)  call manually_deactivate_bin_via_transfer(i_cut(LO) + I_ONE, I_ONE, n, e)
                call decr_vec(active_bins, 1)
@@ -243,7 +243,7 @@ contains
 ! Compute momentum changes in after time period [t,t+dt]
          call cresp_update_bin_index(sptab%ub*dt, sptab%ud*dt, p_cut, p_cut_next, cfl_cresp_violation)
 
-         if (cfl_cresp_violation) then !< cresp_disallow_negatives is not used here, as potential negatives do not appear in transfer of n,e but in p
+         if (cfl_cresp_violation) then          !< cresp_disallow_negatives is not used here, as potential negatives do not appear in transfer of n,e but in p
             approx_p = e_small_approx_p         !< restore approximation after momenta computed
             call deallocate_active_arrays
 #ifdef CRESP_VERBOSED
@@ -318,7 +318,7 @@ contains
 
 #ifdef CRESP_VERBOSED
       write (msg, "(A)") "[cresp_crspectrum:cresp_update_cell] :"               ; call printinfo(msg)
-      write (msg, "(A,2L2)") "[cresp_crspectrum:cresp_update_cell] solve_fail_lo, solve_fail_up:",solve_fail_lo, solve_fail_up   ; call printinfo(msg)
+      write (msg, "(A,2L2)") "[cresp_crspectrum:cresp_update_cell] unsolved_cutoff(LO:HI) :", unsolved_cutoff(LO:HI) ; call printinfo(msg)
       write (msg, '(A5, 50E18.9)') "p_fix", p_fix      ; call printinfo(msg)
       write (msg, '(A5, 50E18.9)') "p_act", p          ; call printinfo(msg)
       write (msg, '(A5, 50E18.9)') "p_nex", p_next     ; call printinfo(msg)
