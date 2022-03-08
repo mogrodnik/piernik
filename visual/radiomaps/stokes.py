@@ -83,8 +83,8 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
          else:
             for i3 in range(n3):
                #elfq = electrons.crenpp(nu_s, ncre, B_perp[i3], Ecre[:,i3])            # DEPRECATED
-               elfq = electrons.crenppfq(i_nl, ncre, B_perp[i3], Ecre[:,i3], Ncre[:,i3])  # "0" stands for nu index, for optimization
-               I[i3] = np.sqrt(nu_s[i_nl]*B_perp[i3]) * elfq
+               crsn  = electrons.crenppfq(i_nl, ncre, B_perp[i3], Ecre[:,i3], Ncre[:,i3])  # "0" stands for nu index, for optimization
+               I[i3] = np.sqrt(nu_s[i_nl]*B_perp[i3]) * crsn * ds[i3]  # Can be derived from Longair's "High Energy Astrophysics", p. 212, eqn 8.78 when not expanding N(E) term
 
       if stg.print_PI or stg.print_SI or stg.print_vec:
          # degree of polarization of synchrotron radiation emitted in a single cell
