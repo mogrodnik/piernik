@@ -37,7 +37,7 @@ def cli_params(argv):
    # The function serves for reading and interpretation of the comand line input parameters
    try:
 
-      opts,args=getopt.getopt(argv,"adhf:i:k:l:m:n:R:cpPrtSuvxyz",["dump","help","file","convolve","contours","lin=","log","spectral","suffix=","yt=","tz=","pz=","iz=","rz=","pr=","vp=","cp="])
+      opts,args=getopt.getopt(argv,"adhf:i:k:l:m:n:R:cpPrtSuvxyz",["dump","help","file=","convolve","contours","lin=","log","spectral","suffix=","yt=","tz=","pz=","iz=","rz=","pr=","vp=","cp="])
       #print (opts,"op",args,"arg")
    except getopt.GetoptError:
       print("Error: unknown parameter")
