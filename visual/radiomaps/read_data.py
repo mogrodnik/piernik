@@ -216,9 +216,14 @@ def data_h5(plik,ax_set,wave_data):
          Bq[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g[bset[1]][:,:,:].swapaxes(0,2) * stg.B_code_factor
          Bn[ off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] = -h5g[bset[2]][:,:,:].swapaxes(0,2) * stg.B_code_factor
          if (stg.mode == 'spectral'):
-            for ic in range(ncre):
-               Ecre[ic,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cree'+str(ic+1).zfill(2)][:,:,:].swapaxes(0,2)
-               Ncre[ic,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cren'+str(ic+1).zfill(2)][:,:,:].swapaxes(0,2)
+            if (stg.one_bin == False):
+               for ic in range(ncre):
+                  Ecre[ic,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cree'+str(ic+1).zfill(2)][:,:,:].swapaxes(0,2)
+                  Ncre[ic,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cren'+str(ic+1).zfill(2)][:,:,:].swapaxes(0,2)
+            else:
+               Ecre[stg.one_bin,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cree'+str(stg.one_bin+1).zfill(2)][:,:,:].swapaxes(0,2)
+               Ncre[stg.one_bin,off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cren'+str(stg.one_bin+1).zfill(2)][:,:,:].swapaxes(0,2)
+
          else:
             Ecrp[off[0]:ce[0], off[1]:ce[1], off[2]:ce[2]] =  h5g['cr01'][:,:,:].swapaxes(0,2)
 

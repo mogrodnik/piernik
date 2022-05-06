@@ -20,6 +20,7 @@ q_big     = 30.
 arr_dim_q = 1000      #TODO <! if possible - read the above from h5file, if available
 allow_amr_upscaling = False
 use_yt    = False
+one_bin   = False
 
 # Read only one refinement level
 lvl_only = -1

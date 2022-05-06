@@ -177,6 +177,13 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
          if (stg.spectral_mode):
             Ecre = np.array([R[ecre_lbl[l]][iRsort].v for l in cre_iter])
             Ncre = np.array([R[ncre_lbl[l]][iRsort].v for l in cre_iter])
+            if (stg.one_bin != False):
+               Ecre[:,:] = 0.
+               Ncre[:,:] = 0.
+
+               Ecre[stg.one_bin,:] = R[ecre_lbl[stg.one_bin]][iRsort].v
+               Ncre[stg.one_bin,:] = R[ncre_lbl[stg.one_bin]][iRsort].v
+
             plot_data_arrays = stokes_params(Bp, Bq, Bn, rho_ion, Ecrp, wave_data, ds, lends, Ecre=Ecre, Ncre=Ncre, ncre=ncre) # Does not contain khi-klo! - irrelevant for ray (supplying length of ds)
          else:
             Ecrp =  R[ecrp_lbl][iRsort].v
