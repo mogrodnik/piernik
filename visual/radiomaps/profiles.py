@@ -33,6 +33,7 @@ inches_ax = 2.
 aspect_ax = 6.
 dpi_plot  = 150.
 coords_text = False
+get_scale_height = False # True
 
 # main plotting function: processess data and produces plot files
 def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs):
@@ -94,6 +95,7 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
    means_save = []
    stds_save  = []
 # prepare and save profile(s)
+   print("")
    for iprof in range(nwboxes):
       ind_h, h_adj_edges = get_encompassed_range(datahshape, figh, hrange)
 
@@ -114,6 +116,20 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
 
       hdata = np.linspace(hrange[0], hrange[1], ihe-ihb)
       plot_labelsxy = [ not return_axes, not plot_one_fig ]
+
+      if (get_scale_height):
+         from scipy.optimize import curve_fit
+         popt1h, _ = curve_fit(objective_scale_height, hdata[0:int(len(hdata)/2.)]-hrange[0], np.flip(means[0:int(len(means)/2.)]))
+         popt2h, _ = curve_fit(objective_scale_height,         hdata[int(len(hdata)/2.):-1],         means[int(len(means)/2.):-1])
+         max_Prof, H_scale = np.mean([popt1h[0], popt2h[0]]), np.mean([popt1h[1], popt2h[1]])
+         print("Scale height (1): ", popt1h, popt2h, " | Averaged: ", max_Prof, H_scale)
+
+         try:
+            popt2f1h, _ = curve_fit(objective_2scale_height, hdata[0:int(len(hdata)/2.)]-hrange[0], np.flip(means[0:int(len(means)/2.)]), maxfev = 100)
+            popt2f2h, _ = curve_fit(objective_2scale_height,         hdata[int(len(hdata)/2.):-1],         means[int(len(means)/2.):-1], maxfev = 100)
+            print("Scale heights(2):", popt2f1h, popt2f2h)
+         except:
+            print("Scale heights(2): >>> not converged.")
 
       xlab = "Distance from the disk plane (kpc)"
       ylab = "Averaged %s at %5.1f kpc" %(labelnam[label], mid_coord)
@@ -220,7 +236,10 @@ def plot_one_profile(ax, xdata, ydata, yerrdata, xlabel, ylabel, title, label, s
       ax.set_title(title, fontsize=fsize)
 
    if (coords_text[0]):
-      ax.text(min(xdata), (min(ydata) + 0.25*max(ydata)), coords_text[1], size = fsize)
+      if (stg.print_log):
+         ax.text(min(xdata), (min(ylims) + 0.25* (max(ylims)-min(ylims) )), coords_text[1], size = fsize)
+      else:
+         ax.text(min(xdata), (min(ydata) + 0.25* (max(ydata)-min(ydata) )), coords_text[1], size = fsize)
 
    ax.set_yscale(scaletype)
    if use_def_ylims: # if true, using global 'ylimsdef' via passed 'label' variable
@@ -246,3 +265,9 @@ def plot_one_profile(ax, xdata, ydata, yerrdata, xlabel, ylabel, title, label, s
 
    ax.tick_params(labelsize = fsize * 0.95)
    return ax
+
+def objective_scale_height(x, max_y, H):
+   return max_y * np.exp(- x / H)
+
+def objective_2scale_height(x, max_d, max_h, H_d, H_h):
+   return max_d * np.exp(- x / H_d) + max_h * np.exp(- x / H_h)
