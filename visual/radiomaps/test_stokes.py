@@ -3,6 +3,7 @@ from math import *
 import numpy as np
 import pylab as py
 from stokes import stokes_params
+import settings as stg
 
 # This program is aiming to test the routine 'stokes_params along a single line of sight
 B0=1.0  # indukcja pola magnetycznego
@@ -30,27 +31,34 @@ for ii in range (n):
 	#if Z[ii]>=0.0 and Z[ii] <= 10.0:
 	rho[ii]= dd0
 	Ecr[ii] = Ecr0
-	Bp[ii] = 1.0
-	Bq[ii] = 0.0
-	Bn[ii] = 0.0
-plot_data_arrays=stokes_params(Bp,Bq,Bn,rho,Ecr,pp,Nu,lbd,cJnu,dz)
+	Bp[ii] = B0 # 1.0
+	Bq[ii] = B0 # 0.0
+	Bn[ii] = B0 # 0.0
 
+wave_data = [[Nu], [lbd]]
+stg.p 	= pp
+stg.cJnu = cJnu
+stg.N_nulbd = len([Nu])
+stg.test = True
+stg.print_TP, stg.print_PI = True, True
+stg.x_ion = x_ion
+plot_data_arrays=stokes_params(Bp,Bq,Bn,rho,Ecr,wave_data,dz,n)
+					  #stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
 print('I= ',plot_data_arrays[0],'Q= ',plot_data_arrays[1],'U= ',plot_data_arrays[2])
-
 
 Q=plot_data_arrays[1]
 U=plot_data_arrays[2]
 psi_obs=0.5*np.arctan2(U,Q)
-print(psi_obs)
+print("PI / I =", np.sqrt(Q[0]**2 + U[0]**2) / plot_data_arrays[0][0])
 py.figure(1)
 py.subplot(211)
 py.title('Q')
 py.xlabel('Z')
 py.ylabel(r'$\Delta Q$')
-py.plot(plot_data_arrays[4])
+py.plot(plot_data_arrays[5])
 py.subplot(212)
 py.title("U")
 py.ylabel(r'$\Delta U$')
 py.xlabel('Z')
-py.plot(plot_data_arrays[5])
+py.plot(plot_data_arrays[6])
 py.show()

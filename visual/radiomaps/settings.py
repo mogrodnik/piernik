@@ -21,6 +21,7 @@ arr_dim_q = 1000      #TODO <! if possible - read the above from h5file, if avai
 allow_amr_upscaling = False
 use_yt    = False
 one_bin   = False
+test      = False
 
 # Read only one refinement level
 lvl_only = -1
@@ -95,6 +96,7 @@ def RMunit():
    mH_g    = 1.673559e-24
    RMunit = 0.812 * (cm_pc)**3 * (mgs_muG) * (Msun_g/mH_g) * 3./4.
    #print('RMunit = ',RMunit)
+   if (test): RMunit = 0.812
    return RMunit
 
 def krange(n3,axis):
