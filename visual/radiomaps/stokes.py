@@ -49,6 +49,8 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
    if stg.print_RM:
       # Total rotation measure along the line of sight
       RM_sum = RM[n-1]
+   p_index = np.array([stg.p] * n3) # DEFAULT
+   PI      = np.zeros(n3)
 
    for i_nl in N_iter:
 
@@ -78,20 +80,19 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
          I = np.zeros_like(B_perp)
          if not stg.spectral_mode:
             for i3 in range(n3):
-               I[i3] = stg.cJnu*B_perp[i3]**((stg.p+1.0)/2.0) * (1.0/nu_s[i_nl])**((stg.p-1.0)/2.0) * Ecrp[i3] * ds[i3]
-
+               I[i3] = stg.cJnu*B_perp[i3]**((p_index[i3] + 1.0)/2.0) * (1.0/nu_s[i_nl])**((p_index[i3] - 1.0)/2.0) * Ecrp[i3] * ds[i3]
          else:
             for i3 in range(n3):
                #elfq = electrons.crenpp(nu_s, ncre, B_perp[i3], Ecre[:,i3])            # DEPRECATED
-               crsn  = electrons.crenppfq(i_nl, ncre, B_perp[i3], Ecre[:,i3], Ncre[:,i3])  # "0" stands for nu index, for optimization
+               crsn, p_index[i3] = electrons.crenppfq(i_nl, ncre, B_perp[i3], Ecre[:,i3], Ncre[:,i3])  # "0" stands for nu index, for optimization
                I[i3] = np.sqrt(nu_s[i_nl]*B_perp[i3]) * crsn * ds[i3]  # Can be derived from Longair's "High Energy Astrophysics", p. 212, eqn 8.78 when not expanding N(E) term
 
       if stg.print_PI or stg.print_SI or stg.print_vec:
          # degree of polarization of synchrotron radiation emitted in a single cell
-         PI = (stg.p + 1.0) / (stg.p + 7.0/3.0)   # BEWARE: stg.p should be replkaced by the spectral index of CR energy density derived  from the spectrum
+         PI = (p_index[:] + 1.0) / (p_index[:] + 7.0/3.0)   # BEWARE: stg.p should be replkaced by the spectral index of CR energy density derived  from the spectrum
          # Stokes parameters of each cell, corrected for Faraday rotation on the Way to the observer.
-         Q = PI*I*cos_2psi
-         U = PI*I*sin_2psi
+         Q = PI[:]*I[:]*cos_2psi[:]
+         U = PI[:]*I[:]*sin_2psi[:]
 
 # Stokes parameters received by the observer are summed up for all cells along the line of sight
       if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
@@ -105,7 +106,7 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
          SI[stg.SI_set.index(i_pairs)] = np.log10(I_sum[i_pairs[1]] / (I_sum[i_pairs[0]] + 1.e-240) + 1.e-200) / np.log10(nu_s[i_pairs[1]] / nu_s[i_pairs[0]])
 
 # The function returns the summed Stokes parameters I, Q and U, and rotation measure RM. The spectral index should be removed from here and computed in the plot_maps routine.
-   return I_sum, Q_sum, U_sum, RM_sum, SI
+   return I_sum, Q_sum, U_sum, RM_sum, SI, Q, U
 
 def polarized(I,Q,U):
 # I - total intensity of the synchrotron radiation (Total Power - TP).
