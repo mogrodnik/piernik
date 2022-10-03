@@ -112,7 +112,7 @@ def crenppfq(nu_ind, ncre, bperp, ecr, ncr):      # recovers spectral index q fr
    p_im1  = p_fix[max(p_ind - 1, 0)]
    p_im13 = p_fix3[max(p_ind - 1, 0)]
 
-   q1     = 4.1
+   q_bin, q1     = 4.1, 4.1
    npq_nu = _zero
    if (cree_i > _zero and cren_i > _zero):
       enpc_bin = cree_i / (cren_i * _one * p_im1)
@@ -122,7 +122,7 @@ def crenppfq(nu_ind, ncre, bperp, ecr, ncr):      # recovers spectral index q fr
       f_binXfourXpi  = nq2fXfourXpi(cren_i, q_bin, p_im1, p_im13, p_i) # zwraca wartosc f(p,q) na lewej scianie wybranego binu
       npq_nu         = f_binXfourXpi * ((p_nu / p_im1)**(- q_bin)) * (p_nu)**2   # recovered N(p_nu)
 
-   return const_synch * npq_nu
+   return const_synch * npq_nu, q_bin - _one # in widely adopted formula N(E) = k * E ** (-a) power index "a" is q - 1 for q used in f(p)
 
 #=============================================================================================================================
 def prepare_q_grid(p_fix_ratio):   # fills grid with values of spectral indices 'q' in range of given e / (n p c), for further q interpolation
