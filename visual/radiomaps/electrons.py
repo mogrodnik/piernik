@@ -15,8 +15,9 @@ _ncre_m2            = 0.           # initialized below (in initialize_crspectrum
 _const_1956_x_sqrt_nu_by_16p1MHz      = []
 _const_nu_HEA       = []
 _smallB             = 1.e-24
-_one                = 1.0
 _zero               = 0.0
+_one                = 1.0
+_two                = 2.0
 # FIXME / BEWARE for some reason ncre, p_min_fix and p_max_fix retain their default, hard-coded values from settings,
 # even if 'read_CRESP_params' is run at 'main' before 'initialize_crspectrum_tools'.
 # The below three serves as in-module storage for the right values, provided at initialization
@@ -122,7 +123,7 @@ def crenppfq(nu_ind, ncre, bperp, ecr, ncr):      # recovers spectral index q fr
       f_binXfourXpi  = nq2fXfourXpi(cren_i, q_bin, p_im1, p_im13, p_i) # zwraca wartosc f(p,q) na lewej scianie wybranego binu
       npq_nu         = f_binXfourXpi * ((p_nu / p_im1)**(- q_bin)) * (p_nu)**2   # recovered N(p_nu)
 
-   return const_synch * npq_nu, q_bin - _one # in widely adopted formula N(E) = k * E ** (-a) power index "a" is q - 1 for q used in f(p)
+   return const_synch * npq_nu, q_bin - _two # in widely adopted formula N(E) = k * E ** (-a) power index "a" is q - 2 for q used in f(p)
 
 #=============================================================================================================================
 def prepare_q_grid(p_fix_ratio):   # fills grid with values of spectral indices 'q' in range of given e / (n p c), for further q interpolation
