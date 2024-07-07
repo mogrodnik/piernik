@@ -124,7 +124,7 @@ def draw_vecs(ax,vecs,axis, fsize=24, posl=[0.83, 0.03]):
    wp, wq, X, Y = vecs
 
    cellsize = (X[-1][-1] - X[0][0]) / (max(np.shape(X)) + 1) # Assumes square-like cell, serves to scale vectors to cell-diagonal * dokvec
-   scale_u = 2. * np.sqrt(2) * stg.scale_vec_maxPD / ( ax.figure.dpi * cellsize ) if stg.use_vec_scaling else scalevec(ax)
+   scale_u = 5. * np.sqrt(2) * stg.scale_vec_maxPD / ( ax.figure.dpi * cellsize ) if stg.use_vec_scaling else scalevec(ax)
 
    r = 1 #np.sqrt(wq**2 + wp**2)
    W1 = ax.quiver(X, Y, +0.50*wq/r, +0.50*wp/r, headwidth=1., headlength=0., minlength=0, color='white', width=0.003, scale_units = "dots" if stg.use_vec_scaling else "xy", scale = scale_u)

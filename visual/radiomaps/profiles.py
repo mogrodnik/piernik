@@ -135,6 +135,8 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
       ylab = "Averaged %s at %5.1f kpc" %(labelnam[label], mid_coord)
       if (coords_text):
          text_overplot = [ True, "%s = %5.2f kpc" %(ax_w, mid_coord)]
+      else:
+         text_overplot = [ False ]
       title = "Time = %10.2f Myr" %time   # WARNING assuming units
       if (return_axes): all_axes = []
 
@@ -168,8 +170,9 @@ def plot_profile(data, figext_tot, ax_set, ety_file, label, attributes, **kwargs
       plt.close(mfig)
 
    if (save_data):
-      fP = open(outpath+"/"+label+ety_file+"_profile_data.dat", "w+")
-      print(fP.name)
+      print("Out path: ", outpath)
+      fP = open(outpath+label+ety_file+"_profile_data.dat", "w+")
+      print(fP.name, outpath+"/"+label+ety_file+"_profile_data.dat")
       fP.write("#     dist\t")
       for wi in range(nwboxes):
          fP.write(" %8s(p %2i)\t  %8s(p %2i)\t" %("mean",wi,"std",wi))
