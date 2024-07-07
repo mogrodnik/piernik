@@ -8,6 +8,8 @@ import os
 import getopt
 import h5py as h5
 import settings as stg
+from time import time as time_now_seconds
+import datetime
 
 from stokes import vector_direction, polarized
 from read_data import *
@@ -33,6 +35,7 @@ nu2_set  = -1.0   # DEPRECATED
 yt_imres = 0
 yt_depth = "max"
 
+time_beg = time_now_seconds()
 def cli_params(argv):
    # The function serves for reading and interpretation of the comand line input parameters
    try:
@@ -325,3 +328,6 @@ if stg.print_RM:
       if (save_data): dump_data(RM.T/stg.norm('RM'), lbd[i_nl], nu[i_nl], figext, time, etyfil, 'RM')
    else:
       print('RM = 0; I do not create the map.')
+
+time_end = time_now_seconds()
+print("\n --------------- \nFinished for file %s | execution took %f s ( %s )" %(file_name, (time_end - time_beg), str(datetime.timedelta(seconds = time_end - time_beg))))
