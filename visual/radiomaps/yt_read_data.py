@@ -6,7 +6,7 @@ from draw_map import plotext
 from sys import stdout as sys_stdout
 from stokes import stokes_params
 import settings as stg
-from settings import ncre
+from settings import ncre, cr_fieldnames
 import yt
 
 # wczytac dane przez yt
@@ -21,6 +21,8 @@ import yt
 
 ax_map = {'x': 0, 'y': 1, 'z': 2}
 high_verbosity = False
+d_eps = 1.e-10
+kpc   = 1000 # pc
 
 def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
 # function reading data from an HDF5 file (.h5) and using it to compute Stokes parameters.
@@ -54,7 +56,7 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
 
    # Labels are defined below
    rho_lbl = "density"
-   ecrp_lbl = "cr01"
+   ecrp_lbl = cr_fieldnames["crp"]
    ecre_lbl = []
    ncre_lbl = []
    bx_lbl = "mag_field_x"
@@ -63,11 +65,11 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
    sorT_lbl = "t"
    cre_iter = list(range(ncre)) # Do not use range generator each time (saves time if stg.spectral_mode)
    for ic in cre_iter:
-      ecre_lbl.append('cree'+str(ic+1).zfill(2))
-      ncre_lbl.append('cren'+str(ic+1).zfill(2))
+      ecre_lbl.append(cr_fieldnames["cre_e"]+str(ic+1).zfill(2))
+      ncre_lbl.append(cr_fieldnames["cre_n"]+str(ic+1).zfill(2))
 
    [wlo, whi, hlo, hhi] = plotext(ax_set)
-   [wlo, whi, hlo, hhi] = [wlo * 1000., whi * 1000., hlo * 1000., hhi * 1000.] # WARNING these are PROBABLY in kpc, data will be in pc, thus multiplying them by 1000
+   [wlo, whi, hlo, hhi] = [wlo * kpc, whi * kpc, hlo * kpc, hhi * kpc] # WARNING these are PROBABLY in kpc, data will be in pc, thus multiplying them by 1000
 
    # Prepare limits and pre-organize B arrays, according to the settings and ax_set
    if ax_set==0:
@@ -93,7 +95,7 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
    rbeg = [xmin, ymin, zmin]
    rend = [xmax, ymax, zmax]
    if (imdepth == "max"):
-      print("(WARNING) Parameter 'yt_depth' is 'max'; assuming maximal domain range: -%10.1f:%10.1f" %(rbeg[ax_set], rend[ax_set]))
+      print("(WARNING) Parameter 'yt_depth' is 'max'; assuming maximal domain range: -%16.6f:%16.6f" %(rbeg[ax_set], rend[ax_set]))
 
    # Prepare indices pointing width-ax and height-ax of the demanded image
    i_w = ax_map["x"] if (ax_set == ax_map["y"] or ax_set == ax_map["z"]) else ax_map["y"]
@@ -161,7 +163,7 @@ def data_h5_yt(filename, ax_set, wave_data, imresw, imdepth):
          lends    =  R.shape[0]
 
          if (lends == 0): # Countermeasure againt empty vector from yt - probably bug due to coordinates pointing right in between cells.
-            rbegv[i_h] = rbeg[i_h] + j * dh + 1e-6 # WARNING: if pointing right in between cells I'm assuming it's supposed to be the next one
+            rbegv[i_h] = rbeg[i_h] + j * dh + d_eps # WARNING: if pointing right in between cells I'm assuming it's supposed to be the next one
             rendv[i_h] = rbegv[i_h]
             R = h5ds.ray(rbegv, rendv)
             iRsort = np.argsort(R[sorT_lbl])

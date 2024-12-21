@@ -14,6 +14,7 @@ const_synch = 1. #1.e8  # DEPRECATED ??
 p_min_fix = 1.e0
 p_max_fix = 1.e6
 ncre      = 14
+ncrb      = 14
 maxcren   = ncre
 q_eps     = 0.001
 q_big     = 30.
@@ -22,6 +23,13 @@ allow_amr_upscaling = False
 use_yt    = False
 one_bin   = False
 test      = False
+
+cr_fieldnames_legacy = {"crp":"cr01",  "cre_e":"cree",   "cre_n":"cren"}
+cr_fieldnames_new    = {"crp":"cr_p+", "cre_e":"cr_e-e", "cre_n":"cr_e-n"}
+cr_fieldnames = [] # to be set and used
+
+crsn_cgs2PSM  = 6.47e-13 # convert rest mass energy in cgs to PSM
+crsn_PSM2cgs  = 7.9e-7 # convert rest mass energy density in PSM to n cgs
 
 # Read only one refinement level
 lvl_only = -1

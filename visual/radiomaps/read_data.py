@@ -305,7 +305,15 @@ def data_h5(plik,ax_set,wave_data):
 def read_CRESP_params(fileh5_name):
 
    h5f = h5.File(fileh5_name, 'r')
-   stg.ncre      = read_1h5_attr(h5f, ['ncre'], stg.ncre)
+   h5f_attr_keys = h5f.attrs.keys()
+   if 'ncre' in h5f_attr_keys:
+      stg.ncre      = read_1h5_attr(h5f, ['ncre'], stg.ncre)
+      stg.cr_fieldnames = stg.cr_fieldnames_legacy
+   elif 'ncrb' in h5f_attr_keys:
+      stg.ncre      = read_1h5_attr(h5f, ['ncrb'], stg.ncre)
+      stg.cr_fieldnames = stg.cr_fieldnames_new
+   else:
+      sys.exit("Error reading CRESP parameters -- number of bins (ncre or ncrb) not found in h5 file.")
    stg.p_min_fix = read_1h5_attr(h5f, ['p_min_fix'], stg.p_min_fix)
    stg.p_max_fix = read_1h5_attr(h5f, ['p_max_fix'], stg.p_max_fix)
 
