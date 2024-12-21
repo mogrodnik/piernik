@@ -40,7 +40,7 @@ def cli_params(argv):
    # The function serves for reading and interpretation of the comand line input parameters
    try:
 
-      opts,args=getopt.getopt(argv,"ab:dhf:i:k:l:m:n:R:cpPrtSuvxyz",["bin=","dump","help","file","convolve","contours","lin=","log","spectral","suffix=","yt=","tz=","pz=","iz=","rz=","pr=","vp=","cp="])
+      opts,args=getopt.getopt(argv,"ab:dD:hf:i:k:l:m:n:R:cpPrtSuvxyz",["bin=","dump","dimensions=","help","file","convolve","contours","lin=","log","spectral","suffix=","yt=","tz=","pz=","iz=","rz=","pr=","vp=","cp="])
       #print (opts,"op",args,"arg")
    except getopt.GetoptError:
       print("Error: unknown parameter")
@@ -98,6 +98,9 @@ def cli_params(argv):
 
       elif opt == "-d":
          stg.print_df = True
+
+      elif opt in ("-D", "--dimensions"):
+         stg.px_user, stg.pz_user = float(arg.split(",")[0]), float(arg.split(",")[1])
 
       elif opt in ("--log"):
          stg.print_log = True
