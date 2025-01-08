@@ -32,15 +32,20 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
 # Vectorize ds to make it universal for either yt analysis or h5py script parts
    if (not stg.use_yt):
       ds = np.ones(n) * ds
-# modulus of magnetic field vector
-   #B_tot = np.sqrt((Bp**2+Bq**2+Bn**2))
-# modulus of the perpendiculat (to the line of sight) component of B
+# modulus of the perpendicular (to the line of sight) component of B
    B_perp = np.sqrt(Bp**2 + Bq**2)
 # magnetic field component parallet to the line of sight
    B_paral = Bn
+   if stg.use_B_tot:
+# modulus of magnetic field vector
+      B_tot  = np.sqrt((Bp**2+Bq**2+Bn**2 + stg.background_B**2))
+      B_synch = B_tot
+   else:
+      B_synch = B_perp
+
 # Faraday rotation for a single cell
    dRM = B_paral*rho_ion*ds
-# TODO: The constant 0.808 is missing here
+# The constant 0.808 is included in stg.RMunit()
 
 # RM is measured in rad m^{}−2}, the line-of-sight magnetic field B_{reg,\paral} in \muG, the thermal electron density ne in cm^{−3} and the line of sight l in pc.
 
@@ -77,15 +82,15 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
 
       if stg.print_PI or stg.print_SI or stg.print_vec or stg.print_TP:
          # The total intensity of synchrotron radiation emitted form each cell of lengths ds along the line of sight
-         I = np.zeros_like(B_perp)
+         I = np.zeros_like(B_synch)
          if not stg.spectral_mode:
             for i3 in range(n3):
-               I[i3] = stg.cJnu*B_perp[i3]**((p_index[i3] + 1.0)/2.0) * (1.0/nu_s[i_nl])**((p_index[i3] - 1.0)/2.0) * Ecrp[i3] * ds[i3]
+               I[i3] = stg.cJnu*B_synch[i3]**((p_index[i3] + 1.0)/2.0) * (1.0/nu_s[i_nl])**((p_index[i3] - 1.0)/2.0) * Ecrp[i3] * ds[i3]
          else:
             for i3 in range(n3):
                #elfq = electrons.crenpp(nu_s, ncre, B_perp[i3], Ecre[:,i3])            # DEPRECATED
-               crsn, p_index[i3] = electrons.crenppfq(i_nl, ncre, B_perp[i3], Ecre[:,i3], Ncre[:,i3])  # "0" stands for nu index, for optimization
-               I[i3] = np.sqrt(nu_s[i_nl]*B_perp[i3]) * crsn * ds[i3]  # Can be derived from Longair's "High Energy Astrophysics", p. 212, eqn 8.78 when not expanding N(E) term
+               crsn, p_index[i3] = electrons.crenppfq(i_nl, ncre, B_synch[i3], Ecre[:,i3], Ncre[:,i3])  # "0" stands for nu index, for optimization
+               I[i3] = np.sqrt(nu_s[i_nl] * B_synch[i3]) * crsn * ds[i3]  # Can be derived from Longair's "High Energy Astrophysics", p. 212, eqn 8.78 when not expanding N(E) term
 
       if stg.print_PI or stg.print_SI or stg.print_vec:
          # degree of polarization of synchrotron radiation emitted in a single cell

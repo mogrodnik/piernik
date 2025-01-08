@@ -40,14 +40,14 @@ def cli_params(argv):
    # The function serves for reading and interpretation of the comand line input parameters
    try:
 
-      opts,args=getopt.getopt(argv,"ab:dD:hf:i:k:l:m:n:R:cpPrtSuvxyz",["bin=","dump","dimensions=","help","file","convolve","contours","lin=","log","spectral","suffix=","yt=","tz=","pz=","iz=","rz=","pr=","vp=","cp="])
+      opts,args=getopt.getopt(argv,"ab:B:CdD:hf:i:k:l:m:n:R:cpPrtTSuvxyz",["bin=","background=","dump","dimensions=","help","file","convolve","contours","lin=","log","spectral","total","suffix=","yt=","tz=","pz=","iz=","rz=","pr=","vp=","cp="])
       #print (opts,"op",args,"arg")
    except getopt.GetoptError:
       print("Error: unknown parameter")
       sys.exit(2)
    for opt, arg in opts:
       if opt in ("-h", "--help"):
-         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -n sets the frequency \n -c convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i pair1,pair2,.. generates the map of Spectral Index (SI), requires additional input: list indexes of of pairs of wavelengths or frequencies provided in -l or -n (e.g., 01,02)  \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -r produces the map of Rotation measue (RM) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -S --spectral to generate synchrotron radiation maps using electron number and energy density data \n -R <integer> reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale \n --lin {SI,TP,PI,RM} to override logarythmic scaling for chosen components \n --yt RESX,DEPTH or RESX,DEPTHL,DEPTHH \t use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>); type 'max' for maximal practical resolution, with depth working as -DEPTH:DEPTH with one DEPTH argument ('max' for maximal depth) or DEPTHL:DEPTHH for layer with 2 DEPTH arguments. Slower method, but works well with all levels of AMR data\n --{tz|pz|rz|iz} vmin,vmax \t to set plot limits for the given field (TP, PI, SI or RM, respectively). \n \t \t \t \t For TP and PI it must match the number of wavelengths provided, for SI the number of pairs, for RM one set of limits (wavelength independent quantity) \n --pr width,height to set the absolute limits of plotted physical space \n --vp DVEC to set vector coverage \n --cp nbeam1,sigma1:nbeam2,sigma2:... alter convolution parameters \n \n --contours draw map contours (Default: 10 levels)\n --suffix <text> to have output files with given suffix before extension\n --dump saves data to ASCII file (e.g., to plot it using other script)\n -b\t --bin BIN_NUMBER\t restricts range of used bins to just one indicated")
+         print("-f [-file] filename.h5 generates maps from an hdf5 file. Running the script without the -f parameter generates a map based on analytical data (it is currently broken)  \n -l sets the wavelengths \n -n sets the frequency \n -c convolves the resulting data with a 2D Gauss function representing the angular characteristic of the radiotelescope beam \n -x generates projection parallel to x-axis (default option)  \n -y along y-axis \n -z along z-axis \n -i pair1,pair2,.. generates the map of Spectral Index (SI), requires additional input: list indexes of of pairs of wavelengths or frequencies provided in -l or -n (e.g., 01,02)  \n -p the map of Polarized Intensity (PI) \n -t produces the map of Total Power (TP) \n -r produces the map of Rotation measue (RM) \n -v to add vectors and \n -u not to add vectors \n --log to drow the map in logarythmic scale \n -S --spectral to generate synchrotron radiation maps using electron number and energy density data \n -R <integer> reads and plots only one refinement level\n -P to additionally plot profiles of S/P/T intensity \n --log to drow the map in logarythmic scale \n --lin {SI,TP,PI,RM} to override logarythmic scaling for chosen components \n --yt RESX,DEPTH or RESX,DEPTHL,DEPTHH \t use yt package for reading data and construct image of resolution RESX:(RESX / <aspect ratio>); type 'max' for maximal practical resolution, with depth working as -DEPTH:DEPTH with one DEPTH argument ('max' for maximal depth) or DEPTHL:DEPTHH for layer with 2 DEPTH arguments. Slower method, but works well with all levels of AMR data\n --{tz|pz|rz|iz} vmin,vmax \t to set plot limits for the given field (TP, PI, SI or RM, respectively). \n \t \t \t \t For TP and PI it must match the number of wavelengths provided, for SI the number of pairs, for RM one set of limits (wavelength independent quantity) \n --pr width,height to set the absolute limits of plotted physical space \n --vp DVEC to set vector coverage \n --cp nbeam1,sigma1:nbeam2,sigma2:... alter convolution parameters \n \n --contours draw map contours (Default: 10 levels)\n --suffix <text> to have output files with given suffix before extension\n --dump saves data to ASCII file (e.g., to plot it using other script)\n -b\t --bin BIN_NUMBER\t restricts range of used bins to just one indicated\n-B --background B(uG)\t add background magnetic field to B_tot (use in conjunction with -T)\n-T --total\t use B_tot (instead of B_perp) to compute synchrotron emissivity")
          sys.exit()
       elif opt == '-x':
          global ax_set, ax
@@ -74,6 +74,11 @@ def cli_params(argv):
          global handSI
          handSI = True
          stg.SI_set = [ (int(item[0]), int(item[1])) for item in arg.split(",")]
+
+      elif opt in ("-B", "--background"):
+         stg.use_background_B = True
+         print("INFO: Emulating inverse Compton for z=0: 3.2uG will be added to B_perp")
+         stg.background_B = float(arg) # in uG
 
       elif opt == "-p":
          global handPI
@@ -124,6 +129,10 @@ def cli_params(argv):
          stg.spectral_mode = True
          stg.mode = "spectral"   # DEPRECATED
          print("Proceeding with spectral method")
+
+      elif opt in ("-T", "--total"):
+         stg.use_B_tot = True
+         print("B_tot will be used for computing emissivity, instead of B_perp!")
 
       elif opt in ("-b", "--bin"):
          stg.one_bin = int(arg)
