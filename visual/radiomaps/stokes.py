@@ -33,12 +33,12 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
    if (not stg.use_yt):
       ds = np.ones(n) * ds
 # modulus of the perpendicular (to the line of sight) component of B
-   B_perp = np.sqrt(Bp**2 + Bq**2)
+   B_perp = np.sqrt(Bp**2 + Bq**2  + stg.background_B**2)
 # magnetic field component parallet to the line of sight
    B_paral = Bn
    if stg.use_B_tot:
 # modulus of magnetic field vector
-      B_tot  = np.sqrt((Bp**2+Bq**2+Bn**2 + stg.background_B**2))
+      B_tot  = np.sqrt((Bp**2+Bq**2+Bn**2))
       B_synch = B_tot
    else:
       B_synch = B_perp

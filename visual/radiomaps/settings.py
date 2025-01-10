@@ -24,8 +24,7 @@ use_yt    = False
 one_bin   = False
 test      = False
 use_B_tot = False
-use_background_B = False
-background_B = 0.# uG at z = 0
+background_B = 0.# uG
 
 cr_fieldnames_legacy = {"crp":"cr01",  "cre_e":"cree",   "cre_n":"cren"}
 cr_fieldnames_new    = {"crp":"cr_p+", "cre_e":"cr_e-e", "cre_n":"cr_e-n"}
