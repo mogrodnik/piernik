@@ -38,7 +38,7 @@ def stokes_params(Bp,Bq,Bn,rho_ion,Ecrp,wave_data,ds,n3,Ecre=[],Ncre=[],ncre=0):
    B_paral = Bn
    if stg.use_B_tot:
 # modulus of magnetic field vector
-      B_tot  = np.sqrt((Bp**2+Bq**2+Bn**2))
+      B_tot  = np.sqrt(( B_perp**2 + B_paral**2 ))
       B_synch = B_tot
    else:
       B_synch = B_perp
