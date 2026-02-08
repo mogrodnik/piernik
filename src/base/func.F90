@@ -38,7 +38,7 @@ module func
    implicit none
 
    private
-   public :: ekin, emag, L2norm, sq_sum3, resample_gauss, piernik_fnum, &
+   public :: ekin, emag, emagden, L2norm, sq_sum3, resample_gauss, piernik_fnum, &
       & append_int_to_array, append_int4_to_array, operator(.equals.), operator(.notequals.)
 
    interface operator (.equals.)
@@ -77,6 +77,16 @@ contains
       emag = half*sq_sum3(bx, by, bz)
 
    end function emag
+
+!> \brief Calculate magnetic energy from magnetic field components
+   elemental real function emagden(bx, by, bz, miu)
+      use constants,  only: half
+      implicit none
+      real, intent(in) :: bx, by, bz, miu
+
+      emagden = half/miu*sq_sum3(bx, by, bz)
+
+   end function emagden
 
 !> \brief Calculate kinetic energy from momenta and density
    elemental real function ekin(mx, my, mz, dn)

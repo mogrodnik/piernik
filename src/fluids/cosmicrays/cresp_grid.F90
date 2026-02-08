@@ -120,7 +120,8 @@ contains
       use crhelpers,        only: divv_i
       use cresp_helpers,    only: enden_CMB
       use dataio_pub,       only: msg, warn
-      use func,             only: emag
+      use func,             only: emagden
+      use units,            only: miu0
       use global,           only: dt
       use grid_cont,        only: grid_container
       use initcosmicrays,   only: iarr_cre_e, iarr_cre_n
@@ -170,7 +171,7 @@ contains
                   sptab%ud = 0.0 ; sptab%ub = 0.0; sptab%umag = 0.0
                   cresp%n = cg%u(iarr_cre_n, i, j, k)
                   cresp%e = cg%u(iarr_cre_e, i, j, k)
-                  if (synch_active) sptab%umag = min(emag(cg%b(xdim,i,j,k), cg%b(ydim,i,j,k), cg%b(zdim,i,j,k)) * f_synchIC, u_b_max) !< WARNING assusmes that b is in mGs
+                  if (synch_active) sptab%umag = min(emagden(cg%b(xdim,i,j,k), cg%b(ydim,i,j,k), cg%b(zdim,i,j,k), miu0) * f_synchIC, u_b_max) !< WARNING assusmes that b is in mGs
                   if (adiab_active) sptab%ud   = cg%q(divv_i)%point([i,j,k]) * onet
                   sptab%ub = sptab%umag + sptab%ucmb  ! prepare term for synchrotron + IC losses
 
