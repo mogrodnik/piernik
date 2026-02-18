@@ -527,7 +527,7 @@ contains
          case ("temn", "temi", "temperature")
             val =  1.0
             write(s_val, '(a)') trim(s_lmtvB(U_TEMP))
-         case ("magx", "magy", "magz")
+         case ("magx", "magy", "magz", "mag_field_x", "mag_field_y", "mag_field_z")
             val = lmtvB(U_MAG)
             write(s_val, '(a)') trim(s_lmtvB(U_MAG))
          case ("cr01" : "cr99", "cr_A000" : "cr_zz99", "cree01" : "cree99")
