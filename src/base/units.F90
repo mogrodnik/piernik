@@ -498,6 +498,7 @@ contains
       character(len=*), intent(in) :: field
       real, intent(out) :: val
       character(len=units_len), intent(out):: s_val
+      integer(kind=4) :: en_ind
 
       select case (trim(field))
          case ("dend", "deni", "denn", "density")
@@ -530,11 +531,17 @@ contains
             val = lmtvB(U_MAG)
             write(s_val, '(a)') trim(s_lmtvB(U_MAG))
          case ("cr01" : "cr99", "cr_A000" : "cr_zz99", "cree01" : "cree99")
-            val = lmtvB(U_MASS) / lmtvB(U_LEN) / lmtvB(U_TIME) ** 2
-            if (trim(s_lmtvB(U_ENER)) /= "complex") then
-               write(s_val, '(a, "/", a,"**3")') trim(s_lmtvB(U_ENER)), trim(s_lmtvB(U_LEN))
+            en_ind = len(trim(field), kind=4) - 2
+            if (field(en_ind:en_ind) /= "n") then
+               val = lmtvB(U_MASS) / lmtvB(U_LEN) / lmtvB(U_TIME) ** 2
+               if (trim(s_lmtvB(U_ENER)) /= "complex") then
+                  write(s_val, '(a, "/", a,"**3")') trim(s_lmtvB(U_ENER)), trim(s_lmtvB(U_LEN))
+               else
+                  write(s_val, '(a, "/", a, " /",a,"**2")') trim(s_lmtvB(U_MASS)), trim(s_lmtvB(U_LEN)), trim(s_lmtvB(U_TIME))
+               endif
             else
-               write(s_val, '(a, "/", a, " /",a,"**2")') trim(s_lmtvB(U_MASS)), trim(s_lmtvB(U_LEN)), trim(s_lmtvB(U_TIME))
+               val = 1.0 / lmtvB(U_LEN)**3                          !< CRESP number density
+               write(s_val, '( "1  /", a,"**3")') trim(s_lmtvB(U_LEN))
             endif
 #ifdef CRESP
          case ("cren01" : "cren99")
