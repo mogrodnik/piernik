@@ -491,7 +491,7 @@ contains
 
    subroutine get_unit(field, val, s_val)
 
-      use constants, only: U_LEN, U_MASS, U_TIME, U_VEL, U_MAG, U_TEMP, units_len
+      use constants, only: U_LEN, U_MASS, U_TIME, U_VEL, U_MAG, U_TEMP, units_len, I_TWO
 
       implicit none
 
@@ -531,7 +531,7 @@ contains
             val = lmtvB(U_MAG)
             write(s_val, '(a)') trim(s_lmtvB(U_MAG))
          case ("cr01" : "cr99", "cr_A000" : "cr_zz99", "cree01" : "cree99")
-            en_ind = len(trim(field), kind=4) - 2
+            en_ind = len(trim(field), kind=4) - I_TWO
             if (field(en_ind:en_ind) /= "n") then
                val = lmtvB(U_MASS) / lmtvB(U_LEN) / lmtvB(U_TIME) ** 2
                if (trim(s_lmtvB(U_ENER)) /= "complex") then
