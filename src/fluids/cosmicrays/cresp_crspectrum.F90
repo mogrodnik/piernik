@@ -515,6 +515,7 @@ contains
       has_n_gt_zero(:) = .false. ; has_e_gt_zero(:)  = .false.
       is_active_bin(:) = .false. ; is_active_edge(:) = .false.
       num_has_gt_zero  = I_ZERO  ; num_active_bins   = I_ZERO
+      empty_cell       = .false.
       pre_i_cut = max_ic
       i_cut     = max_ic
       if (allocated(nonempty_bins)) deallocate(nonempty_bins)
@@ -756,6 +757,8 @@ contains
       integer                            :: i
       logical, intent(inout)             :: negatives_found
 
+      negatives_found = .false.
+
       do i = 1, ncrb
          if (e(i) < zero .or. n(i) < zero .or. edt(i) < zero .or. ndt(i) < zero) then
             if (present(location)) then
@@ -784,6 +787,8 @@ contains
       real,            intent(in)    :: n_bin, e_bin
       integer(kind=4), intent(in)    :: i_bin
       logical,         intent(inout) :: cfl_cresp_violated
+
+      cfl_cresp_violated = .false.
 
       if (e_bin < zero .or. n_bin < zero) then
 #ifdef CRESP_VERBOSED
@@ -936,6 +941,8 @@ contains
       fail_count_interpol = 0
       fail_count_NR_2dim  = 0
       fail_count_comp_q   = 0
+
+      exit_code = .false.
 
       approx_p    = e_small_approx_p
       e_threshold = e_small_approx_p * e_small
@@ -1817,6 +1824,8 @@ contains
 
       ipfix = i_cut(cutoff) + pm(cutoff)
       qi    = i_cut(cutoff) + oz(cutoff)
+      exit_code = .false.
+
       call assoc_pointers(cutoff)
 
       alpha = e(qi)/(n(qi) * p_fix(ipfix) * clight_cresp)
@@ -1833,7 +1842,6 @@ contains
 #ifdef CRESP_VERBOSED
       write (msg, "(A27,A2,A2,2E22.15)") "Input ratios(p, f) for NR (", bound_name(cutoff), "):", x_NR  ; call printinfo(msg)
 #endif /* CRESP_VERBOSED */
-      exit_code = .false.
       if (NR_refine_pf(cutoff)) then
          call NR_algorithm(x_NR, exit_code)
          if (exit_code) then ! some failures still take place
