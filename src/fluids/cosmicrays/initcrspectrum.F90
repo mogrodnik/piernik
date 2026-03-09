@@ -42,7 +42,7 @@ module initcrspectrum
            & smallcren, smallcree, max_p_ratio, NR_iter_limit, force_init_NR, NR_run_refine_pf, NR_refine_solution_q, NR_refine_pf, nullify_empty_bins, synch_active, adiab_active,                 &
            & icomp_active, allow_source_spectrum_break, cre_active, tol_f, tol_x, tol_f_1D, tol_x_1D, arr_dim_a, arr_dim_n, arr_dim_q, eps, eps_det, w, p_fix, p_mid_fix, total_init_cree, p_fix_ratio,           &
            & spec_mod_trms, cresp_all_edges, cresp_all_bins, norm_init_spectrum, cresp, crel, dfpq, f_synchIC, init_cresp, cleanup_cresp_sp, check_if_dump_fpq, cleanup_cresp_work_arrays, q_eps,     &
-           & u_b_max, def_dtsynchIC, def_dtadiab, NR_smap_file, NR_allow_old_smaps, cresp_substep, n_substeps_max, allow_unnatural_transfer, K_cresp_paral, K_cresp_perp, p_min_fix, p_max_fix, redshift
+           & u_b_max, def_dtsynchIC, def_dtadiab, NR_smap_file, NR_allow_old_smaps, cresp_substep, n_substeps_max, allow_unnatural_transfer, K_cresp_paral, K_cresp_perp, p_min_fix, p_max_fix, redshift, f_loss_IC, f_loss_B
 
 ! contains routines reading namelist in problem.par file dedicated to cosmic ray electron spectrum and initializes types used.
 ! available via namelist COSMIC_RAY_SPECTRUM
@@ -161,7 +161,7 @@ module initcrspectrum
    end type dump_fpq_type
    type(dump_fpq_type) :: dfpq
 
-   real :: f_synchIC, def_dtadiab, def_dtsynchIC
+   real :: f_synchIC, f_loss_IC, f_loss_B, def_dtadiab, def_dtsynchIC
 
 contains
 
@@ -597,13 +597,15 @@ contains
 
       f_synchIC = (4. / 3. ) * sigma_T / (me * clight)
       write (msg, *) "[initcrspectrum:init_cresp] 4/3 * sigma_T / ( me * c ) = ", f_synchIC
+      f_loss_B  = f_synchIC * 2. / 3.     ! separate factors: synchrotron cooling is applied isotropically -- factor 2/3 pitch angle integration
+      f_loss_IC = f_synchIC
 
       def_dtadiab   = cfl_cre * half * three * logten * w
       def_dtsynchIC = cfl_cre * half * w
 
       if (master) call printinfo(msg)
 
-      u_b_max = f_synchIC * emag(b_max_db, 0., 0.)   !< initializes factor for comparing u_b with u_b_max
+      u_b_max = f_loss_B * emag(b_max_db, 0., 0.)   !< initializes factor for comparing u_b with u_b_max
 
       write (msg, "(A,F10.4,A,ES12.5)") "[initcrspectrum:init_cresp] Maximal B_tot =",b_max_db, "mGs, u_b_max = ", u_b_max
       if (master)  call warn(msg)
