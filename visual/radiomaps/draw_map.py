@@ -167,6 +167,9 @@ def draw_map(data,vecs,figext,axis,attr,plot_file,lab,ff,i_nl):
       py.savefig('./radiomaps/'+lab+plot_file+'.'+ext)
       print("Image storred in file: ",'./radiomaps/'+lab+plot_file+'.'+ext)
 
+   py.close(img)
+   py.close()
+
 def dump_data(data, lbd, nu, figext, t, plot_file, lab):
 
    fname = lab + plot_file + ".dat"
