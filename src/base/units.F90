@@ -152,6 +152,8 @@ module units
    real, protected :: Lsun                                  !< luminosity of Sun
    real, protected :: Mearth                                !< mass of Earth
    real, protected :: earthradius                           !< radius of Earth
+   real, protected :: Lambda_C                              !< cooling time for Coulomb losses for non-spectral protons
+   real, protected :: Lambda_Cc                             !< cooling time for Coulomb losses for spectral CRs
 
 contains
 !>
@@ -396,6 +398,8 @@ contains
       Lsun       = 3.826e33*erg/sek         !< luminosity of Sun
       Mearth     = 5.977e27*gram            !< mass of Earth
       earthradius= 6378.17*km               !< radius of Earth
+      Lambda_C   = 1.65e-16*cm**3/sek       !< Couling term of Coulomb losses for non-spectral CR protons (Guo & Ho, 2008)
+      Lambda_Cc  = 1e-18*erg*cm**3/sek      !< Couling term of Coulomb losses for spectral CRs (Girichidis et al, 2020)
 
       ! Following physical constants are used in various modules.
       ! They need to have some sane values.

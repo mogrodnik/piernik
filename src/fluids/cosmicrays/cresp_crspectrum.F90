@@ -38,8 +38,9 @@ module cresp_crspectrum
 
    private ! most of it
    public :: cresp_update_cell, cresp_init_state, cresp_get_scaled_init_spectrum, cleanup_cresp, cresp_allocate_all, &
-      &      src_gpcresp, p_rch_init, detect_clean_spectrum, cresp_find_prepare_spectrum, cresp_detect_negative_content
+      &      src_gpcresp, p_rch_init, detect_clean_spectrum, cresp_find_prepare_spectrum, cresp_detect_negative_content, printed
 
+   logical :: printed
    integer, dimension(1:2)            :: fail_count_NR_2dim, fail_count_interpol
    integer(kind=4), allocatable, dimension(:) :: fail_count_comp_q
 
@@ -111,7 +112,7 @@ contains
       use diagnostics,    only: decr_vec
       use global,         only: disallow_CRnegatives
       use initcosmicrays, only: ncrb
-      use initcrspectrum, only: allow_unnatural_transfer, crel, dfpq, e_small_approx_p, nullify_empty_bins, p_mid_fix, p_fix, spec_mod_trms
+      use initcrspectrum, only: allow_unnatural_transfer, crel, dfpq, e_small_approx_p, nullify_empty_bins, p_mid_fix, p_fix, g_fix, spec_mod_trms, coulomb_active
 
       implicit none
 
@@ -159,6 +160,11 @@ contains
             crel%n = zero
             crel%i_cut = max_ic
          endif
+      endif
+
+      if (.not. printed) then
+            print "(A, 50E16.8)", "e0", e_inout
+            print "(A, 50E16.8)", "n0", n_inout
       endif
 
       call cresp_find_prepare_spectrum(n_inout, e_inout, empty_cell)
@@ -315,6 +321,29 @@ contains
          endif
 
       enddo
+
+      if (coulomb_active .eqv. .true.) then
+         if (.not. printed) then
+            print "(A, 50E16.8)", "f0", f
+            print "(A, 50E16.8)", "q0", q
+!               print "(A, 50E16.8)", "ndt0", ndt
+              print "(A, 50E16.8)", "edt0", edt
+         endif
+         f = nq_to_f(p(0:ncrb-1), p(1:ncrb), ndt(1:ncrb), q(1:ncrb), active_bins)
+
+         call cresp_compute_cre_Coulomb_cooling(sptab%dcoul, f, p, q, active_bins, dt)
+
+         ! update values in n and e
+         edt = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), g_fix(0:ncrb-1), q(1:ncrb), active_bins)
+         ndt = fq_to_n(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins)
+         if (.not. printed) then
+            print "(A, 50E16.8)", "f1", f
+            print "(A, 50E16.8)", "q1", q
+!               print "(A, 50E16.8)", "ndt1", ndt
+              print "(A, 50E16.8)", "edt1", edt
+            printed = .true.
+         endif
+      endif
 
       approx_p = e_small_approx_p         !< restore approximation after momenta computed
 
@@ -928,7 +957,7 @@ contains
       use cresp_helpers,  only: bound_name
       use dataio_pub,     only: warn, msg, die, printinfo
       use initcosmicrays, only: ncrb
-      use initcrspectrum, only: q_init, p_init, initial_spectrum, eps, p_fix, f_init, dfpq, crel,   &
+      use initcrspectrum, only: q_init, p_init, initial_spectrum, eps, p_fix, g_fix, f_init, dfpq, crel,   &
                              &  allow_source_spectrum_break, e_small_approx_init_cond, e_small_approx_p, total_init_cree, e_small, cresp_all_bins
       use mpisetup,       only: master
 
@@ -1067,7 +1096,8 @@ contains
             allocate(active_bins(num_active_bins)) ! active arrays must be reevaluated - number of active bins and edges might have changed
             active_bins = pack(cresp_all_bins, is_active_bin)
 
-            e = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins) ! once again we must count n and e
+!             e = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), g_fix(0:ncrb-1), q(1:ncrb), active_bins) ! once again we must count n and e
+            e = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), g_fix(0:ncrb-1), q(1:ncrb), active_bins) ! once again we must count n and e
             n = fq_to_n(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins)
          endif
       endif
@@ -1119,7 +1149,7 @@ contains
       use constants,      only: zero
       use diagnostics,    only: my_deallocate
       use initcosmicrays, only: ncrb
-      use initcrspectrum, only: cresp_all_bins, cresp_all_edges, f_init, p_fix, p_init, q_init
+      use initcrspectrum, only: cresp_all_bins, cresp_all_edges, f_init, p_fix, g_fix, p_init, q_init
 
       implicit none
 
@@ -1142,7 +1172,7 @@ contains
       f(act_edges) = f_init * (p_range_add(act_edges)/p_init(LO))**(-q_init)
 
       n = n + fq_to_n(p_range_add(0:ncrb-1), p_range_add(1:ncrb), f(0:ncrb-1), q(1:ncrb), act_bins)
-      e = e + fq_to_e(p_range_add(0:ncrb-1), p_range_add(1:ncrb), f(0:ncrb-1), q(1:ncrb), act_bins)
+      e = e + fq_to_e(p_range_add(0:ncrb-1), p_range_add(1:ncrb), f(0:ncrb-1), g_fix(0:ncrb-1), q(1:ncrb), act_bins)
 
       call my_deallocate(act_bins)
       call my_deallocate(act_edges)
@@ -1160,7 +1190,7 @@ contains
       use cresp_variables, only: fpcc
       use diagnostics,     only: my_deallocate
       use initcosmicrays,  only: ncrb
-      use initcrspectrum,  only: cresp_all_bins, e_small, f_init, p_br_init, p_fix, p_init, q_init
+      use initcrspectrum,  only: cresp_all_bins, e_small, f_init, p_br_init, p_fix, g_fix, p_init, q_init
 
       implicit none
 
@@ -1218,7 +1248,7 @@ contains
       enddo
 
       n = n + fq_to_n(p_range_add(0:ncrb-1), p_range_add(1:ncrb), f(0:ncrb-1), q(1:ncrb), act_bins)
-      e = e + fq_to_e(p_range_add(0:ncrb-1), p_range_add(1:ncrb), f(0:ncrb-1), q(1:ncrb), act_bins)
+      e = e + fq_to_e(p_range_add(0:ncrb-1), p_range_add(1:ncrb), f(0:ncrb-1), g_fix(0:ncrb-1), q(1:ncrb), act_bins)
 
       call my_deallocate(act_bins)
 
@@ -1232,7 +1262,7 @@ contains
 
       use constants,      only: I_ONE
       use initcosmicrays, only: ncrb
-      use initcrspectrum, only: p_fix, p_br_init, p_init, q_br_init
+      use initcrspectrum, only: p_fix, g_fix, p_br_init, p_init, q_br_init
 
       implicit none
 
@@ -1243,7 +1273,7 @@ contains
       do i = 1, i_br
          q(i) = pf_to_q(p(i-1),p(i),f(i-1),f(i))
       enddo
-      e = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins)
+      e = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), g_fix(0:ncrb-1), q(1:ncrb), active_bins)
       n = fq_to_n(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins)
 
    end subroutine cresp_init_brpg_spectrum
@@ -1256,7 +1286,7 @@ contains
 
       use constants,      only: I_ONE
       use initcosmicrays, only: ncrb
-      use initcrspectrum, only: p_fix, p_br_init, q_br_init, q_init
+      use initcrspectrum, only: p_fix, g_fix, p_br_init, q_br_init, q_init
 
       implicit none
 
@@ -1265,7 +1295,7 @@ contains
       i_br = int(minloc(abs(p_fix - p_br_init(LO)), dim=1), kind=4) - I_ONE
       q(:i_br) = q_br_init ; q(i_br+1:) = q_init
       f(i_cut(LO):i_br-1) = f(i_br) * (p(i_cut(LO):i_br-1) / p(i_br))**(-q_br_init)
-      e = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins)
+      e = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), g_fix(0:ncrb-1), q(1:ncrb), active_bins)
       n = fq_to_n(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins)
 
    end subroutine cresp_init_brpl_spectrum
@@ -1277,7 +1307,7 @@ contains
 
       use constants,      only: I_ONE
       use initcosmicrays, only: ncrb
-      use initcrspectrum, only: p_fix, q_init
+      use initcrspectrum, only: p_fix, g_fix, q_init
 
       implicit none
 
@@ -1293,7 +1323,7 @@ contains
 
       if ((i_cut(HI) - i_br /= i_br - i_cut(LO))) p_cut(HI) = p_cut(HI) - (p_cut(HI) - p_fix(i_cut(HI)-1))
       p(i_cut(HI)) = p_cut(HI) ; i_cut(HI) = i_cut(HI) - I_ONE
-      e = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins)
+      e = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), g_fix(0:ncrb-1), q(1:ncrb), active_bins)
       n = fq_to_n(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins)
 
    end subroutine cresp_init_symf_spectrum
@@ -1305,7 +1335,7 @@ contains
 
       use constants,      only: I_ONE
       use initcosmicrays, only: ncrb
-      use initcrspectrum, only: p_fix, q_init
+      use initcrspectrum, only: p_fix, g_fix, q_init
 
       implicit none
 
@@ -1318,7 +1348,7 @@ contains
       enddo
       if ((i_cut(HI) - i_br /= i_br - i_cut(LO))) p_cut(HI) = p_cut(HI) - (p_cut(HI) - p_fix(i_cut(HI)-1))
       p(i_cut(HI)) = p_cut(HI) ; i_cut(HI) = i_cut(HI) -I_ONE
-      e = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins)
+      e = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), g_fix(0:ncrb-1), q(1:ncrb), active_bins)
       n = fq_to_n(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins)
 
    end subroutine cresp_init_syme_spectrum
@@ -1331,7 +1361,7 @@ contains
 
       use cresp_variables, only: fpcc
       use initcosmicrays,  only: ncrb
-      use initcrspectrum,  only: f_init, p_init
+      use initcrspectrum,  only: f_init, p_init, g_fix
 
       implicit none
 
@@ -1342,7 +1372,7 @@ contains
       do i = 1, ncrb
          q(i) = pf_to_q(p(i-1),p(i),f(i-1),f(i)) !-log(f(i)/f(i-1))/log(p(i)/p(i-1))
       enddo
-      e = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins)
+      e = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), g_fix(0:ncrb-1), q(1:ncrb), active_bins)
       n = fq_to_n(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins)
 
    end subroutine cresp_init_bump_spectrum
@@ -1389,8 +1419,8 @@ contains
 ! energy integral (eq. 21)
 !
 !-------------------------------------------------------------------------------------------------
-
-   function fq_to_e(p_l, p_r, f_l, q, bins)
+!
+   function fq_to_e(p_l, p_r, f_l, g_l, q, bins)
 
       use constants,       only: zero, one, four
       use cresp_variables, only: fpcc
@@ -1399,13 +1429,13 @@ contains
 
       implicit none
 
-      real,            dimension(:), intent(in) :: p_l, p_r, f_l, q
+      real,            dimension(:), intent(in) :: p_l, p_r, f_l, g_l, q
       integer(kind=4), dimension(:), intent(in) :: bins
       real,    dimension(size(bins))    :: e_bins
       real,    dimension(1:ncrb)        :: fq_to_e
 
       fq_to_e = zero
-      e_bins = fpcc * f_l(bins) * p_l(bins)**4
+      e_bins = fpcc * f_l(bins) * p_l(bins)**3 * g_l(bins)
       where (abs(q(bins) - four) > eps)
          e_bins = e_bins * ((p_r(bins)/p_l(bins))**(four-q(bins)) - one)/(four - q(bins))
       elsewhere
@@ -1885,6 +1915,218 @@ contains
       alpha = zero ;  n_in = zero
 
    end subroutine get_fqp_cutoff
+
+!---------------------------------------------------------------------------------------------------
+! Preparation and computation of free cooling method for spectral CRs, using the method developped in Girichids et al, 2020, section 2.6.
+! Application to the Coulomb energy loss
+!---------------------------------------------------------------------------------------------------
+
+   subroutine cresp_compute_cre_Coulomb_cooling(gas_dens, f_0, p_0, q_0, bins, delta_t)
+
+      use cr_data,        only: cr_mass, icr_E, cr_Z
+      use constants,      only: zero
+      use initcosmicrays, only: ncrb
+      use units,          only: clight, me, mH, mp, Lambda_Cc
+
+      implicit none
+
+      integer(kind=4)                           :: i_bin, last_bin, j, k, i_sub, n_sub, n_step_max
+      integer(kind=4), dimension(:), intent(in) :: bins
+      real, dimension(2), intent(in)            :: gas_dens
+      real                                      :: dgas
+      real                                      :: delta_t, h, delta_p, w
+      real, dimension(0:ncrb)                   :: p_one, f_one, f_old
+      real, dimension(0:ncrb),intent(in)        :: p_0
+      real, dimension(0:ncrb)                   :: f_0
+      real, dimension(ncrb)                     :: q_0
+      real                                      :: eps_tiny, eps_local, eps_f, p_cut_u, p_cut_l
+      real(kind=8)                              :: delta, delta_t_sub, loss_amplitude, dp0, dp1, Fp0_out, dN0_out, Fp1_out, dN1_out, N_lost, tau_sink
+
+      last_bin = bins(size(bins))
+
+      n_step_max = 10
+
+      dgas = 0.
+
+      delta = 1.e-60
+      eps_f = 1e-12
+
+      eps_tiny = 1e-10      ! avoid exact zeros in logs/divides
+      eps_local = 1e-30     ! tolerance for nearly-equal momenta
+
+      N_lost = 0.
+
+      h = - 1.9 !value of the power law coefficient for momentum-dependent Coulomb cooling approximation
+
+      p_cut_u = 1.0e6 !p_0(10) ! Momentum value under which cooling applies. Above, the spectrum is unchanged.
+      p_cut_l = 1.
+
+      dgas = dgas + gas_dens(1) / mp + gas_dens(2) / mH
+
+      loss_amplitude = Lambda_Cc*cr_Z(icr_E)**2*(cr_mass(icr_E)/0.938)**(-h)*dgas/clight/(clight*mp) !amplitude b in dp/dt=b*p^h
+
+!       print "(A, 50E16.8)", "f1", f_0
+      f_old = f_0
+      f_0(last_bin) = zero
+      f_old(last_bin) = zero
+
+      ! set p_one initially to the grid momenta so frozen bins are correct by default
+      p_one = p_0
+      f_one = f_old
+
+      f_old(last_bin) = zero
+
+      do i_bin = 1, last_bin ! loop to compute f_one and p_one
+         if (p_0(i_bin) .ge. p_cut_u .or. p_0(i_bin) .lt. p_cut_u) then !HIGH-ENERGY CONDITION: do not change f_0 at high energy E_k>10^2 GeV (negligible losses, creates artifacts)
+            delta_t_sub = 0.1 * abs(p_0(i_bin)**(1-h) / loss_amplitude) !substep = 0.1 * |p_min/(dp/dt)(p_min)|
+            n_sub = max(1,int(delta_t/delta_t_sub))
+            if (n_sub .gt. n_step_max) then
+               n_sub = n_step_max
+               delta_t_sub = delta_t/n_sub
+            endif
+
+            if (delta_t_sub .gt. delta_t) delta_t_sub = delta_t
+            delta_p = (1-h)*delta_t_sub*loss_amplitude
+            do i_sub = 1, n_sub !subcycling loop
+
+               if (p_0(i_bin)**(1-h) .gt. delta_p) then
+                  p_one(i_bin) = max(((p_0(i_bin))**(1-h) - delta_p)**(1/(1-h)), eps_tiny)
+                  ! avoid division by zero for extremely small p_one
+                  f_one(i_bin) = f_old(i_bin)*(p_0(i_bin)/p_one(i_bin))**(2+h)
+               else
+                  ! cooled to (near) zero momentum -> treat as removed (or sink)
+                  p_one(i_bin) = zero
+                  f_one(i_bin) = delta
+               endif
+               ! accumulate the result of this substep before the next substep
+               f_old(i_bin) = f_one(i_bin)
+            enddo
+         endif
+      enddo
+!       print *, loss_amplitude, dgas, delta_t_sub
+
+      ! Ensure p_one is non-decreasing; if a later p_one is zero while earlier not, keep consistency
+      ! (This is a conservative fix: if cooling removes later bins, keep monotonicity)
+      do i_bin = 1, last_bin
+         if (p_one(i_bin) .lt. p_one(i_bin-1)) then
+            p_one(i_bin) = p_one(i_bin-1)
+            f_one(i_bin) = f_one(i_bin-1)
+         endif
+      enddo
+      ! --- Interpolate/extrapolate f_0 from f_one at the new p-grid p_0
+      do i_bin = 0, last_bin
+         if (p_0(i_bin) .ge. p_cut_u .or. p_0(i_bin) .lt. p_cut_u) then !HIGH-ENERGY CONDITION: do not change f_0 at high energy E_k>10^2 GeV (negligible losses, creates artifacts)
+         ! default fallback
+            f_0(i_bin) = delta
+
+            ! If p_0 is smaller or equal than smallest p_one, use nearest (or fallback) value
+            if (p_0(i_bin) <= max(p_one(0), eps_tiny)) then
+               if (f_one(0) .gt. delta) then
+                  f_0(i_bin) = f_one(0)
+               else
+                  f_0(i_bin) = delta
+               endif
+               cycle
+            endif
+
+            ! If p_0 is larger or equal than largest p_one, use nearest-extrapolation:
+            if (p_0(i_bin) >= max(p_one(last_bin), eps_tiny)) then
+               ! find last two distinct valid points for extrapolation
+               k = last_bin
+               do while (k .gt. 0 .and. p_one(k) <= p_one(k-1) + eps_local)
+                  k = k - 1
+               enddo
+               if (k .ge. 1 .and. f_one(k) .gt. delta .and. f_one(k-1) .gt. delta) then
+                  ! log-linear extrapolate using last segment
+                  w = log(p_0(i_bin)/p_one(k-1)) / log(p_one(k)/p_one(k-1))
+                  f_0(i_bin) = exp((1.0 - w)*log(f_one(k-1)) + w*log(f_one(k)))
+               else
+                  ! fall back to last known value
+                  if (f_one(last_bin) .gt. delta) then
+                     f_0(i_bin) = f_one(last_bin)
+                  else
+                     f_0(i_bin) = delta
+                  endif
+               endif
+               cycle
+            endif
+
+            ! Normal interior interpolation: find j such that p_one(j) < p_0(i) < p_one(j+1)
+            do j = 0, last_bin-1
+               if (p_0(i_bin) .gt. p_one(j) .and. p_0(i_bin) .le. p_one(j+1)) then
+                  ! ensure denominators are safe
+                  if (p_one(j+1) .gt. p_one(j) + eps_local .and. f_one(j) .gt. delta .and. f_one(j+1) .gt. delta) then
+                     w = log(p_0(i_bin)/p_one(j)) / log(p_one(j+1)/p_one(j))
+                     f_0(i_bin) = exp((1.0 - w)*log(f_one(j)) + w*log(f_one(j+1)))
+                  else
+                     ! cannot interpolate reliably -> fallback
+                     if (f_one(j) .gt. delta) then
+                        f_0(i_bin) = f_one(j)
+                     else
+                        f_0(i_bin) = delta
+                     endif
+                  endif
+                  exit
+               endif
+            enddo
+         endif
+      enddo
+
+      f_old = f_0
+      f_0(last_bin) = zero
+      f_old(last_bin) = zero
+
+
+      dp0 = max(p_0(1) - p_0(0), 1d-40)
+      dp1 = max(p_0(2) - p_0(1), 1d-40)
+
+      ! Compute outgoing flux at lower boundary
+      Fp1_out = abs(loss_amplitude * p_0(1)**h * f_0(1))
+
+      ! Number of particles leaving the CR regime during this substep
+      dN1_out = Fp1_out * delta_t_sub / dp1
+
+      !Flux on the left boundary bin
+      !if (dN1_out >= f_0(1) * (1.0d0 - eps_f)) then
+      !   ! Tout le contenu du bin 1 est vidé
+      !   dN1_out = f_0(1)
+      !   f_0(1) = delta
+      !   f_0(0) = f_0(0) + dN1_out
+      !else
+      !   ! Transfert normal
+      !   f_0(1) = f_0(1) - dN1_out
+      !   f_0(0) = f_0(0) + dN1_out
+      !endif
+
+      !Fp0_out = abs(loss_amplitude * p_0(0)**h * f_0(0))
+      !
+      !dN0_out = Fp0_out * delta_t_sub / dp0
+      !
+      !if (dN0_out >= f_0(0) * (1.0d0 - eps_f)) then
+      !   dN0_out = f_0(0)
+      !   f_0(0) = delta
+      !else
+      !   f_0(0) = f_0(0) - dN0_out
+      !endif
+
+      ! Accumulate diagnostic (for conservation test)
+      N_lost = N_lost + dN0_out * dp0 + dN1_out * dp1
+
+         ! Recompute q_0 from neighbouring f_0 values; ensure q_0 defined only where both neighbors valid
+      do i_bin = 1, last_bin-2
+         if (f_0(i_bin-1) .gt. delta .and. f_0(i_bin) .gt. delta .and. p_0(i_bin) .lt. p_cut_u) then !For p_0(i_bin), same condtion at high-energy for q
+            q_0(i_bin) = pf_to_q(p_0(i_bin-1), p_0(i_bin), f_0(i_bin-1), f_0(i_bin))
+         !else
+         !
+         !   if (i_bin .gt. 1) q_0(i_bin) = q_0(i_bin - 1) ! or some sentinel/previous value; adjust to your convention
+         endif
+      enddo
+         ! handle boundaries and set q_0(1) and q_0(last_bin-1) to sensible values if needed
+         !q_0(1)        = zero
+         !q_0(last_bin-1) = q_0(last_bin-2)
+!       print "(A, 50E16.8)", "f1", f_0
+
+end subroutine cresp_compute_cre_Coulomb_cooling
 
 !>
 !! \brief Relative change of momentum due to losses (u_b*p*dt) and compression u_d*dt (Taylor expansion up to 3rd order)

@@ -40,7 +40,7 @@ module initcrspectrum
    private
    public :: use_cresp, use_cresp_evol, p_init, initial_spectrum, p_br_init, f_init, q_init, q_br_init, q_big, cfl_cre, cre_eff, expan_order, e_small, e_small_approx_p, e_small_approx_init_cond,  &
            & smallcren, smallcree, max_p_ratio, NR_iter_limit, force_init_NR, NR_run_refine_pf, NR_refine_solution_q, NR_refine_pf, nullify_empty_bins, synch_active, adiab_active,                 &
-           & icomp_active, allow_source_spectrum_break, cre_active, tol_f, tol_x, tol_f_1D, tol_x_1D, arr_dim_a, arr_dim_n, arr_dim_q, eps, eps_det, w, p_fix, p_mid_fix, total_init_cree, p_fix_ratio,           &
+           & icomp_active, coulomb_active, allow_source_spectrum_break, cre_active, tol_f, tol_x, tol_f_1D, tol_x_1D, arr_dim_a, arr_dim_n, arr_dim_q, eps, eps_det, w, p_fix, p_mid_fix, g_fix, total_init_cree, p_fix_ratio,           &
            & spec_mod_trms, cresp_all_edges, cresp_all_bins, norm_init_spectrum, cresp, crel, dfpq, f_synchIC, init_cresp, cleanup_cresp_sp, check_if_dump_fpq, cleanup_cresp_work_arrays, q_eps,     &
            & u_b_max, def_dtsynchIC, def_dtadiab, NR_smap_file, NR_allow_old_smaps, cresp_substep, n_substeps_max, allow_unnatural_transfer, K_cresp_paral, K_cresp_perp, p_min_fix, p_max_fix, redshift, f_loss_IC, f_loss_B
 
@@ -62,6 +62,8 @@ module initcrspectrum
    real            :: q_big                       !< maximal amplitude of q
    real            :: cfl_cre                     !< CFL parameter  for cr electrons
    real            :: cre_eff                     !< fraction of energy passed to cr-electrons by nucleons (mainly protons)
+   real, dimension(:), allocatable :: g_fix       !< kinetic energy array
+!    real, allocatable, dimension(:,:) :: s         !> power-law exponent arrays for transrelativistic limit
    real, dimension(:), allocatable :: K_cresp_paral !< array containing parallel diffusion coefficients of all CR CRESP components (number density and energy density)
    real, dimension(:), allocatable :: K_cresp_perp  !< array containing perpendicular diffusion coefficients of all CR CRESP components (number density and energy density)
    real            :: K_cre_pow                   !< exponent for power law-like diffusion-energy dependence
@@ -94,6 +96,8 @@ module initcrspectrum
    logical         :: synch_active                !< TEST feature - turns on / off synchrotron cooling @ CRESP
    logical         :: adiab_active                !< TEST feature - turns on / off adiabatic   cooling @ CRESP
    logical         :: icomp_active                !< TEST feature - turns on / off Inv-Compton cooling @ CRESP
+   logical         :: coulomb_active              !< TEST feature - turns on / off Coulomb     cooling @ CRESP
+   logical         :: transrelativistic           !< logical parameter for use of trans-relativistic and non-relativistic limit of CR spectra
    real            :: redshift                    !< redshift for chosen epoch WARNING this remains constant
    real            :: cre_active                  !< electron contribution to Pcr
 
@@ -145,6 +149,7 @@ module initcrspectrum
       real :: ud
       real :: umag
       real :: ucmb
+      real, dimension(2) :: dcoul
    end type spec_mod_trms
 
    real :: total_init_cree
@@ -192,7 +197,8 @@ contains
       &                         NR_iter_limit, max_p_ratio, synch_active, adiab_active, arr_dim_a, arr_dim_n, arr_dim_q, q_br_init, &
       &                         Gamma_min_fix, Gamma_max_fix, nullify_empty_bins, approx_cutoffs, NR_run_refine_pf, b_max_db,       &
       &                         NR_refine_solution_q, NR_refine_pf_lo, NR_refine_pf_up, smallcree, smallcren, p_br_init_up, p_diff, &
-      &                         q_eps, NR_smap_file, cresp_substep, n_substeps_max, allow_unnatural_transfer, icomp_active, redshift
+      &                         q_eps, NR_smap_file, cresp_substep, n_substeps_max, allow_unnatural_transfer, icomp_active,         &
+      &                         coulomb_active, redshift, transrelativistic
 
 ! Default values
       use_cresp         = .true.
@@ -203,6 +209,7 @@ contains
       p_up_init         = 7.5e2
       p_br_def          = p_lo_init
       initial_spectrum  = "powl"
+      transrelativistic = .false.
       f_init            = 1.0
       q_init            = 4.1
       q_br_def          = q_init
@@ -240,6 +247,7 @@ contains
       synch_active         = .true.
       adiab_active         = .true.
       icomp_active         = .false.
+      coulomb_active       = .false.
       cre_active           = 0.0
       b_max_db             = 10.  ! default value of B limiter
       redshift             = 0.
@@ -308,6 +316,8 @@ contains
 
          lbuff(15) =  cresp_substep
          lbuff(16) =  allow_unnatural_transfer
+         lbuff(17) =  transrelativistic
+         lbuff(18) =  coulomb_active
 
          rbuff(1)  = cfl_cre
          rbuff(2)  = cre_eff
@@ -383,6 +393,8 @@ contains
 
          cresp_substep               = lbuff(15)
          allow_unnatural_transfer    = lbuff(16)
+         transrelativistic           = lbuff(17)
+         coulomb_active              = lbuff(18)
 
          cfl_cre                     = rbuff(1)
          cre_eff                     = rbuff(2)
@@ -481,6 +493,8 @@ contains
       call my_allocate_with_index(cresp_all_bins,   ncrb, I_ONE )
       call my_allocate_with_index(n_small_bin,      ncrb, I_ONE )
 
+      call my_allocate_with_index(g_fix, ncrb, I_ZERO )
+
       call my_allocate_with_index(Gamma_fix,        ncrb, I_ZERO)
       call my_allocate_with_index(Gamma_mid_fix,    ncrb, I_ONE )
       call my_allocate_with_index(mom_cre_fix,      ncrb, I_ZERO)
@@ -505,6 +519,9 @@ contains
       p_mid_fix(2:ncrb-1) = sqrt(p_fix(1:ncrb-2)*p_fix(2:ncrb-1))
       p_mid_fix(1)    = p_mid_fix(2) / p_fix_ratio
       p_mid_fix(ncrb) = p_mid_fix(ncrb-1) * p_fix_ratio
+
+!       g_fix(:) = clight_cresp * p_fix(:)     ! WARNING -- assuming non-transrelativistic over whole spectrum range
+      call compute_g_fix
 
 !> set Gamma arrays, analogically to p_fix arrays, that will be constructed using Gamma arrays
       Gamma_fix            = one             !< Gamma factor obviously cannot be lower than 1
@@ -715,7 +732,40 @@ contains
       crel%n = zero
       crel%i_cut = I_ZERO
 
-   end subroutine init_crel
+   end subroutine
+
+!----------------------------------------------------------------------------------------------------
+
+   subroutine compute_g_fix
+
+      use cresp_variables, only: clight_cresp
+      use cr_data,         only: cr_mass, icr_E
+      use constants,       only: zero
+
+      implicit none
+
+      g_fix(:) = zero
+
+      print *, 'In compute_gs'
+!       print *, 'sizes(s):   ', lbound(s),  ubound(s), size(s)
+      print *, 'sizes(p):   ', lbound(p_fix),  ubound(p_fix), size(p_fix)
+      print *, 'sizes(g_fix):', lbound(g_fix),  ubound(g_fix), size(g_fix)
+!       print *, 'bins =', ncrb
+
+      if (transrelativistic) then
+            g_fix(:) = sqrt(clight_cresp**2 * p_fix(:)**2 + clight_cresp**4 * cr_mass(icr_E)**2) - cr_mass(icr_E) * clight_cresp**2
+   !         g = sqrt(cnst_c**2*crel%p**2 + cnst_m**2*cnst_c**4) - cnst_m*cnst_c**2
+   !         cnst_m is different for each nucleon, therefore g_fix should be array of ncrb x nspc.
+      else
+            g_fix(:) = clight_cresp*p_fix
+      endif
+      g_fix(lbound(g_fix)) = g_fix(lbound(g_fix) + 1) / p_fix_ratio
+      g_fix(ubound(g_fix)) = g_fix(ubound(g_fix) - 1) * p_fix_ratio
+      print *, "g_fix initialized:", g_fix
+
+   end subroutine compute_g_fix
+
+
 !----------------------------------------------------------------------------------------------------
 
    real function cresp_get_mom(gamma, particle_mass)
@@ -778,6 +828,7 @@ contains
 
       if (allocated(p_fix)) call my_deallocate(p_fix)
       if (allocated(p_mid_fix)) call my_deallocate(p_mid_fix)
+      if (allocated(g_fix)) call my_deallocate(g_fix)
       if (allocated(cresp_all_edges)) call my_deallocate(cresp_all_edges)
       if (allocated(cresp_all_bins )) call my_deallocate(cresp_all_bins)
 

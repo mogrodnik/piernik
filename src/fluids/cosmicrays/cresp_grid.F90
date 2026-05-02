@@ -116,15 +116,17 @@ contains
       use cg_leaves,        only: leaves
       use cg_list,          only: cg_list_element
       use constants,        only: xdim, ydim, zdim, onet
-      use cresp_crspectrum, only: cresp_update_cell
+      use cresp_crspectrum, only: cresp_update_cell, printed
       use crhelpers,        only: divv_i
       use cresp_helpers,    only: enden_CMB
       use dataio_pub,       only: msg, warn
       use func,             only: emag
+      use fluidindex,       only: flind
+      use fluids_pub,       only: has_ion, has_neu
       use global,           only: dt
       use grid_cont,        only: grid_container
       use initcosmicrays,   only: iarr_cre_e, iarr_cre_n
-      use initcrspectrum,   only: adiab_active, synch_active, icomp_active, icomp_active, cresp, crel, dfpq, f_loss_B, f_loss_IC, spec_mod_trms, u_b_max, use_cresp_evol
+      use initcrspectrum,   only: adiab_active, coulomb_active, synch_active, icomp_active, cresp, crel, dfpq, f_loss_B, f_loss_IC, spec_mod_trms, u_b_max, use_cresp_evol
       use initcrspectrum,   only: cresp_substep, n_substeps_max, redshift
       use named_array_list, only: wna
       use ppp,              only: ppp_main
@@ -157,10 +159,13 @@ contains
       nssteps     = 1
       nssteps_max = 1
 
+      printed = .false.
+
       do while (associated(cgl))
          cg => cgl%cg
          call cg%costs%start
 
+         sptab%dcoul(:) = 0.0
          sptab%ucmb  = 0.0
          if (icomp_active) sptab%ucmb = enden_CMB(redshift) * f_loss_IC
 
@@ -173,6 +178,10 @@ contains
                   if (synch_active) sptab%umag = min(emag(cg%b(xdim,i,j,k), cg%b(ydim,i,j,k), cg%b(zdim,i,j,k)) * f_loss_B, u_b_max)
                   if (adiab_active) sptab%ud   = cg%q(divv_i)%point([i,j,k]) * onet
                   sptab%ub = sptab%umag + sptab%ucmb  ! prepare term for synchrotron + IC losses
+                  if (coulomb_active) then
+                     if (has_ion) sptab%dcoul(1) = cg%u(flind%ion%idn, i, j, k)
+                     if (has_neu) sptab%dcoul(2) = cg%u(flind%neu%idn, i, j, k)
+                  endif
 
                   if (cresp_substep) then !< prepare substep timestep for each cell
                      call cresp_timestep_cell(sptab, dt_cresp, inactive_cell)
