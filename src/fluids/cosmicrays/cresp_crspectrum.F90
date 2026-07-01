@@ -327,7 +327,7 @@ contains
             print "(A, 50E16.8)", "f0", f
             print "(A, 50E16.8)", "q0", q
 !               print "(A, 50E16.8)", "ndt0", ndt
-              print "(A, 50E16.8)", "edt0", edt
+            print "(A, 50E16.8)", "e0", edt
          endif
          f = nq_to_f(p(0:ncrb-1), p(1:ncrb), ndt(1:ncrb), q(1:ncrb), active_bins)
 
@@ -340,7 +340,7 @@ contains
             print "(A, 50E16.8)", "f1", f
             print "(A, 50E16.8)", "q1", q
 !               print "(A, 50E16.8)", "ndt1", ndt
-              print "(A, 50E16.8)", "edt1", edt
+            print "(A, 50E16.8)", "e1", edt
             printed = .true.
          endif
       endif
@@ -1924,13 +1924,13 @@ contains
    subroutine cresp_compute_cre_Coulomb_cooling(gas_dens, f_0, p_0, q_0, bins, delta_t)
 
       use cr_data,        only: cr_mass, icr_E, cr_Z
-      use constants,      only: zero
+      use constants,      only: zero, one, two
       use initcosmicrays, only: ncrb
       use units,          only: clight, me, mH, mp, Lambda_Cc
 
       implicit none
 
-      integer(kind=4)                           :: i_bin, last_bin, j, k, i_sub, n_sub, n_step_max
+      integer(kind=4)                           :: i_bin, first_bin, last_bin, j, k, i_sub, n_sub, n_step_max
       integer(kind=4), dimension(:), intent(in) :: bins
       real, dimension(2), intent(in)            :: gas_dens
       real                                      :: dgas
@@ -1940,9 +1940,11 @@ contains
       real, dimension(0:ncrb)                   :: f_0
       real, dimension(ncrb)                     :: q_0
       real                                      :: eps_tiny, eps_local, eps_f, p_cut_u, p_cut_l
-      real(kind=8)                              :: delta, delta_t_sub, loss_amplitude, dp0, dp1, Fp0_out, dN0_out, Fp1_out, dN1_out, N_lost, tau_sink
+      real(kind=8)                              :: delta, delta_t_sub, loss_amplitude, dp0, dp1, Fp0_out, dN0_out, Fp1_out, dN1_out, N_lost
 
-      last_bin = bins(size(bins))
+      first_bin = bins(lbound(bins, dim=1))
+      last_bin  = bins(ubound(bins, dim=1))
+      delta_t_sub = delta_t
 
       n_step_max = 10
 
@@ -1965,7 +1967,6 @@ contains
 
       loss_amplitude = Lambda_Cc*cr_Z(icr_E)**2*(cr_mass(icr_E)/0.938)**(-h)*dgas/clight/(clight*mp) !amplitude b in dp/dt=b*p^h
 
-!       print "(A, 50E16.8)", "f1", f_0
       f_old = f_0
       f_0(last_bin) = zero
       f_old(last_bin) = zero
@@ -1976,8 +1977,8 @@ contains
 
       f_old(last_bin) = zero
 
-      do i_bin = 1, last_bin ! loop to compute f_one and p_one
-         if (p_0(i_bin) .ge. p_cut_u .or. p_0(i_bin) .lt. p_cut_u) then !HIGH-ENERGY CONDITION: do not change f_0 at high energy E_k>10^2 GeV (negligible losses, creates artifacts)
+      do i_bin = first_bin, last_bin ! loop to compute f_one and p_one
+         if (p_0(i_bin) .gt. p_cut_l .and. p_0(i_bin) .lt. p_cut_u) then !HIGH-ENERGY CONDITION: do not change f_0 at high energy E_k>10^2 GeV (negligible losses, creates artifacts)
             delta_t_sub = 0.1 * abs(p_0(i_bin)**(1-h) / loss_amplitude) !substep = 0.1 * |p_min/(dp/dt)(p_min)|
             n_sub = max(1,int(delta_t/delta_t_sub))
             if (n_sub .gt. n_step_max) then
@@ -1986,13 +1987,13 @@ contains
             endif
 
             if (delta_t_sub .gt. delta_t) delta_t_sub = delta_t
-            delta_p = (1-h)*delta_t_sub*loss_amplitude
+            delta_p = (one-h)*delta_t_sub*loss_amplitude
             do i_sub = 1, n_sub !subcycling loop
 
-               if (p_0(i_bin)**(1-h) .gt. delta_p) then
-                  p_one(i_bin) = max(((p_0(i_bin))**(1-h) - delta_p)**(1/(1-h)), eps_tiny)
+               if (p_0(i_bin)**(one-h) .gt. delta_p) then
+                  p_one(i_bin) = max(((p_0(i_bin))**(one-h) - delta_p)**(one/(one-h)), eps_tiny)
                   ! avoid division by zero for extremely small p_one
-                  f_one(i_bin) = f_old(i_bin)*(p_0(i_bin)/p_one(i_bin))**(2+h)
+                  f_one(i_bin) = f_old(i_bin)*(p_0(i_bin)/p_one(i_bin))**(two+h)
                else
                   ! cooled to (near) zero momentum -> treat as removed (or sink)
                   p_one(i_bin) = zero
@@ -2003,26 +2004,25 @@ contains
             enddo
          endif
       enddo
-!       print *, loss_amplitude, dgas, delta_t_sub
 
       ! Ensure p_one is non-decreasing; if a later p_one is zero while earlier not, keep consistency
       ! (This is a conservative fix: if cooling removes later bins, keep monotonicity)
-      do i_bin = 1, last_bin
+      do i_bin = first_bin, last_bin
          if (p_one(i_bin) .lt. p_one(i_bin-1)) then
             p_one(i_bin) = p_one(i_bin-1)
             f_one(i_bin) = f_one(i_bin-1)
          endif
       enddo
       ! --- Interpolate/extrapolate f_0 from f_one at the new p-grid p_0
-      do i_bin = 0, last_bin
-         if (p_0(i_bin) .ge. p_cut_u .or. p_0(i_bin) .lt. p_cut_u) then !HIGH-ENERGY CONDITION: do not change f_0 at high energy E_k>10^2 GeV (negligible losses, creates artifacts)
+      do i_bin = first_bin-1, last_bin
+         if (p_0(i_bin) .gt. p_cut_l .and. p_0(i_bin) .lt. p_cut_u) then !HIGH-ENERGY CONDITION: do not change f_0 at high energy E_k>10^2 GeV (negligible losses, creates artifacts)
          ! default fallback
             f_0(i_bin) = delta
 
             ! If p_0 is smaller or equal than smallest p_one, use nearest (or fallback) value
-            if (p_0(i_bin) <= max(p_one(0), eps_tiny)) then
-               if (f_one(0) .gt. delta) then
-                  f_0(i_bin) = f_one(0)
+            if (p_0(i_bin) <= max(p_one(first_bin-1), eps_tiny)) then
+               if (f_one(first_bin-1) .gt. delta) then
+                  f_0(i_bin) = f_one(first_bin-1)
                else
                   f_0(i_bin) = delta
                endif
@@ -2039,7 +2039,7 @@ contains
                if (k .ge. 1 .and. f_one(k) .gt. delta .and. f_one(k-1) .gt. delta) then
                   ! log-linear extrapolate using last segment
                   w = log(p_0(i_bin)/p_one(k-1)) / log(p_one(k)/p_one(k-1))
-                  f_0(i_bin) = exp((1.0 - w)*log(f_one(k-1)) + w*log(f_one(k)))
+                  f_0(i_bin) = exp((one - w)*log(f_one(k-1)) + w*log(f_one(k)))
                else
                   ! fall back to last known value
                   if (f_one(last_bin) .gt. delta) then
@@ -2052,12 +2052,12 @@ contains
             endif
 
             ! Normal interior interpolation: find j such that p_one(j) < p_0(i) < p_one(j+1)
-            do j = 0, last_bin-1
+            do j = first_bin-1, last_bin-1
                if (p_0(i_bin) .gt. p_one(j) .and. p_0(i_bin) .le. p_one(j+1)) then
                   ! ensure denominators are safe
                   if (p_one(j+1) .gt. p_one(j) + eps_local .and. f_one(j) .gt. delta .and. f_one(j+1) .gt. delta) then
                      w = log(p_0(i_bin)/p_one(j)) / log(p_one(j+1)/p_one(j))
-                     f_0(i_bin) = exp((1.0 - w)*log(f_one(j)) + w*log(f_one(j+1)))
+                     f_0(i_bin) = exp((one - w)*log(f_one(j)) + w*log(f_one(j+1)))
                   else
                      ! cannot interpolate reliably -> fallback
                      if (f_one(j) .gt. delta) then
@@ -2077,43 +2077,45 @@ contains
       f_old(last_bin) = zero
 
 
-      dp0 = max(p_0(1) - p_0(0), 1d-40)
-      dp1 = max(p_0(2) - p_0(1), 1d-40)
+      dp0 = max(p_0(first_bin)   - p_0(first_bin-1), 1d-40)
+      dp1 = max(p_0(first_bin+1) - p_0(first_bin),   1d-40)
 
       ! Compute outgoing flux at lower boundary
-      Fp1_out = abs(loss_amplitude * p_0(1)**h * f_0(1))
+      Fp1_out = abs(loss_amplitude * p_0(first_bin)**h * f_0(first_bin))
 
       ! Number of particles leaving the CR regime during this substep
       dN1_out = Fp1_out * delta_t_sub / dp1
 
-      !Flux on the left boundary bin
-      !if (dN1_out >= f_0(1) * (1.0d0 - eps_f)) then
-      !   ! Tout le contenu du bin 1 est vidé
-      !   dN1_out = f_0(1)
-      !   f_0(1) = delta
-      !   f_0(0) = f_0(0) + dN1_out
+      ! =============== EXPERIMENTAL =================
+      !Flux through the left boundary bin
+      !if (dN1_out >= f_0(first_bin) * (one - eps_f)) then
+      !  ! Whole content of 1st bin is empty
+      !  dN1_out = f_0(first_bin)
+      !  f_0(first_bin)   = delta
+      !  f_0(first_bin-1) = f_0(first_bin-1) + dN1_out
       !else
-      !   ! Transfert normal
-      !   f_0(1) = f_0(1) - dN1_out
-      !   f_0(0) = f_0(0) + dN1_out
+      !  Transfer normal
+      !  f_0(first_bin)   = f_0(first_bin)     - dN1_out
+      !  f_0(first_bin-1) = f_0(first_bin-1) + dN1_out
       !endif
 
-      !Fp0_out = abs(loss_amplitude * p_0(0)**h * f_0(0))
+      !Fp0_out = abs(loss_amplitude * p_0(first_bin-1)**h * f_0(first_bin-1))
       !
       !dN0_out = Fp0_out * delta_t_sub / dp0
       !
-      !if (dN0_out >= f_0(0) * (1.0d0 - eps_f)) then
-      !   dN0_out = f_0(0)
-      !   f_0(0) = delta
+      !if (dN0_out >= f_0(first_bin-1) * (one - eps_f)) then
+      !   dN0_out = f_0(first_bin-1)
+      !   f_0(first_bin-1) = delta
       !else
-      !   f_0(0) = f_0(0) - dN0_out
+      !   f_0(first_bin-1) = f_0(first_bin-1) - dN0_out
       !endif
+      ! ==================================
 
       ! Accumulate diagnostic (for conservation test)
       N_lost = N_lost + dN0_out * dp0 + dN1_out * dp1
 
-         ! Recompute q_0 from neighbouring f_0 values; ensure q_0 defined only where both neighbors valid
-      do i_bin = 1, last_bin-2
+      ! Recompute q_0 from neighbouring f_0 values; ensure q_0 defined only where both neighbors valid
+      do i_bin = first_bin, last_bin-2
          if (f_0(i_bin-1) .gt. delta .and. f_0(i_bin) .gt. delta .and. p_0(i_bin) .lt. p_cut_u) then !For p_0(i_bin), same condtion at high-energy for q
             q_0(i_bin) = pf_to_q(p_0(i_bin-1), p_0(i_bin), f_0(i_bin-1), f_0(i_bin))
          !else
@@ -2121,10 +2123,10 @@ contains
          !   if (i_bin .gt. 1) q_0(i_bin) = q_0(i_bin - 1) ! or some sentinel/previous value; adjust to your convention
          endif
       enddo
-         ! handle boundaries and set q_0(1) and q_0(last_bin-1) to sensible values if needed
-         !q_0(1)        = zero
-         !q_0(last_bin-1) = q_0(last_bin-2)
-!       print "(A, 50E16.8)", "f1", f_0
+!    ! handle boundaries and set q_0(1) and q_0(last_bin-1) to sensible values if needed
+!     q_0(first_bin)  = zero
+!     q_0(first_bin)  = pf_to_q(p_0(i_bin-1), p_0(i_bin), f_0(i_bin-1), f_0(i_bin))
+!     q_0(last_bin-1) = q_0(last_bin-2)
 
 end subroutine cresp_compute_cre_Coulomb_cooling
 
