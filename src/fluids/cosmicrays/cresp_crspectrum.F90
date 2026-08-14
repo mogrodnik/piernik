@@ -222,6 +222,7 @@ contains
          endif
 
          if (solve_fail_lo) then                               !< exit_code support
+            if (.not. printed) print *,"DBG: failed to solve for p_lo"
             if (i_cut(LO) > 0) then
                if (allow_unnatural_transfer)  call manually_deactivate_bin_via_transfer(i_cut(LO) + I_ONE, I_ONE, n, e)
                call decr_vec(active_bins, 1)
@@ -323,13 +324,15 @@ contains
       enddo
 
       if (coulomb_active .eqv. .true.) then
+
+         f = nq_to_f(p(0:ncrb-1), p(1:ncrb), ndt(1:ncrb), q(1:ncrb), active_bins)
+
          if (.not. printed) then
             print "(A, 50E16.8)", "f0", f
             print "(A, 50E16.8)", "q0", q
 !               print "(A, 50E16.8)", "ndt0", ndt
             print "(A, 50E16.8)", "e0", edt
          endif
-         f = nq_to_f(p(0:ncrb-1), p(1:ncrb), ndt(1:ncrb), q(1:ncrb), active_bins)
 
          call cresp_compute_cre_Coulomb_cooling(sptab%dcoul, f, p, q, active_bins, dt)
 
@@ -1924,8 +1927,9 @@ contains
    subroutine cresp_compute_cre_Coulomb_cooling(gas_dens, f_0, p_0, q_0, bins, delta_t)
 
       use cr_data,        only: cr_mass, icr_E, cr_Z
-      use constants,      only: zero, one, two
+      use constants,      only: zero, one, two, LO
       use initcosmicrays, only: ncrb
+      use initcrspectrum, only: e_small_approx_p
       use units,          only: clight, me, mH, mp, Lambda_Cc
 
       implicit none
@@ -1961,11 +1965,11 @@ contains
       h = - 1.9 !value of the power law coefficient for momentum-dependent Coulomb cooling approximation
 
       p_cut_u = 1.0e6 !p_0(10) ! Momentum value under which cooling applies. Above, the spectrum is unchanged.
-      p_cut_l = 1.
+      p_cut_l = 1.e-3
 
       dgas = dgas + gas_dens(1) / mp + gas_dens(2) / mH
-
-      loss_amplitude = Lambda_Cc*cr_Z(icr_E)**2*(cr_mass(icr_E)/0.938)**(-h)*dgas/clight/(clight*mp) !amplitude b in dp/dt=b*p^h
+!     Substitution of cr_mass(icr_E) by one is deliberate for CRe
+      loss_amplitude = Lambda_Cc*cr_Z(icr_E)**2*(one/0.938)**(-h)*dgas/clight/(clight*mp) !amplitude b in dp/dt=b*p^h
 
       f_old = f_0
       f_0(last_bin) = zero
@@ -2086,31 +2090,34 @@ contains
       ! Number of particles leaving the CR regime during this substep
       dN1_out = Fp1_out * delta_t_sub / dp1
 
-      ! =============== EXPERIMENTAL =================
-      !Flux through the left boundary bin
-      !if (dN1_out >= f_0(first_bin) * (one - eps_f)) then
-      !  ! Whole content of 1st bin is empty
-      !  dN1_out = f_0(first_bin)
-      !  f_0(first_bin)   = delta
-      !  f_0(first_bin-1) = f_0(first_bin-1) + dN1_out
-      !else
-      !  Transfer normal
-      !  f_0(first_bin)   = f_0(first_bin)     - dN1_out
-      !  f_0(first_bin-1) = f_0(first_bin-1) + dN1_out
-      !endif
-
-      !Fp0_out = abs(loss_amplitude * p_0(first_bin-1)**h * f_0(first_bin-1))
-      !
-      !dN0_out = Fp0_out * delta_t_sub / dp0
-      !
-      !if (dN0_out >= f_0(first_bin-1) * (one - eps_f)) then
-      !   dN0_out = f_0(first_bin-1)
-      !   f_0(first_bin-1) = delta
-      !else
-      !   f_0(first_bin-1) = f_0(first_bin-1) - dN0_out
-      !endif
-      ! ==================================
-
+!       ! =============== EXPERIMENTAL =================
+!       !Flux through the left boundary bin
+!       if (dN1_out >= f_0(first_bin) * (one - eps_f)) then
+!        ! Whole content of 1st bin is empty
+!          dN1_out = f_0(first_bin)
+!          f_0(first_bin)   = delta
+!          f_0(first_bin-1) = f_0(first_bin-1) + dN1_out
+!       else
+!       !Transfer normal
+!          if (.not. printed) print *, "Transfer normal"
+!          f_0(first_bin)   = f_0(first_bin)   - dN1_out
+!          f_0(first_bin-1) = f_0(first_bin-1) + dN1_out
+!       endif
+!       if (.not. printed) print *, f_0(first_bin), f_0(first_bin-1)
+!       Fp0_out = abs(loss_amplitude * p_0(first_bin-1)**h * f_0(first_bin-1))
+!
+!       dN0_out = Fp0_out * delta_t_sub / dp0
+!       if (.not. printed) print *, "dN1_out", dN1_out, f_0(first_bin-1) * (one - eps_f)
+!       if (.not. printed) print *, f_0(first_bin), f_0(first_bin-1)
+!       if (dN0_out >= f_0(first_bin-1) * (one - eps_f)) then
+!          dN0_out = f_0(first_bin-1)
+!          f_0(first_bin-1) = delta
+!       else
+!          if (.not. printed) print *, "Transfer normal"
+!          f_0(first_bin-1) = f_0(first_bin-1) - dN0_out
+!       endif
+!       ! ==================================
+!       if (.not. printed) print *, "f_0(i_lo)", f_0(first_bin)
       ! Accumulate diagnostic (for conservation test)
       N_lost = N_lost + dN0_out * dp0 + dN1_out * dp1
 
@@ -2123,6 +2130,7 @@ contains
          !   if (i_bin .gt. 1) q_0(i_bin) = q_0(i_bin - 1) ! or some sentinel/previous value; adjust to your convention
          endif
       enddo
+
 !    ! handle boundaries and set q_0(1) and q_0(last_bin-1) to sensible values if needed
 !     q_0(first_bin)  = zero
 !     q_0(first_bin)  = pf_to_q(p_0(i_bin-1), p_0(i_bin), f_0(i_bin-1), f_0(i_bin))
