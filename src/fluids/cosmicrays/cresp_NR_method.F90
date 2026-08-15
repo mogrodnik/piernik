@@ -527,6 +527,7 @@ contains
 
       sought_by = SLV
 #endif /* CRESP_VERBOSED */
+      exit_code = .true.
 
       prev_solution(1) = p_space(1)
       prev_solution(2) = p_space(1)**q_space(1)
@@ -657,6 +658,7 @@ contains
       real, dimension(1:2)                :: prev_solution
       logical                             :: exit_code
 
+      exit_code = .true.
       prev_solution(1) = p_space(1)              ! refine must be called before these are deallocated
       prev_solution(2) = p_space(1)**q_space(1)
       call prepare_indices(arr_dim_a, i_incr, i_beg, i_end)
@@ -696,6 +698,7 @@ contains
       real, dimension(1:2)                :: prev_solution
       logical                             :: exit_code
 
+      exit_code = .true.
       prev_solution(1) = p_space(1)              ! refine must be called before these are deallocated
       prev_solution(2) = p_space(1)**q_space(1)
       call prepare_indices(arr_dim_a, i_incr, i_beg, i_end)
@@ -1240,6 +1243,7 @@ contains
       real                            :: blin_a, blin_n
       integer(kind=4), dimension(1:2) :: l1, l2 ! indexes that points where alpha_tab_ and up and n_tab_ and up are closest in value to a_val and n_val - indexes point to
 
+      successful = .false.
 #ifdef CRESP_VERBOSED
       write (*,"(A30,A2,A4)",advance="no") "Determining indices for case: ", bound_name(co), "... "  ! QA_WARN debug
 #endif /* CRESP_VERBOSED */
@@ -1273,8 +1277,8 @@ contains
       integer(kind=4),                 intent(in)  :: co
       real,                            intent(in)  :: a_val, n_val
       integer(kind=4), dimension(1:2), intent(out) :: loc1
-      logical,                         intent(out) :: successful
-      logical                                      :: hit_zero
+      logical,                         intent(inout) :: successful
+      logical                                        :: hit_zero
 
       hit_zero  = .false.
       loc1(1) = inverse_f_to_ind(a_val, alpha_tab(co, 1), alpha_tab(co, arr_dim_a), arr_dim_a)
