@@ -15,11 +15,15 @@ else:
 # String parameter values cannot contain spaces.
 # On input it receives a list of names of variables to be read, while it returns a list of parameter values.
 # Having array of names and array of values one can simply `exec ("%s=%s" %(name,value))
+cr_fieldnames_legacy = {"crp":"cr01",  "cre_e":"cree",   "cre_n":"cren"}
+cr_fieldnames        = {"crp":"cr_p+", "cre_e":"cr_e-e", "cre_n":"cr_e-n"}
+
+legacy_names = {"ncre":"ncrb"}
 
 # searches for variable name, if found splits and appends the value ----------
 
 
-def append_split_var(line, variable_name, var_array_to_append, param_found):
+def append_split_var(line, ind, variable_name, var_array_to_append, param_found):
     if (not_py27):
         words = (str(line).replace(" ", "").replace("\t", "").replace("b'", "")).split('=')  # remove leading b' (byte type) in python3
     else:
@@ -29,7 +33,7 @@ def append_split_var(line, variable_name, var_array_to_append, param_found):
         if (not_py27):
             var_value = var_value.strip("'")  # remove remaining b' (byte type) in python3
         var_value = determine_type_append(var_value)
-        var_array_to_append.append(var_value)
+        var_array_to_append[ind] = var_value
         param_found = True
 
     return var_array_to_append, param_found
@@ -43,22 +47,27 @@ def read_par(hdf5_filename, var_nam, default_values):  # , var_array):
         sys.exit("Exiting: no variables to read provided")
 
     found_parameter = [False] * len(var_nam)
-    var_array = []
+    var_array = [False] * len(var_nam)
     value = 0.
     for i in range(len(var_nam)):
         h5File = h5py.File(hdf5_filename, 'r')
         parfile = h5File['problem.par']
         for line in parfile:
             if found_parameter[i] is False:
-                value, found_parameter[i] = append_split_var(line, var_nam[i], var_array, found_parameter[i])
+                value, found_parameter[i] = append_split_var(line, i, var_nam[i], var_array, found_parameter[i])
     for i in range(len(var_nam)):
         if found_parameter[i] is False:
-            prtwarn("Warning: some parameters were not included in problem.par, i.e: %s (default value: %s) . Please provide it:" % (var_nam[i], str(default_values[i])))
-            value = input_names_array()
-            if (len(value) > 1):
-                var_array.append(value)
+            # if legacy parameter has its new counterpart name found, abstain from prompting for parameter value
+            if var_nam[i] in legacy_names and found_parameter[var_nam.index(legacy_names[var_nam[i]])]:
+                prtwarn("Some legacy parameters were not included in problem.par i.e: %s, however its counterpart (%s = %s) was found. "% (var_nam[i], legacy_names[var_nam[i]], str(var_array[var_nam.index(legacy_names[var_nam[i]])]) ) )
+                var_array[i] = var_array[var_nam.index(legacy_names[var_nam[i]])]
             else:
-                var_array.append(default_values[i])
+                prtwarn("Some parameters were not included in problem.par, i.e: >>%s<< (default value: %s).\nPlease provide parameter value(s)." % (var_nam[i], str(default_values[i])))
+                value = input_names_array()
+                if (len(value) > 1):
+                    var_array[i] = value
+                else:
+                    var_array[i] =  default_values[i]
     return var_array
 # for given string value it determines the type of value and returns it -------
 # Value types supported: integer, float, boolean and string.
@@ -99,6 +108,17 @@ def determine_type_append(var):
         print("Type for provided variable %s not recognized - ")
         return var
 # read names if nothing provided
+
+def get_CRESP_labels(fileh5_name):
+
+   h5f = h5py.File(fileh5_name, 'r')
+   h5f_attr_keys = h5f.attrs.keys()
+   if 'ncre' in h5f_attr_keys:
+      return cr_fieldnames_legacy
+   elif 'ncrb' in h5f_attr_keys:
+      return cr_fieldnames
+   else:
+      sys.exit("Error reading CRESP parameters -- number of bins (ncre or ncrb) not found in h5 file.")
 
 
 def input_names_array():
