@@ -176,7 +176,7 @@ def copy_field(field, data):
 
 def add_cren_tot_to(h5_dataset):
     try:
-        if (h5ds.all_data()[cresp_labels["cre_n"]+"01"].units == "dimensionless"):
+        if (h5ds.all_data()[cresp_labels["cre_n"] + "01"].units == "dimensionless"):
             h5ds.add_field(("gdf", "cren_tot"), units="", function=_total_cren,
                            display_name="Total CR electron number density", sampling_type="cell")
         else:
@@ -189,7 +189,7 @@ def add_cren_tot_to(h5_dataset):
 
 def add_cree_tot_to(h5_dataset):
     try:
-        if (h5ds.all_data()[cresp_labels["cre_e"]+"01"].units == "dimensionless"):
+        if (h5ds.all_data()[cresp_labels["cre_e"] + "01"].units == "dimensionless"):
             h5ds.add_field(("gdf", "cree_tot"), units="", function=_total_cree,
                            display_name="Total CR electron energy density", sampling_type="cell")
         else:
@@ -331,7 +331,7 @@ if f_run is True:
 
     if (plot_field[0:-2] == "en_ratio"):
         try:
-            if str(dsSlice[cresp_labels["cre_n"]+"01"].units) == "dimensionless":  # DEPRECATED
+            if str(dsSlice[cresp_labels["cre_n"] + "01"].units) == "dimensionless":  # DEPRECATED
                 h5ds.add_field(("gdf", plot_field), units="", function=en_ratio,
                                display_name="Ratio e/n in %i-th bin" % int(plot_field[-2:]), sampling_type="cell")
             else:
