@@ -40,10 +40,12 @@ module initproblem
    private
    public :: read_problem_par, problem_initial_conditions, problem_pointers
 
-   real                     :: d0, p0, bx0, by0, bz0, amp_cr1, u_d0, u_b0, u_d_ampl, omega_d, Btot
+   real                     :: d0, p0, bx0, by0, bz0, amp_cr1, u_d0, u_b0, u_d_ampl, omega_d, Btot, &
+                               injection_rate
    character(len=cbuff_len) :: outfile
 
-   namelist /PROBLEM_CONTROL/ d0, p0, bx0, by0, bz0, amp_cr1, u_d0, u_b0, u_d_ampl, omega_d, Btot, outfile
+   namelist /PROBLEM_CONTROL/ d0, p0, bx0, by0, bz0, amp_cr1, u_d0, u_b0, u_d_ampl, omega_d, Btot, &
+                              outfile, injection_rate
 
 contains
 
@@ -81,6 +83,7 @@ contains
       u_d_ampl = -0.2        !< amplitude of variable u_d component (periodic), sums up with u_d0 to u_d
       omega_d  = 0.157079633 !< omega_d parameter for test with periodic adiabatic compression: u_d(t) = u_d0 + u_d_ampl * cos(omega_d * t)
       Btot     = 0.          !< Total amplitude of MF in micro Gauss
+      injection_rate = 0.    !< injects initial spectrum at rate of injection_rate * total_init_cree / time_unit
 
       outfile  = 'crs.dat'
 
@@ -113,6 +116,7 @@ contains
          rbuff(9)  = u_d_ampl
          rbuff(10) = omega_d
          rbuff(11) = Btot
+         rbuff(12) = injection_rate
 
          cbuff(1)  = outfile
 
@@ -134,6 +138,7 @@ contains
          u_d_ampl = rbuff(9)
          omega_d  = rbuff(10)
          Btot     = rbuff(11)
+         injection_rate = rbuff(12)
 
          outfile   = trim(cbuff(1))
 
@@ -234,6 +239,7 @@ contains
       logical, intent(in) :: forward
 
       if (forward) then
+         call inject_spectrum
          call append_cooling_terms
       else
          call printer
@@ -319,6 +325,57 @@ contains
       enddo
 
    end subroutine append_cooling_terms
+
+   subroutine inject_spectrum
+
+      use cg_leaves,          only: leaves
+      use cg_list,            only: cg_list_element
+      use fluidindex,         only: flind
+      use fluidtypes,         only: component_fluid
+      use grid_cont,          only: grid_container
+      use global,             only: dt
+      use initcosmicrays,     only: iarr_cre_n, iarr_cre_e
+      use initcrspectrum,     only: cresp
+      use cresp_crspectrum,   only: cresp_get_scaled_init_spectrum
+! #ifdef CRESP_VERBOSED
+      use dataio_pub,         only: msg, printinfo
+! #endif /* CRESP_VERBOSED */
+
+      implicit none
+
+      type(cg_list_element),  pointer     :: cgl
+      type(grid_container),   pointer     :: cg
+      class(component_fluid), pointer     :: fl
+      integer                             :: i, j, k
+
+      fl => flind%ion
+      cgl => leaves%first
+
+      do while (associated(cgl))
+         cg => cgl%cg
+
+         cresp%n =  0.0;  cresp%e = 0.0
+         call cresp_get_scaled_init_spectrum(cresp%n, cresp%e, injection_rate * dt)
+#ifdef CRESP_VERBOSED
+         write (msg, "(A,E16.8)") "Injecting fraction of initial spectrum: ", injection_rate * dt
+         call printinfo(msg)
+         print *, cresp%n
+         print *, cresp%e
+#endif CRESP_VERBOSED
+         do k = cg%ks, cg%ke
+            do j = cg%js, cg%je
+               do i = cg%is, cg%ie
+                  cg%u(iarr_cre_n,i,j,k) = cg%u(iarr_cre_n,i,j,k) + cresp%n   !< update, TODO need to talk to the team if this should be inside if-clause
+                  cg%u(iarr_cre_e,i,j,k) = cg%u(iarr_cre_e,i,j,k) + cresp%e   !< if outside, cresp%n and cresp%e needs to be zeroed
+!                   print *, "n", cg%u(iarr_cre_n,i,j,k)
+!                   print *, "e", cg%u(iarr_cre_e,i,j,k)
+               enddo
+            enddo
+         enddo
+         cgl => cgl%nxt
+      enddo
+
+   end subroutine inject_spectrum
 
    subroutine printer
 
