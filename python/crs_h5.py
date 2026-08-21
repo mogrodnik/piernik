@@ -1,7 +1,7 @@
 #!/usr/bin/python
 from pylab import zeros, sqrt, size
 import matplotlib.pyplot as plt
-from numpy import log10, log, pi, asfarray, array, linspace, sign, around
+from numpy import log10, log, pi, asarray, array, linspace, sign, around
 import h5py
 import os
 import sys
@@ -474,13 +474,13 @@ def crs_initialize(parameter_names, parameter_values):
         p_fix_ratio = 10.0 ** log_width
         p_fix[0] = (sqrt(p_fix[1] * p_fix[2])) / p_fix_ratio
         p_fix[ncrb] = (sqrt(p_fix[ncrb - 2] * p_fix[ncrb - 1])) * p_fix_ratio
-        p_fix = asfarray(p_fix)
+        p_fix = asarray(p_fix)
 
     p_mid_fix = zeros(ncrb)
     p_mid_fix[1:ncrb - 1] = sqrt(p_fix[1:ncrb - 1] * p_fix[2:ncrb])
     p_mid_fix[0] = p_mid_fix[1] / p_fix_ratio
     p_mid_fix[ncrb - 1] = p_mid_fix[ncrb - 2] * p_fix_ratio
-    p_mid_fix = asfarray(p_mid_fix)
+    p_mid_fix = asarray(p_mid_fix)
 
     p_fix = tuple(p_fix)
     p_mid_fix = tuple(p_mid_fix)
@@ -677,7 +677,7 @@ def crs_plot_main_fpq(parameter_names, parameter_values, plot_var, fcrs, qcrs, p
             p_fix[0] = (sqrt(p_fix[1] * p_fix[2])) / p_fix_ratio
             p_fix[ncrb] = (
                 sqrt(p_fix[ncrb - 2] * p_fix[ncrb - 1])) * p_fix_ratio
-            p_fix = asfarray(p_fix)
+            p_fix = asarray(p_fix)
 
     i_lo = 0
     i_up = ncrb

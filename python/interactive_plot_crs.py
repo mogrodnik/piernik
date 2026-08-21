@@ -11,7 +11,7 @@ from numpy import array as np_array, log, log10, mean, rot90
 from os import getcwd, makedirs, path
 from optparse import OptionParser
 from re import search
-from read_h5 import read_par, input_names_array
+from read_h5 import read_par, input_names_array, get_CRESP_labels
 from sys import argv, version
 from warnings import simplefilter
 try:
@@ -123,13 +123,15 @@ par_epsilon = 1.0e-15
 f_run = True
 pf_initialized = False
 
+cresp_labels = False
+
 # ------- Local functions -----------
 
 
 def _total_cree(field, data):
     list_cree = []
     for element in h5ds.field_list:
-        if search("cree", str(element[1])):
+        if search(cresp_labels['cre_e'], str(element[1])):
             list_cree.append(element[1])
     cree_tot = data[str(list_cree[0])]
     for element in list_cree[1:]:
@@ -140,7 +142,7 @@ def _total_cree(field, data):
 def _total_cren(field, data):
     list_cren = []
     for element in h5ds.field_list:
-        if search("cren", str(element[1])):
+        if search(cresp_labels['cre_n'], str(element[1])):
             list_cren.append(element[1])
     cren_tot = data[str(list_cren[0])]
     for element in list_cren[1:]:
@@ -157,11 +159,11 @@ def _total_B(field, data):
 def en_ratio(field, data):  # DEPRECATED (?)
     bin_nr = field.name[1][-2:]
     for element in h5ds.field_list:
-        if search("cree" + str(bin_nr.zfill(2)), str(element[1])):
-            cren_data = data["cren" + str(bin_nr.zfill(2))]
+        if search(cresp_labels["cre_e"] + str(bin_nr.zfill(2)), str(element[1])):
+            cren_data = data[cresp_labels["cre_n"] + str(bin_nr.zfill(2))]
             # necessary to avoid FPEs
             cren_data[cren_data <= par_epsilon**2] = par_epsilon
-            cree_data = data["cree" + str(bin_nr.zfill(2))]
+            cree_data = data[cresp_labels["cre_n"] + str(bin_nr.zfill(2))]
             en_ratio = cree_data / cren_data
     return en_ratio
 
@@ -174,7 +176,7 @@ def copy_field(field, data):
 
 def add_cren_tot_to(h5_dataset):
     try:
-        if (h5ds.all_data()["cren01"].units == "dimensionless"):
+        if (h5ds.all_data()[cresp_labels["cre_n"] + "01"].units == "dimensionless"):
             h5ds.add_field(("gdf", "cren_tot"), units="", function=_total_cren,
                            display_name="Total CR electron number density", sampling_type="cell")
         else:
@@ -187,7 +189,7 @@ def add_cren_tot_to(h5_dataset):
 
 def add_cree_tot_to(h5_dataset):
     try:
-        if (h5ds.all_data()["cree01"].units == "dimensionless"):
+        if (h5ds.all_data()[cresp_labels["cre_e"] + "01"].units == "dimensionless"):
             h5ds.add_field(("gdf", "cree_tot"), units="", function=_total_cree,
                            display_name="Total CR electron energy density", sampling_type="cell")
         else:
@@ -226,15 +228,20 @@ if f_run:
 var_array = []
 if f_run is True:
     var_names = []
-    var_names = ["ncrb", "p_min_fix", "p_max_fix",
+    var_names = ["ncrb", "ncre", "p_min_fix", "p_max_fix",
                  "e_small", "cre_eff", "q_big"]
-    var_def = [20, 10., 1.e5, 1.e-6, 0.01, 30., ]
+    var_def = [1, 1, 10., 1.e5, 1.e-6, 0.01, 30., ]
     if len(var_names) == 0:
         prtwarn(
             "Empty list of parameter names provided: enter names of parameters to read")
         var_names = input_names_array()
-
     var_array = read_par(filename, var_names, var_def)
+
+    if var_array[var_names.index("ncre")] == 1:
+        var_array[var_names.index("ncre")] = var_array[var_names.index("ncrb")]
+    elif var_array[var_names.index("ncrb")] == 1:
+        var_array[var_names.index("ncrb")] = var_array[var_names.index("ncre")]
+
     for i in range(len(var_names)):
         exec("%s=%s" % (var_names[i], var_array[i]))
 
@@ -245,6 +252,8 @@ if f_run is True:
 
 # ---------- Open file
     h5ds = yt.load(filename)
+
+    cresp_labels = get_CRESP_labels(filename)
 
     initialize_pf_arrays(filename, pf_initialized)
 # ---------- bounds on domain size
@@ -322,7 +331,7 @@ if f_run is True:
 
     if (plot_field[0:-2] == "en_ratio"):
         try:
-            if str(dsSlice["cren01"].units) == "dimensionless":  # DEPRECATED
+            if str(dsSlice[cresp_labels["cre_n"] + "01"].units) == "dimensionless":  # DEPRECATED
                 h5ds.add_field(("gdf", plot_field), units="", function=en_ratio,
                                display_name="Ratio e/n in %i-th bin" % int(plot_field[-2:]), sampling_type="cell")
             else:
@@ -354,10 +363,7 @@ if f_run is True:
         plot_field = new_field
 
     # WARNING - this makes field_max unitless
-    try:
-        field_max = h5ds.find_max("cr_p+")[0].v
-    except:
-        field_max = h5ds.find_max("cr1")[0].v
+    field_max = h5ds.find_max(cresp_labels["crp"])[0].v
 
 # prepare limits for framebuffer
     # if (options.usr_width == 0.):
@@ -504,16 +510,16 @@ if f_run is True:
         position = h5ds.r[coords:coords]
         if (plot_field[0:-2] != "en_ratio"):
             prtinfo(">>>>>>>>>>>>>>>>>>> Value of %s at point [%f, %f, %f] = %f " % (
-                plot_field, coords[0], coords[1], coords[2], position[plot_field]))
+                plot_field, coords[0], coords[1], coords[2], position[plot_field][0]))
         else:
             prtinfo("Value of %s at point [%f, %f, %f] = %f " % (plot_field, coords[0], coords[1],
-                    coords[2], position["cree" + str(plot_field[-2:])] / position["cren" + str(plot_field[-2:])]))
+                    coords[2], position[cresp_labels["cre_e"] + str(plot_field[-2:])] / position[cresp_labels["cre_n"] + str(plot_field[-2:])]))
             # once again appended - needed as ylimit for the plot
             plot_max = h5ds.find_max(
-                "cre" + plot_var + str(plot_field[-2:]))[0]
+                cresp_labels["cre_e"][0:-1] + plot_var + str(plot_field[-2:]))[0]
 
         btot = (position["mag_field_x"].v**2 + position["mag_field_y"].v **
-                2 + position["mag_field_z"].v**2)**0.5
+                2 + position["mag_field_z"].v**2)[0]**0.5
         btot_uG = 2.85 * btot  # WARNING magic number @btot - conversion factor
         prtinfo("B_tot = %f = %f (uG)" % (btot, btot_uG))
         if (True):   # TODO DEPRECATED save_fqp
@@ -561,9 +567,9 @@ if f_run is True:
 
                 for ind in range(1, ncrb + 1):
                     ecrs.append(
-                        float(mean(position['cree' + str(ind).zfill(2)][0].v)))
+                        float(mean(position[cresp_labels['cre_e'] + str(ind).zfill(2)][0].v)))
                     ncrs.append(
-                        float(mean(position['cren' + str(ind).zfill(2)][0].v)))
+                        float(mean(position[cresp_labels['cre_n'] + str(ind).zfill(2)][0].v)))
 
                 fig2, exit_code = crs_plot_main(
                     plot_var, ncrs, ecrs, time, coords, marker=marker_l[marker_index], clean_plot=options.clean_plot, hide_axes=options.no_axes)
@@ -576,8 +582,8 @@ if f_run is True:
                     position = position = h5ds.r[[coords[0], dom_l[avail_dim[0]] + dl * j, coords[2]]: [
                         coords[0], dom_l[avail_dim[0]] + dl * j, coords[2]]]
                     for ind in range(1, ncrb + 1):
-                        ecrs.append(position['cree' + str(ind).zfill(2)][0].v)
-                        ncrs.append(position['cren' + str(ind).zfill(2)][0].v)
+                        ecrs.append(position[cresp_labels['cre_e'] + str(ind).zfill(2)][0].v)
+                        ncrs.append(position[cresp_labels['cre_n'] + str(ind).zfill(2)][0].v)
                     fig2, exit_code_tmp = crs_plot_main(
                         plot_var, ncrs, ecrs, time, coords, marker=marker_l[marker_index], i_plot=image_number, clean_plot=options.clean_plot, hide_axes=options.no_axes)
                     if (exit_code_tmp is False):
@@ -592,8 +598,8 @@ if f_run is True:
             ncrs = []
 
             for ind in range(1, ncrb + 1):
-                ecrs.append(float(position['cree' + str(ind).zfill(2)][0].v))
-                ncrs.append(float(position['cren' + str(ind).zfill(2)][0].v))
+                ecrs.append(float(position[cresp_labels['cre_e'] + str(ind).zfill(2)][0].v))
+                ncrs.append(float(position[cresp_labels['cre_n'] + str(ind).zfill(2)][0].v))
 
             for ind in range(1, ncrb + 2):
                 fcrs.append(float(position['cref' + str(ind).zfill(2)][0].v))

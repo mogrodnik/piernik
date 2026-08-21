@@ -67,15 +67,15 @@ def initialize_pf_arrays(h5fname, pf_initialized=False):
         p_ratios_up = h5f["cresp/smaps_UP/p_ratios"]
         f_ratios_up = h5f["cresp/smaps_UP/f_ratios"]
         # Use whatever values are saved in h5 file
-        a_min_lo = h5f["cresp"]["smaps_LO"].attrs["a_min"]
-        a_max_lo = h5f["cresp"]["smaps_LO"].attrs["a_max"]
-        n_min_lo = h5f["cresp"]["smaps_LO"].attrs["n_min"]
-        n_max_lo = h5f["cresp"]["smaps_LO"].attrs["n_max"]
+        a_min_lo = h5f["cresp"]["smaps_LO"].attrs["a_min"][0]
+        a_max_lo = h5f["cresp"]["smaps_LO"].attrs["a_max"][0]
+        n_min_lo = h5f["cresp"]["smaps_LO"].attrs["n_min"][0]
+        n_max_lo = h5f["cresp"]["smaps_LO"].attrs["n_max"][0]
 
-        a_min_up = h5f["cresp"]["smaps_UP"].attrs["a_min"]
-        a_max_up = h5f["cresp"]["smaps_UP"].attrs["a_max"]
-        n_min_up = h5f["cresp"]["smaps_UP"].attrs["n_min"]
-        n_max_up = h5f["cresp"]["smaps_UP"].attrs["n_max"]
+        a_min_up = h5f["cresp"]["smaps_UP"].attrs["a_min"][0]
+        a_max_up = h5f["cresp"]["smaps_UP"].attrs["a_max"][0]
+        n_min_up = h5f["cresp"]["smaps_UP"].attrs["n_min"][0]
+        n_max_up = h5f["cresp"]["smaps_UP"].attrs["n_max"][0]
 
         if (h5f["cresp"]["smaps_LO"].attrs["dims"][0] != h5f["cresp"]["smaps_UP"].attrs["dims"][0]):
             die("Error, different sizes of solution maps!")
