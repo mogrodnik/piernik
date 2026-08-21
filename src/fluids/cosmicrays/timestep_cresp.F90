@@ -58,7 +58,7 @@ contains
       use grid_cont,        only: grid_container
       use initcosmicrays,   only: cfl_cr, iarr_cre_e, iarr_cre_n, diff_max_lev
       use initcrspectrum,   only: K_cresp_paral, K_cresp_perp, spec_mod_trms, synch_active, adiab_active, icomp_active, &
-           &                      use_cresp_evol, cresp, f_synchIC, u_b_max, cresp_substep, n_substeps_max, redshift
+           &                      use_cresp_evol, cresp, f_loss_B, f_loss_IC, u_b_max, cresp_substep, n_substeps_max, redshift
 
       implicit none
 
@@ -94,13 +94,13 @@ contains
          endif
 
          sptab%ucmb = zero
-         if (icomp_active) sptab%ucmb = enden_CMB(redshift) * f_synchIC ! NOTICE redshift is hard-coded to zero (current epoch)
+         if (icomp_active) sptab%ucmb = enden_CMB(redshift) * f_loss_IC ! NOTICE redshift is hard-coded to zero (current epoch)
 
          do k = cg%ks, cg%ke
             do j = cg%js, cg%je
                do i = cg%is, cg%ie
                   sptab%ub = zero ; sptab%ud = zero ; sptab%umag = zero ; empty_cell = .false.
-                  if (synch_active) sptab%umag = emag(cg%b(xdim,i,j,k), cg%b(ydim,i,j,k), cg%b(zdim,i,j,k)) * f_synchIC
+                  if (synch_active) sptab%umag = emag(cg%b(xdim,i,j,k), cg%b(ydim,i,j,k), cg%b(zdim,i,j,k)) * f_loss_B
                   cresp%n = cg%u(iarr_cre_n, i, j, k)
                   cresp%e = cg%u(iarr_cre_e, i, j, k)
                   call cresp_find_prepare_spectrum(cresp%n, cresp%e, empty_cell, i_up_max_tmp) ! needed for synchrotron timestep
