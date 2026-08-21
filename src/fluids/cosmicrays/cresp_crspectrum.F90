@@ -232,6 +232,9 @@ contains
             endif
             p(i_cut(LO)) = p_cut(LO)
          endif
+      else
+         p_cut(LO)     = p_fix(i_cut(LO))
+         p(i_cut(LO))  = p_cut(LO)
       endif
 
       if (num_active_bins < 1) then          !< if 2 active_bins and solution fails in both, return empty_cell
@@ -1017,10 +1020,15 @@ contains
 
       if (e_small_approx_init_cond > 0) then
          do co = LO, HI
-            call get_fqp_cutoff(co, exit_code)
-            if (exit_code) then
-               write(msg,*) "[cresp_crspectrum:cresp_init_state] e_small_approx_init_cond = 1, but solution for initial spectrum ",bound_name(co)," cutoff not found, exiting! "
-               call die(msg)
+            if (e_small_approx_p(co) > 0) then
+               call get_fqp_cutoff(co, exit_code)
+               if (exit_code) then
+                  write(msg,*) "[cresp_crspectrum:cresp_init_state] e_small_approx_init_cond = 1, but solution for initial spectrum ",bound_name(co)," cutoff not found, exiting! "
+                  call die(msg)
+               endif
+            else
+               write(msg,*) "[cresp_crspectrum:cresp_init_state] e_small_approx_init_cond = 1, but not solving for cutoff ",bound_name(co)," (e_small_approx_p_",bound_name(co)," parameter)."
+               call warn(msg)
             endif
          enddo
 

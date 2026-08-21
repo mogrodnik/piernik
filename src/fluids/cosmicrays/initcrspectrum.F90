@@ -70,8 +70,8 @@ module initcrspectrum
    real            :: e_small                     !< lower energy cutoff for energy-approximated cutoff momenta
    logical         :: approx_cutoffs              !< T,F - turns off/on all approximating terms
    integer(kind=4), dimension(2) :: e_small_approx_p !< vector to store e_small_approx_p_lo and e_approx_p_up
-   integer(kind=4) :: e_small_approx_p_lo         !< 0,1 - turns off/on energy (e_small) approximated lower cutoff momentum in isolated case
-   integer(kind=4) :: e_small_approx_p_up         !< 0,1 - turns off/on energy (e_small) approximated upper cutoff momentum in isolated case
+   integer(kind=1) :: e_small_approx_p_lo         !< 0,1 - turns off/on energy (e_small) approximated lower cutoff momentum in isolated case
+   integer(kind=1) :: e_small_approx_p_up         !< 0,1 - turns off/on energy (e_small) approximated upper cutoff momentum in isolated case
    integer(kind=1) :: e_small_approx_init_cond    !< 0,1 - turns off/on energy (e_small) approximated momenta at initialization
    real            :: smallcren                   !< floor value for CRESP number density
    real            :: smallcree                   !< floor value for CRESP energy density
@@ -151,6 +151,8 @@ module initcrspectrum
    real :: p_fix_ratio
    integer(kind=4), allocatable, dimension(:) :: cresp_all_edges, cresp_all_bins
 
+   integer(kind=1) :: default_int_param_value = -1
+
 ! CRESP names
    integer, parameter :: cnlen = 4
    type dump_fpq_type
@@ -218,9 +220,9 @@ contains
 
       approx_cutoffs       = .true.
       e_small              = 1.0e-5
-      e_small_approx_p_lo  = 1
-      e_small_approx_p_up  = 1
-      e_small_approx_init_cond = 1
+      e_small_approx_p_lo  = default_int_param_value
+      e_small_approx_p_up  = default_int_param_value
+      e_small_approx_init_cond = default_int_param_value
       max_p_ratio          = 2.5
       NR_iter_limit        = 100
       force_init_NR        = .false.
@@ -443,16 +445,22 @@ contains
 
       if (ncrb < 3) call die("[initcrspectrum:init_cresp] CRESP algorithm currently requires at least 3 bins (ncrb) in order to work properly, check your parameters.")
 
-      if (approx_cutoffs) then
-         e_small_approx_p = 1
-         write (msg,'(A)') "[initcrspectrum:init_cresp] approx_cutoffs = .true. -- will use e_small to approximate spectrum cutoffs and initial state spectrum."
-      else
-         e_small_approx_p = 0 ! e_small_approx_init_cond stays default, unless user changes.
-         write (msg,'(A)') "[initcrspectrum:init_cresp] approx_cutoffs = .false. -- will not use e_small approximated cutoffs, but still approximate initial state. To turn it off use e_small_approx_init_cond = 0."
-      endif
-      if (master) call printinfo(msg)
+      do i = LO, HI
+! e_small_approx_p is a global switch, while e_small_approx_p_lo, e_small_approx_p_up allow setting constant boundary selectively
+! selective borders should be given distinct initial value (here -1) to know when parameter is changed intentionally
+         if (e_small_approx_p(i) == default_int_param_value) then
+            if (approx_cutoffs) then
+               e_small_approx_p(i) = 1
+               write (msg,'(A)') "[initcrspectrum:init_cresp] approx_cutoffs = .true. -- will use e_small to approximate BOTH spectrum cutoffs and initial state spectrum."
+            else
+               e_small_approx_p(i) = 0 ! e_small_approx_init_cond stays default, unless user changes.
+               write (msg,'(A)') "[initcrspectrum:init_cresp] approx_cutoffs = .false. -- will not use e_small approximated cutoffs, but still approximate initial state. To turn it off use e_small_approx_init_cond = 0."
+            endif
+         endif
+         if (master) call printinfo(msg)
+      enddo
 
-      if (sum(e_small_approx_p) > 0 .and. e_small_approx_init_cond < 1) then
+      if ( any(e_small_approx_p > 0, 1) .and. e_small_approx_init_cond == default_int_param_value) then
          e_small_approx_init_cond = 1
          if (master) call warn("[initcrspectrum:init_cresp] Approximation of boundary momenta is active -> modifying e_small_approx_init_cond to 1.")
       endif
