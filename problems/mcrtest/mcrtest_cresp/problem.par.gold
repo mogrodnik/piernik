@@ -49,6 +49,7 @@ $BASE_DOMAIN
     smallei= 1.e-5
     integration_order = 2
     limiter= 'vanleer'
+    solver_str = "riemann"
  /
 
  $FLUID_IONIZED
