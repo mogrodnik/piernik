@@ -500,7 +500,7 @@ contains
 #endif /* CRESP_VERBOSED */
       use diagnostics,    only: incr_vec
       use initcosmicrays, only: ncrb
-      use initcrspectrum, only: e_small, cresp_all_bins, p_fix, p_mid_fix
+      use initcrspectrum, only: e_small, q_big, cresp_all_bins, p_fix, p_mid_fix
 
       implicit none
 
@@ -592,7 +592,8 @@ contains
          is_active_bin = .false.
 
          do i = I_ONE, ncrb
-            is_active_bin(i) = ((e_amplitudes_r(i) > e_small .or. e_amplitudes_l(i) > e_small ) .and. (e(i) > zero .and. n(i) > zero))
+            is_active_bin(i) = ((e_amplitudes_r(i) > e_small .or. e_amplitudes_l(i) > e_small ) &
+            &  .and. (abs(q(i)) < q_big) .and. (e(i) > zero .and. n(i) > zero))
          enddo
          pre_i_cut = max_ic
 
