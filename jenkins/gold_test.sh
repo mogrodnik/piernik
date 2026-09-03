@@ -35,8 +35,6 @@ RUN_GOLD_DIR=${GOLD_DIR}runs/$(basename ${PROBLEM_NAME})/
 
 GOLD_LOG=${OUT_DIR}gold_log
 GOLD_CSV=${OUT_DIR}gold.csv
-RIEM_LOG=${OUT_DIR}riem_log
-RIEM_CSV=${OUT_DIR}riem.csv
 GOLD_SHA_FILE=${OUT_DIR}__sha__
 
 echo -e "\033[34;1mRunning gold test for $PROBLEM_NAME in $OUT_DIR, defined in $1\033[0m"
@@ -127,63 +125,28 @@ cp -a runs/$(basename ${PROBLEM_NAME})_${FLAT_PROBLEM_NAME}/* $RUN_TEST_DIR
 sed -i 's/-fcheck=all/& -fcheck=no-array-temps/' ${TEST_DIR}$OBJ"/Makefile"
 make -j -C ${TEST_DIR}$OBJ > ${TEST_DIR}/make.stdout
 
-# Detect whether we have genuine riemann setup (which is unlikely to run in RTVD)
-if [ -e ${RUN_GOLD_DIR}/problem.par ] ; then
-    grep -qi '^ *solver_str *= *"riemann"' ${RUN_GOLD_DIR}/problem.par && RIEMANN=1 || RIEMANN=0
-else
+if [ ! -e ${RUN_GOLD_DIR}/problem.par ] ; then
     echo "Error: Gold test failed fatally. Aborting." 1>&2
     exit 3
 fi
-# ToDo set this up in the config file to make it easier to implement dual RTVD/Riemann gold tests
 
 # Run the tests on current version of Piernik
-if [ $RIEMANN == 1 ] ; then
-    (
-	cd $RUN_TEST_DIR
-	eval $RUN_COMMAND ./${PIERNIK} > test_Riemann_stdout
-    )
-else
-    RUN_TEST_DIR2=${TEST_DIR}runs/$(basename ${PROBLEM_NAME})"_Riemann"/
-    cp -a $RUN_TEST_DIR $RUN_TEST_DIR2
-    (
-	cd $RUN_TEST_DIR
-	eval $RUN_COMMAND ./${PIERNIK} "-n '&NUMERICAL_SETUP solver_str = \"RTVD\" /'"  > test_RTVD_stdout
-    ) &
-    (
-	RIEM_ERR=test_Riemann_stderr
-	cd $RUN_TEST_DIR2
-	eval $RUN_COMMAND ./${PIERNIK} "-n '&NUMERICAL_SETUP solver_str = \"Riemann\" /'"  > test_Riemann_stdout 2> $RIEM_ERR
-	[ -s $RIEM_ERR ] && ( echo ${PROBLEM_NAME}": Riemann failed " ; grep "Error"  $RIEM_ERR | sort | grep -vE '(meaningful|Following)' ) 1>&2
-    )
-fi
+(
+    cd $RUN_TEST_DIR
+    eval $RUN_COMMAND ./${PIERNIK} > test_stdout
+)
 
 wait
 # Here background jobs should be finished
 
+# The tool gdf_distance distance is supposed to return values in [0..1] range
+# Map log10(0.) to 1. (impossible as a result of log10(gdf_distance)
 ./bin/gdf_distance ${RUN_GOLD_DIR}${OUTPUT} ${RUN_TEST_DIR}${OUTPUT} 2>&1 | tee $GOLD_LOG
 grep 'Difference of datafield `' $GOLD_LOG |\
     sed 's/.*`\([^ ]*\)[^ ] *: \(.*\)/\1 \2/' |\
     awk '{a[$1]=$2} END {for (i in a) printf("log10(%s),", i); print ""; for (i in a) printf("%s,", (a[i]>0.)?(log(a[i])/log(10.)):1.) ; print ""}' |\
     sed 's/,$//' |\
     tee $GOLD_CSV
-
-if [ $RIEMANN == 0 ] ; then
-    # The tool gdf_distance distance is supposed to return values in [0..1] range
-    # Map log10(0.) to 1. and failed Riemann to 2. (both impossible as a results of log10(gdf_distance)
-    if [ -e ${RUN_TEST_DIR2}${OUTPUT} ] ; then
-	./bin/gdf_distance ${RUN_TEST_DIR}${OUTPUT} ${RUN_TEST_DIR2}${OUTPUT} 2>&1 | tee $RIEM_LOG
-	grep 'Difference of datafield `' $RIEM_LOG |\
-	    sed 's/.*`\([^ ]*\)[^ ] *: \(.*\)/\1 \2/' |\
-	    awk '{a[$1]=$2} END {for (i in a) printf("log10(%s),", i); print ""; for (i in a) printf("%s,", (a[i]>0.)?(log(a[i])/log(10.)):1.) ; print ""}' |\
-	    sed 's/,$//' |\
-	    tee $RIEM_CSV
-    else
-	(
-	    echo "Riemann failed"
-	    echo 2.
-	) | tee $RIEM_CSV
-    fi
-fi
 
 [ $HAS_KEEPPAR == 1 ] && sed -i '1s/$/ --keeppar/' .setuprc
 
