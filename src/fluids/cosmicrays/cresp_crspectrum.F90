@@ -38,9 +38,8 @@ module cresp_crspectrum
 
    private ! most of it
    public :: cresp_update_cell, cresp_init_state, cresp_get_scaled_init_spectrum, cleanup_cresp, cresp_allocate_all, &
-      &      src_gpcresp, p_rch_init, detect_clean_spectrum, cresp_find_prepare_spectrum, cresp_detect_negative_content, printed
+      &      src_gpcresp, p_rch_init, detect_clean_spectrum, cresp_find_prepare_spectrum, cresp_detect_negative_content
 
-   logical :: printed
    integer, dimension(1:2)            :: fail_count_NR_2dim, fail_count_interpol
    integer(kind=4), allocatable, dimension(:) :: fail_count_comp_q
 
@@ -162,11 +161,6 @@ contains
          endif
       endif
 
-      if (.not. printed) then
-            print "(A, 50E16.8)", "e0", e_inout
-            print "(A, 50E16.8)", "n0", n_inout
-      endif
-
       call cresp_find_prepare_spectrum(n_inout, e_inout, empty_cell)
 
       if (empty_cell) then
@@ -222,7 +216,6 @@ contains
          endif
 
          if (solve_fail_lo) then                               !< exit_code support
-            if (.not. printed) print *,"DBG: failed to solve for p_lo"
             if (i_cut(LO) > 0) then
                if (allow_unnatural_transfer)  call manually_deactivate_bin_via_transfer(i_cut(LO) + I_ONE, I_ONE, n, e)
                call decr_vec(active_bins, 1)
@@ -327,25 +320,12 @@ contains
 
          f = nq_to_f(p(0:ncrb-1), p(1:ncrb), ndt(1:ncrb), q(1:ncrb), active_bins)
 
-         if (.not. printed) then
-            print "(A, 50E16.8)", "f0", f
-            print "(A, 50E16.8)", "q0", q
-!               print "(A, 50E16.8)", "ndt0", ndt
-            print "(A, 50E16.8)", "e0", edt
-         endif
-
          call cresp_compute_cre_Coulomb_cooling(sptab%dcoul, f, p, q, active_bins, dt)
 
          ! update values in n and e
          edt = fq_to_e(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), g_fix(0:ncrb-1), q(1:ncrb), active_bins)
          ndt = fq_to_n(p(0:ncrb-1), p(1:ncrb), f(0:ncrb-1), q(1:ncrb), active_bins)
-         if (.not. printed) then
-            print "(A, 50E16.8)", "f1", f
-            print "(A, 50E16.8)", "q1", q
-!               print "(A, 50E16.8)", "ndt1", ndt
-            print "(A, 50E16.8)", "e1", edt
-            printed = .true.
-         endif
+
       endif
 
       approx_p = e_small_approx_p         !< restore approximation after momenta computed
@@ -1969,7 +1949,7 @@ contains
 
       dgas = dgas + gas_dens(1) / mp + gas_dens(2) / mH
 !     Substitution of cr_mass(icr_E) by one is deliberate for CRe
-      loss_amplitude = Lambda_Cc*cr_Z(icr_E)**2*(one/0.938)**(-h)*dgas/clight/(clight*mp) !amplitude b in dp/dt=b*p^h
+      loss_amplitude = Lambda_Cc*cr_Z(icr_E)**2*(one)**(-h)*dgas/clight/(clight*mp) !amplitude b in dp/dt=b*p^h
 
       f_old = f_0
       f_0(last_bin) = zero
@@ -2099,25 +2079,19 @@ contains
 !          f_0(first_bin-1) = f_0(first_bin-1) + dN1_out
 !       else
 !       !Transfer normal
-!          if (.not. printed) print *, "Transfer normal"
 !          f_0(first_bin)   = f_0(first_bin)   - dN1_out
 !          f_0(first_bin-1) = f_0(first_bin-1) + dN1_out
 !       endif
-!       if (.not. printed) print *, f_0(first_bin), f_0(first_bin-1)
 !       Fp0_out = abs(loss_amplitude * p_0(first_bin-1)**h * f_0(first_bin-1))
 !
 !       dN0_out = Fp0_out * delta_t_sub / dp0
-!       if (.not. printed) print *, "dN1_out", dN1_out, f_0(first_bin-1) * (one - eps_f)
-!       if (.not. printed) print *, f_0(first_bin), f_0(first_bin-1)
 !       if (dN0_out >= f_0(first_bin-1) * (one - eps_f)) then
 !          dN0_out = f_0(first_bin-1)
 !          f_0(first_bin-1) = delta
 !       else
-!          if (.not. printed) print *, "Transfer normal"
 !          f_0(first_bin-1) = f_0(first_bin-1) - dN0_out
 !       endif
 !       ! ==================================
-!       if (.not. printed) print *, "f_0(i_lo)", f_0(first_bin)
       ! Accumulate diagnostic (for conservation test)
       N_lost = N_lost + dN0_out * dp0 + dN1_out * dp1
 

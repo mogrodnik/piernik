@@ -116,7 +116,7 @@ contains
       use cg_leaves,        only: leaves
       use cg_list,          only: cg_list_element
       use constants,        only: xdim, ydim, zdim, onet
-      use cresp_crspectrum, only: cresp_update_cell, printed
+      use cresp_crspectrum, only: cresp_update_cell
       use crhelpers,        only: divv_i
       use cresp_helpers,    only: enden_CMB
       use dataio_pub,       only: msg, warn
@@ -158,8 +158,6 @@ contains
       dt_cresp    = dt_doubled   !< computed for each cell if cresp_substep, using dt_doubled
       nssteps     = 1
       nssteps_max = 1
-
-      printed = .false.
 
       do while (associated(cgl))
          cg => cgl%cg
